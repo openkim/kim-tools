@@ -80,7 +80,7 @@ def read_shortnames() -> Dict:
         A dictionary where the keys are the prototype strings, and the values are the shortnames found in the corresponding lines.
     """
     shortnames = {}
-    shortname_file = "../data/README_PROTO.TXT"
+    shortname_file = "data/README_PROTO.TXT"
     notes_index = None
     with open(os.path.dirname(os.path.realpath(__file__))+'/'+shortname_file, encoding="utf-8") as f:
         for line in f:
