@@ -334,8 +334,7 @@ class AFLOW:
             JSON list of dictionaries containing information about matching prototypes. In practice, this list should be of length zero or 1
         """
 
-        output = self.aflow_command([
-            
+        output = self.aflow_command([            
             " --prim < " + self.aflow_work_dir + input_file,
             " --compare2prototypes --catalog=anrl --quiet --print=json"
         ])
@@ -353,8 +352,10 @@ class AFLOW:
             JSON dictionaries describing the AFLOW prototype designation (label and parameters) of the input structure.
        
         """
-        command = " --prototype --print=json <"+self.aflow_work_dir+input_file
-        output=self.aflow_command([command])
+        output=self.aflow_command([
+            " --prim < " + self.aflow_work_dir + input_file,
+            " --prototype --print=json <"+self.aflow_work_dir+input_file
+            ])
         res_json = json.loads(output)
         return res_json    
 
