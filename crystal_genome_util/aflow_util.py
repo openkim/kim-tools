@@ -354,7 +354,7 @@ class AFLOW:
         """
         output=self.aflow_command([
             " --prim < " + self.aflow_work_dir + input_file,
-            " --prototype --print=json <"+self.aflow_work_dir+input_file
+            " --prototype --print=json"
             ])
         res_json = json.loads(output)
         return res_json    
