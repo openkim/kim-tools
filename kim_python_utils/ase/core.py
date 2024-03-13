@@ -1061,8 +1061,7 @@ class CrystalGenomeTest(KIMTest):
             else:
                 self.library_prototype_label.append(None)
             if "short-name.source-value" in parameter_set:
-                # TODO: Will all parameter sets contain identical short names? Also should we extend instead of append below?
-                short_name = parameter_set["library-prototype-label.source-value"]
+                short_name = parameter_set["short-name.source-value"]
                 if not isinstance(short_name,list): # Necessary because we recently changed the property definition to be a list
                     short_name = [short_name]
                 self.short_name.append(short_name)
