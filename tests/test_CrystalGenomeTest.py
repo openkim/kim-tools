@@ -1,9 +1,10 @@
 #!/usr/bin/python
 
-from kim_python_utils.ase import CrystalGenomeTest, get_isolated_energy_per_atom
+from kim_test_utils.test_driver import CrystalGenomeTestDriver
+from kim_python_utils.ase import get_isolated_energy_per_atom
 from crystal_genome_util.aflow_util import get_stoich_reduced_list_from_prototype
 
-class TestTest(CrystalGenomeTest):
+class TestTestDriver(CrystalGenomeTestDriver):
     def _calculate(self,structure_index: int):
         """
         example calculate method. Just writes the binding-energy and crystal-structure-npt properties assuming the provided
@@ -40,11 +41,11 @@ class TestTest(CrystalGenomeTest):
 
 
 # good test case (combination of material and model) -- it has multiple equilibria, one of which has a short-name, the other one does not
-test = TestTest(model_name="MEAM_LAMMPS_KoJimLee_2012_FeP__MO_179420363944_002", stoichiometric_species=['Fe','P'], prototype_label='AB_oP8_62_c_c')
+test = TestTestDriver(model_name="MEAM_LAMMPS_KoJimLee_2012_FeP__MO_179420363944_002", stoichiometric_species=['Fe','P'], prototype_label='AB_oP8_62_c_c')
 test()
 
 atoms = test.atoms # is a list
 # can go the other way too -- instead of giving a prototype to query for, give atoms object(s)
-test = TestTest(model_name="MEAM_LAMMPS_KoJimLee_2012_FeP__MO_179420363944_002", atoms=atoms)
+test = TestTestDriver(model_name="MEAM_LAMMPS_KoJimLee_2012_FeP__MO_179420363944_002", atoms=atoms)
 test()
 

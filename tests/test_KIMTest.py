@@ -1,9 +1,9 @@
 #!/usr/bin/python
 
-from kim_python_utils.ase import KIMTest
+from kim_test_utils.test_driver import KIMTestDriver
 from ase.atoms import Atoms
 
-class TestTest(KIMTest):
+class TestTestDriver(KIMTestDriver):
     def _calculate(self,structure_index: int):
         """
         example calculate method
@@ -19,5 +19,5 @@ class TestTest(KIMTest):
 
 atoms = Atoms(['Ar'], [[0, 0, 0]], cell=[[1, 0, 0], [0, 2, 0], [0, 0, 2]])
 atoms_list = [atoms,atoms] # not modifying, so no need to copy
-test = TestTest(model_name="LennardJones_Ar", atoms=atoms_list)
+test = TestTestDriver(model_name="LennardJones_Ar", atoms=atoms_list)
 test()
