@@ -203,7 +203,7 @@ class KIMTestDriver(ABC):
 
         self._property_instances = kim_property_modify(self._property_instances, current_instance_index, *modify_args)
 
-    def get_property_instances_dict(self) -> Dict:
+    def get_property_instances(self) -> Dict:
         return kim_edn.loads(self._property_instances)
 
 ################################################################################
@@ -444,6 +444,8 @@ class CrystalGenomeTestDriver(KIMTestDriver):
         if self.stoichiometric_species is not None:
             verify_unchanged_symmetry(
                 self.stoichiometric_species,self.prototype_label,**crystal_genome_designation,loose_triclinic_and_monoclinic=loose_triclinic_and_monoclinic)
+            
+        for property_
             
         return crystal_genome_designation
     
