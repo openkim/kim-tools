@@ -407,7 +407,7 @@ class CrystalGenomeTestDriver(KIMTestDriver):
                      "I won't stop you, but you better know what you're doing!")  
 
     def _get_crystal_genome_designation_from_atoms_and_verify_unchanged_symmetry(
-            self, atoms: Atoms, loose_triclinic_and_monoclinic = False
+            self, atoms: Optional[Atoms] = None, loose_triclinic_and_monoclinic = False
     ) -> Dict:
         """
         Get crystal genome designation from an ASE atoms object, and check if symmetry is consistent with 
@@ -436,6 +436,9 @@ class CrystalGenomeTestDriver(KIMTestDriver):
                 short_name: Optional[List[str]]
                     List of human-readable short names (e.g. "FCC"), if present
         """
+        if atoms is None:
+            atoms = self.atoms
+
         crystal_genome_designation = get_crystal_genome_designation_from_atoms(atoms)
         assert ((self.stoichiometric_species is None) == (self.prototype_label is None)), "self.stoichiometric_species and self.prototype_label should either both be None, or neither"
         if self.stoichiometric_species is not None:
