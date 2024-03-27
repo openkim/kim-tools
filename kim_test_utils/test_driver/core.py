@@ -55,6 +55,7 @@ __all__ = [
     "query_crystal_genome_structures",
 ]
 
+# TODO: Verify uniform symmetry
 
 ################################################################################
 class KIMTestDriverError(Exception):
@@ -444,9 +445,7 @@ class CrystalGenomeTestDriver(KIMTestDriver):
         if self.stoichiometric_species is not None:
             verify_unchanged_symmetry(
                 self.stoichiometric_species,self.prototype_label,**crystal_genome_designation,loose_triclinic_and_monoclinic=loose_triclinic_and_monoclinic)
-            
-        for property_
-            
+                        
         return crystal_genome_designation
     
     def _update_crystal_genome_designation_from_atoms(self, atoms: Optional[Atoms] = None, loose_triclinic_and_monoclinic = False):
