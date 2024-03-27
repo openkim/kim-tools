@@ -34,7 +34,7 @@ import numpy as np
 from ase import Atoms
 from ase.calculators.kim.kim import KIM
 from ase.calculators.calculator import Calculator
-from typing import Any, Optional, List, Union
+from typing import Any, Optional, List, Union, Dict
 from abc import ABC, abstractmethod
 from kim_property import kim_property_create, kim_property_modify, kim_property_dump
 import kim_edn
@@ -42,13 +42,17 @@ from crystal_genome_util import aflow_util
 from kim_query import raw_query
 from tempfile import NamedTemporaryFile
 import os
+from warnings import warn
 
 __version__ = "0.1.0"
 __author__ = ["ilia Nikiforov", "Eric Fuemmeler"]
 __all__ = [
     "KIMTestDriverError",
     "KIMTestDriver",
-    "CrystalGenomeTestDriver"
+    "get_crystal_genome_designation_from_atoms",
+    "verify_unchanged_symmetry",
+    "CrystalGenomeTestDriver",
+    "query_crystal_genome_structures",
 ]
 
 
@@ -65,90 +69,63 @@ class KIMTestDriverError(Exception):
 ################################################################################
 class KIMTestDriver(ABC):
     """
-    A KIM test
+    A base class for creating KIM Test Drivers. It has attributes that are likely
+    to be useful to for most KIM tests
 
     Attributes:
-        model_name:
-            KIM model name to use for calculations
-        model:
-            ASE calculator to use for calculations        
-        atoms:
-            List of ASE atoms objects to use as the initial configurations or to build supercells
-        filename:            
-            Filename to which the EDN property instance will be written
+        kim_model_name: Optional[str]
+            KIM model name, absent if a non-KIM ASE calculator was provided
+        _calc: Calculator
+            ASE calculator
+        atoms: Optional[Atoms]
+            ASE atoms object
+        _property_instances: str
+            A string containing the serialized KIM-EDN formatted property instances.
+
     """
 
-    def __init__(self, model_name: Optional[str] = None, model: Optional[Calculator] = None, 
-                 atoms: Optional[Union[Atoms,List[Atoms]]] = None, filename: str = "output/results.edn"):
+    def __init__(self, model: Union[str,Calculator]):
         """
+        The base class constructor only initializes the calculator and an empty property_instances
+
         Args:
-            model_name:
-                KIM extended-id of the model. Provide this or `model`
             model:
-                ASE calculator to use. Provide this or `model_name`
-            atoms:
-                List of ASE atoms objects to use as the initial configurations or to build supercells. 
-                If a single atoms object is provided, it will be converted to a single-element list
-            filename:
-                Path to results.edn file to be written. The default provided is the correct path to work in
-                the KIM Pipeline or KIM Developer Platform
+                ASE calculator or KIM model name to use
         """
-        if model_name is not None:
-            if model is not None:
-                raise KIMTestDriverError("Please provide either a KIM model name or an ASE calculator, not both")            
-            self.model_name = model_name
-            self.model = KIM(model_name)
-        elif model is not None:
-            self.model = model
+        if isinstance(model,Calculator):
+            self._calc = model
+            self.kim_model_name = None
         else:
-            raise KIMTestDriverError("Please provide either a KIM model name or an ASE calculator")
+            self.kim_model_name = model
+            self._calc = KIM(self.kim_model_name)
         
-        if isinstance(atoms,List):
-            self.atoms = atoms
-        else:
-            self.atoms = [atoms]
-        
-        self.property_instances = "[]"
-        self.filename = filename
+        self._property_instances = "[]"
+
+    def _setup(self, atoms: Optional[Atoms] = None, **kwargs):
+        """
+        Set up attributes before running calculation
+        """
+        self.atoms = atoms
 
     @abstractmethod
-    def _calculate(self, structure_index: int, **kwargs):
+    def _calculate(self, **kwargs):
         """
         Abstract calculate method
-
-        Args:
-            structure_index:
-                KIM tests can loop over multiple structures (i.e. crystals, molecules, etc.). This indicates which is being used for the current calculation.
-                TODO: Using an index here seems un-Pythonic, any way around it?
         """
         raise NotImplementedError("Subclasses must implement the _calculate method.")
 
-    def _write_to_file(self):
-        with open(self.filename, "w") as f:
-            kim_property_dump(self.property_instances, f)
+    def write_property_instances_to_file(self,filename="output/results.edn"):
+        with open(filename, "w") as f:
+            kim_property_dump(self._property_instances, f)
 
-    def _validate(self):
+    def __call__(self, atoms: Optional[Atoms] = None, **kwargs):
         """
-        Optional physics validation of properies, to be implemented by each sublass
+        runs and validates test
         """
-        pass
-
-    def __call__(self, **kwargs):
-        """
-        runs test and outputs results
-        """
-        for i,atoms in enumerate(self.atoms):
-            # TODO: this seems like a very un-Pythonic way to do this, but I can't think of another way to give the _calculate
-            # function a way to handle multiple initial structures except mandating that the developer always include a loop in _calculate.
-            # Just passing atoms to calculate wouldn't work, what if, for example, someone has a Crystal Genome test that works directly
-            # with the symmetry-reduced description?
-
-            # still, the most common use case is an ASE calculation with Atoms, so set the calculator here
-            atoms.calc = self.model
-            self._calculate(i, **kwargs)
-
-        self._validate()
-        self._write_to_file()
+        self._setup(atoms, **kwargs)
+        if self.atoms is not None:
+            self.atoms.calc = self._calc        
+        self._calculate(**kwargs)
 
     def _add_property_instance(self, property_name: str):
         """
@@ -163,13 +140,13 @@ class KIMTestDriver(ABC):
                 "binding-energy-crystal"
         """
         # DEV NOTE: I like to use the package name when using kim_edn so there's no confusion with json.loads etc.
-        property_instances_deserialized = kim_edn.loads(self.property_instances)
+        property_instances_deserialized = kim_edn.loads(self._property_instances)
         new_instance_index = len(property_instances_deserialized) + 1
         for property_instance in property_instances_deserialized:
             if property_instance["instance-id"] == new_instance_index:
                 raise KIMTestDriverError("instance-id that matches the length of self.property_instances already exists.\n"
                                   "Was self.property_instances edited directly instead of using this package?")
-        self.property_instances = kim_property_create(new_instance_index, property_name, self.property_instances)
+        self._property_instances = kim_property_create(new_instance_index, property_name, self._property_instances)
 
     def _add_key_to_current_property_instance(self, name: str, value: Any, units: Optional[str] = None):
         """
@@ -201,7 +178,7 @@ class KIMTestDriver(ABC):
         """
         value_arr = np.array(value)
         value_shape = value_arr.shape
-        current_instance_index = len(kim_edn.loads(self.property_instances))
+        current_instance_index = len(kim_edn.loads(self._property_instances))
         modify_args = ["key", name]
         if len(value_shape) == 0:
             modify_args += ["source-value", value]
@@ -224,8 +201,92 @@ class KIMTestDriver(ABC):
         if units is not None:
             modify_args += ["source-unit", units]
 
-        self.property_instances = kim_property_modify(self.property_instances, current_instance_index, *modify_args)
+        self._property_instances = kim_property_modify(self._property_instances, current_instance_index, *modify_args)
 
+    def get_property_instances_dict(self) -> Dict:
+        return kim_edn.loads(self._property_instances)
+
+################################################################################
+def get_crystal_genome_designation_from_atoms(atoms: Atoms,) -> Dict:
+    """
+    Get crystal genome designation from an ASE atoms object.
+
+    Returns:
+        A dictionary with the following keys:
+            stoichiometric_species: List[str]
+                List of unique species in the crystal
+            prototype_label: str
+                AFLOW prototype label for the crystal
+            parameter_names: Optional[List[str]]
+                Names of free parameters of the crystal besides 'a'. May be None if the crystal is cubic with no internal DOF.
+                Should have length one less than `parameter_values_angstrom`
+            parameter_values_angstrom: List[float]
+                Free parameter values of the crystal. The first element in each inner list is the 'a' lattice parameter in 
+                angstrom, the rest (if present) are in degrees or unitless
+            library_prototype_label: Optional[str]
+                AFLOW library prototype label
+            short_name: Optional[List[str]]
+                List of human-readable short names (e.g. "FCC"), if present
+    """
+    aflow = aflow_util.AFLOW()
+    cg_des = {}
+    
+    with NamedTemporaryFile('w',delete=False) as fp: #KDP has python3.8 which is missing the convenient `delete_on_close` option
+        atoms.write(fp,format='vasp')
+        fp.close()
+        with open(fp.name) as f:
+            proto_des = aflow.get_prototype(f.name)
+            libproto,short_name = aflow.get_library_prototype_label_and_shortname(f.name,aflow_util.read_shortnames())
+        os.remove(fp.name)
+
+    cg_des["prototype_label"] = proto_des["aflow_prototype_label"]
+    cg_des["stoichiometric_species"] = sorted(list(set(atoms.get_chemical_symbols())))
+    parameter_names = proto_des["aflow_prototype_params_list"][1:]
+    if parameter_names == []:
+        cg_des["parameter_names"] = None
+    else:
+        cg_des["parameter_names"] = parameter_names
+    cg_des["parameter_values_angstrom"] = proto_des["aflow_prototype_params_values"]
+    cg_des["library_prototype_label"] = libproto
+    if short_name is None:
+        cg_des["short_name"] = None
+    else:
+        cg_des["short_name"] = [short_name]
+
+    return cg_des
+
+################################################################################
+def verify_unchanged_symmetry(
+    reference_stoichiometric_species: List[str],
+    reference_prototype_label: str,
+    stoichiometric_species: List[str],
+    prototype_label: str,
+    loose_triclinic_and_monoclinic: bool = False,
+    **kwargs
+    ):
+    """
+    Checks if stoichiometric_species and/or prototype_label have changed. Raises an error if they have
+
+    Args:
+        loose_triclinic_and_monoclinic:
+            For triclinic and monoclinic space groups (1-15), the Wyckoff letters can be assigned in a non-unique way. Therefore,
+            it may be useful to only check the first three parts of the prototype label: stoichiomerty, Pearson symbol and space
+            group number.
+    """
+    checking_full_label = True
+    if (int(reference_prototype_label.split("_")[2]) < 16) and loose_triclinic_and_monoclinic: # triclinic or monoclinic space group
+        checking_full_label = False
+
+    if checking_full_label:
+        if reference_prototype_label != prototype_label:
+            raise KIMTestDriverError("AFLOW prototype label %s differs from reference prototype label %s" % (prototype_label,reference_prototype_label))
+    else:
+        if reference_prototype_label.split("_")[:3] != prototype_label.split("_")[:3]:
+            raise KIMTestDriverError("AFLOW prototype label %s differs from reference prototype label %s even when ignoring Wyckoff letters"%(prototype_label,reference_prototype_label))
+        
+    if reference_stoichiometric_species != stoichiometric_species:
+        raise KIMTestDriverError("List of stoichiometric species %s does not match reference list %s" % (stoichiometric_species,reference_stoichiometric_species))
+    
 ################################################################################
 class CrystalGenomeTestDriver(KIMTestDriver):
     """
@@ -236,205 +297,182 @@ class CrystalGenomeTestDriver(KIMTestDriver):
             List of unique species in the crystal
         prototype_label: str
             AFLOW prototype label for the crystal
-        parameter_names: Union[List[str],None]
+        parameter_names: Optional[List[str]]
             Names of free parameters of the crystal besides 'a'. May be None if the crystal is cubic with no internal DOF.
             Should have length one less than `parameter_values_angstrom`
         parameter_values_angstrom: List[float]
-            List of lists of parameter values, one inner list for each equilibrium crystal structure this test will use.
-            The first element in each inner list is the 'a' lattice parameter in angstrom, the rest (if present) are
-            in degrees or unitless
-        library_prototype_label: List[Union[str,None]]
-            List of AFLOW library prototype labels, one for each equilibrium. Entries may be `None`. 
-        short_name: List[Union[List[str],None]]
-            Lists of human-readable short names (e.g. "FCC") for each equilibrium, if present
+            Free parameter values of the crystal. The first element in each inner list is the 'a' lattice parameter in 
+            angstrom, the rest (if present) are in degrees or unitless
+        library_prototype_label: Optional[str]
+            AFLOW library prototype label, may be `None`. 
+        short_name: Optional[List[str]]
+            List of human-readable short names (e.g. "FCC"), if present
         cell_cauchy_stress_eV_angstrom3: List[float]
             Cauchy stress on the cell in eV/angstrom^3 (ASE units) in [xx,yy,zz,yz,xz,xy] format
         temperature_K: float
             The temperature in Kelvin
     """
-
-    def __init__(self,
-                 model_name: Optional[str] = None, 
-                 model: Optional[Calculator] = None,
-                 atoms: Optional[Union[List[Atoms],Atoms]] = None,
-                 filename: str = "output/results.edn",
-                 stoichiometric_species: Optional[List[str]] = None,
-                 prototype_label: Optional[str] = None,
-                 parameter_values_angstrom: Optional[Union[List[List[float]],List[float]]] = None,
-                 cell_cauchy_stress_eV_angstrom3: List[float] = [0,0,0,0,0,0],
-                 temperature_K: float = 0
-                 ):
+    def _setup(self,
+               atoms: Optional[Atoms] = None,
+               stoichiometric_species: Optional[List[str]] = None,
+               prototype_label: Optional[str] = None,
+               parameter_names: Optional[List[str]] = None,
+               parameter_values_angstrom: Optional[List[float]] = None,
+               library_prototype_label: Optional[str] = None,
+               short_name: Optional[Union[List[str],str]] = None,
+               cell_cauchy_stress_eV_angstrom3: List[float] = [0,0,0,0,0,0],
+               temperature_K: float = 0,
+               **kwargs
+               ):
         """
         Args:
-            model_name:
-                KIM model name to use for calculations
-            model:
-                ASE calculator to use for calculations     
             atoms:
-                List of ASE atoms objects to use as the initial configurations or to build supercells.  (NOT YET IMPLEMENTED)
-                If a single atoms object is provided, it will be converted to a single-element list
-            filename:
-                Path to results.edn file to be written. The default provided is the correct path to work in the KIM Pipeline or KIM Developer Platform
+                ASE atoms objects to use as the initial configuration or to build supercells. 
+                If this is provided, none of the arguments that are part of the Crystal Genome 
+                designation should be provided, and vice versa.
             stoichiometric_species:
-                List of unique species in the crystal
+                List of unique species in the crystal. Required part of the Crystal Genome designation. 
             prototype_label:
-                AFLOW prototype label for the crystal
+                AFLOW prototype label for the crystal. Required part of the Crystal Genome designation. 
+            parameter_names:
+                Names of free parameters of the crystal besides 'a'. May be None if the crystal is cubic with no internal DOF.
+                Should have length one less than `parameter_values_angstrom`. Part of the Crystal Genome designation.
+                May be omitted for debugging, required metadata for OpenKIM Pipeline operation.
             parameter_values_angstrom:
-                List of lists of AFLOW prototype parameters for the crystal.
+                List of AFLOW prototype parameters for the crystal. Required part of the Crystal Genome designation. 
                 a (first element, always present) is in angstroms, while the other parameters 
                 (present for crystals with more than 1 DOF) are in degrees or unitless. 
-                If the provided list is not nested, it will be converted to a 
-                If this is omitted, the parameters will be queried for
+            library_prototype_label: 
+                AFLOW library prototype label, may be `None`. Optional part of the Crystal Genome designation.  
+            short_name: 
+                List of any human-readable short names (e.g. "FCC") associated with the crystal. 
+                Optional part of the Crystal Genome designation.
             cell_cauchy_stress_eV_angstrom3:
                 Cauchy stress on the cell in eV/angstrom^3 (ASE units) in [xx,yy,zz,yz,xz,xy] format
             temperature_K:
                 The temperature in Kelvin
-        """        
-        # Initialize model, atoms, output file        
-        super().__init__(model_name,model,atoms,filename)
+        """ 
 
-        self.stoichiometric_species = stoichiometric_species
+        super()._setup(atoms)
+        self.stoichiometric_species = stoichiometric_species        
         self.prototype_label = prototype_label
+        self.parameter_names = parameter_names
+        self.parameter_values_angstrom = parameter_values_angstrom
+        self.library_prototype_label = library_prototype_label
+        if isinstance(short_name,str):
+            self.short_name = [short_name]
+        else:
+            self.short_name = short_name
         self.cell_cauchy_stress_eV_angstrom3 = cell_cauchy_stress_eV_angstrom3
         self.temperature_K = temperature_K
-        
-        self.library_prototype_label = [None]*len(self.atoms)
-        self.short_name = [None]*len(self.atoms)        
 
-        # Only handle expected combinations of inputs, but don't raise errors for unexpected combinations, 
-        # who knows what a developer might want to do?
-        if (self.atoms is not None) and (self.prototype_label is None) and (parameter_values_angstrom is None):
-            # placeholders for loop
-            self.parameter_values_angstrom = [None]*len(self.atoms)
+        if (
+            (self.stoichiometric_species is None) !=
+            (self.prototype_label is None) !=
+            (self.parameter_values_angstrom is None)
+        ):
+            print (self._setup.__doc__)
+            raise KIMTestDriverError ("\n\nYou have provided some but not all of the required parts of the Crystal Genome designation specified in the docstring above.")
 
-            for i in range(len(self.atoms)):
-                self._update_aflow_designation_from_atoms(i)
-                # Rebuild atoms object
-                aflow = aflow_util.AFLOW()
-                self.atoms[i] = aflow.build_atoms_from_prototype(self.stoichiometric_species,self.prototype_label,self.parameter_values_angstrom[i])
-                # Error check->update_aflow_designation should catch it 
-                self._update_aflow_designation_from_atoms(i)
-        elif (stoichiometric_species is not None) and (prototype_label is not None):
-            # only run this code if atoms is None, so we don't overwrite an existing atoms object
-            if (parameter_values_angstrom is None) and (model_name is not None):
-                self._query_aflow_designation_from_label_and_species()
-            else:                
-                if not isinstance(parameter_values_angstrom[0],list):
-                    self.parameter_values_angstrom = [parameter_values_angstrom]
-                else:
-                    self.parameter_values_angstrom = parameter_values_angstrom                    
-                # For now, if this constructor is called to build atoms from a fully provided AFLOW designation, don't assign library prototypes to it
-                # TODO: Think about how to handle this
-                self.parameter_names = ["dummy"]*(len(self.parameter_values_angstrom[0])-1) 
-                # TODO: Get the list of parameter names from prototype (preferably without re-analyzing atoms object)
+        if self.atoms is not None:
+            if (
+                (self.stoichiometric_species is not None) or # only need to check one required part
+                ((self.short_name is not None)) or
+                ((self.library_prototype_label is not None)) or
+                ((self.parameter_names is not None))
+            ):
+                print (self._setup.__doc__)
+                raise KIMTestDriverError ("\n\nYou have provided an Atoms object as well as at least one part of the Crystal Genome designation specified in the docstring above.\n"
+                                          "Please provide only an Atoms object or a Crystal Genome designation, not both")  
+                                  
+            # Updates the Crystal Genome designation class attributes according to self.atoms
+            # It checks to make sure that stoichiometric_species and prototype_label have not changed,
+            # But they are both None for now, so the check is skipped            
+            self._update_crystal_genome_designation_from_atoms()
+            # rebuild atoms for consistent orientation
             aflow = aflow_util.AFLOW()
-            self.atoms = []
-            for parameter_values_set_angstrom in self.parameter_values_angstrom:
-                self.atoms.append(aflow.build_atoms_from_prototype(stoichiometric_species,prototype_label,parameter_values_set_angstrom))
-        
-    def _query_aflow_designation_from_label_and_species(self):
-        """
-        Query for all equilibrium parameter sets for this prototype label and species in the KIM database
-        """
-        # TODO: Some kind of generalized query interface for all tests, this is very hand-made
-        cell_cauchy_stress_Pa = [component*1.6021766e+11 for component in self.cell_cauchy_stress_eV_angstrom3]
-        query_result=raw_query(
-            query={
-                "meta.type":"tr",
-                "property-id":"tag:staff@noreply.openkim.org,2023-02-21:property/crystal-structure-npt",
-                "meta.subject.extended-id":self.model_name,
-                "stoichiometric-species.source-value":{
-                    "$size":len(self.stoichiometric_species),
-                    "$all":self.stoichiometric_species
-                },
-                "prototype-label.source-value":self.prototype_label,
-                "cell-cauchy-stress.si-value":cell_cauchy_stress_Pa,
-                "temperature.si-value":self.temperature_K
-            },
-            fields={
-                "a.si-value":1,
-                "parameter-names.source-value":1,
-                "parameter-values.source-value":1,
-                "library-prototype-label.source-value":1,
-                "short-name.source-value":1,
-                },
-            database="data", limit=0, flat='on') # can't use project because parameter-values won't always exist
-        if "parameter-names.source-value" in query_result[0]:
-            self.parameter_names = query_result[0]["parameter-names.source-value"] # determined by prototype-label, same for all crystals
+            self.atoms = aflow.build_atoms_from_prototype(self.stoichiometric_species,self.prototype_label,self.parameter_values_angstrom)
+            # Error check->_update_crystal_genome_designation_from_atoms should catch it 
+            self._update_crystal_genome_designation_from_atoms()
+        elif self.stoichiometric_species is not None: # we've already checked that if this is not None, other required parts exist as well
+            # some checks and cleanup
+            if (len(self.parameter_values_angstrom) > 1) and (self.parameter_names is None):
+                warn("You've provided parameter values besides `a`, but no parameter names.\n"
+                     "Placeholders will be inserted for debugging.")
+                self.parameter_names = ["dummy"]*(len(self.parameter_values_angstrom[0])-1)
+            aflow = aflow_util.AFLOW()
+            self.atoms = aflow.build_atoms_from_prototype(self.stoichiometric_species,self.prototype_label,self.parameter_values_angstrom)
         else:
-            self.parameter_names = None
+            warn("You've provided neither a Crystal Genome designation nor an Atoms object.\n"
+                     "I won't stop you, but you better know what you're doing!")  
 
-        self.parameter_values_angstrom = []
-        self.library_prototype_label = []
-        self.short_name = []
-
-        for parameter_set in query_result:
-            self.parameter_values_angstrom.append([parameter_set["a.si-value"]*1e10])
-            if "parameter-values.source-value" in parameter_set: # has params other than a
-                self.parameter_values_angstrom[-1] += parameter_set["parameter-values.source-value"]
-            if "library-prototype-label.source-value" in parameter_set:
-                self.library_prototype_label.append(parameter_set["library-prototype-label.source-value"])
-            else:
-                self.library_prototype_label.append(None)
-            if "short-name.source-value" in parameter_set:
-                short_name = parameter_set["short-name.source-value"]
-                if not isinstance(short_name,list): # Necessary because we recently changed the property definition to be a list
-                    short_name = [short_name]
-                self.short_name.append(short_name)
-            else:
-                self.short_name.append(None)            
-
-    def _update_aflow_designation_from_atoms(self, structure_index:int, atoms:Optional[Atoms] = None):
+    def _get_crystal_genome_designation_from_atoms_and_verify_unchanged_symmetry(
+            self, atoms: Atoms, loose_triclinic_and_monoclinic = False
+    ) -> Dict:
         """
-        Update the `structure_index`-th Crystal Genome crystal description fields from the corresponding self.atoms object
+        Get crystal genome designation from an ASE atoms object, and check if symmetry is consistent with 
+        existing symmetry in this class
+
+        Args:
+            loose_triclinic_and_monoclinic:
+                For triclinic and monoclinic space groups (1-15), the Wyckoff letters can be assigned in a non-unique way. Therefore,
+                it may be useful to only check the first three parts of the prototype label: stoichiomerty, Pearson symbol and space
+                group number. Use this if you are getting unexpected errors for monoclinic and triclinic crystals
+
+        Returns:
+            A dictionary with the following keys:
+                stoichiometric_species: List[str]
+                    List of unique species in the crystal
+                prototype_label: str
+                    AFLOW prototype label for the crystal
+                parameter_names: Optional[List[str]]
+                    Names of free parameters of the crystal besides 'a'. May be None if the crystal is cubic with no internal DOF.
+                    Should have length one less than `parameter_values_angstrom`
+                parameter_values_angstrom: List[float]
+                    Free parameter values of the crystal. The first element in each inner list is the 'a' lattice parameter in 
+                    angstrom, the rest (if present) are in degrees or unitless
+                library_prototype_label: Optional[str]
+                    AFLOW library prototype label
+                short_name: Optional[List[str]]
+                    List of human-readable short names (e.g. "FCC"), if present
+        """
+        crystal_genome_designation = get_crystal_genome_designation_from_atoms(atoms)
+        assert ((self.stoichiometric_species is None) == (self.prototype_label is None)), "self.stoichiometric_species and self.prototype_label should either both be None, or neither"
+        if self.stoichiometric_species is not None:
+            verify_unchanged_symmetry(
+                self.stoichiometric_species,self.prototype_label,**crystal_genome_designation,loose_triclinic_and_monoclinic=loose_triclinic_and_monoclinic)
+            
+        return crystal_genome_designation
+    
+    def _update_crystal_genome_designation_from_atoms(self, atoms: Optional[Atoms] = None, loose_triclinic_and_monoclinic = False):
+        """
+        Update the Crystal Genome crystal description fields from the corresponding self.atoms object
         or the provided atoms object        
+
+        Args:
+            loose_triclinic_and_monoclinic:
+                For triclinic and monoclinic space groups (1-15), the Wyckoff letters can be assigned in a non-unique way. Therefore,
+                it may be useful to only check the first three parts of the prototype label: stoichiomerty, Pearson symbol and space
+                group number. Use this if you are getting unexpected errors for monoclinic and triclinic crystals
         """
         if atoms is None:
-            atoms = self.atoms[structure_index]
+            atoms = self.atoms
 
-        aflow = aflow_util.AFLOW()
-        with NamedTemporaryFile('w',delete=False) as fp: #KDP has python3.8 which is missing the convenient `delete_on_close` option
-            atoms.write(fp,format='vasp')
-            fp.close()
-            with open(fp.name) as f:
-                proto_des = aflow.get_prototype(f.name)
-                libproto,short_name = aflow.get_library_prototype_label_and_shortname(f.name,aflow_util.read_shortnames())
-            os.remove(fp.name)
+        # get designation and check that symmetry has not changed (symmetry will not be checked if own CG designation has not been set)
+        crystal_genome_designation = self._get_crystal_genome_designation_from_atoms_and_verify_unchanged_symmetry(atoms, loose_triclinic_and_monoclinic)
 
-        self.parameter_values_angstrom[structure_index] = proto_des["aflow_prototype_params_values"]
-        self.library_prototype_label[structure_index] = libproto
-        if short_name is None:
-            self.short_name[structure_index] = None
-        else:
-            self.short_name[structure_index] = [short_name]
+        self.stoichiometric_species = crystal_genome_designation["stoichiometric_species"]
+        self.prototype_label = crystal_genome_designation["prototype_label"]
+        self.parameter_names = crystal_genome_designation["parameter_names"]
+        self.parameter_values_angstrom = crystal_genome_designation["parameter_values_angstrom"]
+        self.library_prototype_label = crystal_genome_designation["library_prototype_label"]
+        self.short_name = crystal_genome_designation["short_name"]
 
-        if self.prototype_label is None:
-            # we have not analyzed a single prototype yet
-            assert self.stoichiometric_species is None
-            self.prototype_label = proto_des["aflow_prototype_label"]
-            parameter_names = proto_des["aflow_prototype_params_list"][1:]
-            if len(parameter_names) > 1:
-                self.parameter_names = parameter_names
-            else:
-                self.parameter_names = None
-            self.stoichiometric_species = sorted(list(set(atoms.get_chemical_symbols())))
-        else:
-            if proto_des["aflow_prototype_label"] != self.prototype_label:
-                raise KIMTestDriverError("It appears that the symmetry (i.e. AFLOW prototype label) is not uniform among provided "
-                                  "structures, or it has changed")
-            if sorted(list(set(atoms.get_chemical_symbols()))) != self.stoichiometric_species:
-                raise KIMTestDriverError("It appears that the set of species is not uniform among provided "
-                                  "structures, or it has changed")
-
-    def _add_common_crystal_genome_keys_to_current_property_instance(self, structure_index: int, write_stress: bool = False, write_temp: bool = False):
+    def _add_common_crystal_genome_keys_to_current_property_instance(self, write_stress: bool = False, write_temp: bool = False):
         """
         Write common Crystal Genome keys -- prototype description and, optionally, stress and temperature
 
         Args:
-            structure_index:
-                Crystal Genome tests may take multiple equilibrium crystal structures of a shared prototype label and species,
-                resulting in multiple property instances of the same property(s) possibly being written. This indicates which
-                one is being written.
             write_stress:
                 Write the `cell-cauchy-stress` key
             write_temp:
@@ -442,19 +480,134 @@ class CrystalGenomeTestDriver(KIMTestDriver):
         """
         self._add_key_to_current_property_instance("prototype-label",self.prototype_label)
         self._add_key_to_current_property_instance("stoichiometric-species",self.stoichiometric_species)
-        self._add_key_to_current_property_instance("a",self.parameter_values_angstrom[structure_index][0],"angstrom")
+        self._add_key_to_current_property_instance("a",self.parameter_values_angstrom[0],"angstrom")
         if self.parameter_names is not None:            
             self._add_key_to_current_property_instance("parameter-names",self.parameter_names)
-            self._add_key_to_current_property_instance("parameter-values",self.parameter_values_angstrom[structure_index][1:])
-        if self.library_prototype_label[structure_index] is not None:
-            self._add_key_to_current_property_instance("library-prototype-label",self.library_prototype_label[structure_index])
-        if self.short_name[structure_index] is not None:
-            self._add_key_to_current_property_instance("short-name",self.short_name[structure_index])
-        
+            self._add_key_to_current_property_instance("parameter-values",self.parameter_values_angstrom[1:])
+        if self.library_prototype_label is not None:
+            self._add_key_to_current_property_instance("library-prototype-label",self.library_prototype_label)
+        if self.short_name is not None:
+            self._add_key_to_current_property_instance("short-name",self.short_name)        
         if write_stress:
             self._add_key_to_current_property_instance("cell-cauchy-stress",self.cell_cauchy_stress_eV_angstrom3,"eV/angstrom^3")
         if write_temp:
             self._add_key_to_current_property_instance("temperature",self.temperature_K,"K")
+
+    def _add_property_instance_and_common_crystal_genome_keys(self, property_name: str, write_stress: bool = False, write_temp: bool = False):
+        """
+        Initialize a new property instance to self.property_instances. It will automatically get the an instance-id
+        equal to the length of self.property_instances after it is added. Then, write the common Crystal Genome
+        keys to it from the attributes of this class.
+        It assumed that if you are calling this function, you have been only using the simplified property functions 
+        in this class and not doing any more advanced editing to self.property_instances using kim_property or any other methods. 
+
+        Args:
+            property_name:
+                The property name, e.g. "tag:staff@noreply.openkim.org,2023-02-21:property/binding-energy-crystal" or
+                "binding-energy-crystal"
+            write_stress:
+                Write the `cell-cauchy-stress` key
+            write_temp:
+                Write the `temperature` key
+        """        
+        super()._add_property_instance(property_name)
+        self._add_common_crystal_genome_keys_to_current_property_instance(write_stress,write_temp)
+ 
+################################################################################
+def query_crystal_genome_structures(
+            kim_model_name: str,
+            stoichiometric_species: List[str],
+            prototype_label: str,
+            cell_cauchy_stress_eV_angstrom3: List[float] = [0,0,0,0,0,0],
+            temperature_K: float = 0,
+        ) -> List[Dict]:
+    """
+    Query for all equilibrium parameter sets for this prototype label and species in the KIM database.
+
+    Args:
+        kim_model_name: str
+            KIM model name
+        stoichiometric_species:
+            List of unique species in the crystal. Required part of the Crystal Genome designation. 
+        prototype_label:
+            AFLOW prototype label for the crystal. Required part of the Crystal Genome designation. 
+        cell_cauchy_stress_eV_angstrom3:
+            Cauchy stress on the cell in eV/angstrom^3 (ASE units) in [xx,yy,zz,yz,xz,xy] format
+        temperature_K:
+            The temperature in Kelvin
+
+    Returns:
+        A list of dictionaries with the following keys:
+            stoichiometric_species: List[str]
+                List of unique species in the crystal
+            prototype_label: str
+                AFLOW prototype label for the crystal
+            parameter_names: Optional[List[str]]
+                Names of free parameters of the crystal besides 'a'. May be None if the crystal is cubic with no internal DOF.
+                Should have length one less than `parameter_values_angstrom`
+            parameter_values_angstrom: List[float]
+                Free parameter values of the crystal. The first element in each inner list is the 'a' lattice parameter in 
+                angstrom, the rest (if present) are in degrees or unitless
+            library_prototype_label: Optional[str]
+                AFLOW library prototype label
+            short_name: Optional[List[str]]
+                List of human-readable short names (e.g. "FCC"), if present
+    """
+    # TODO: Some kind of generalized query interface for all tests, this is very hand-made
+    cell_cauchy_stress_Pa = [component*1.6021766e+11 for component in cell_cauchy_stress_eV_angstrom3]
+    query_result=raw_query(
+        query={
+            "meta.type":"tr",
+            "property-id":"tag:staff@noreply.openkim.org,2023-02-21:property/crystal-structure-npt",
+            "meta.subject.extended-id":kim_model_name,
+            "stoichiometric-species.source-value":{
+                "$size":len(stoichiometric_species),
+                "$all":stoichiometric_species
+            },
+            "prototype-label.source-value":prototype_label,
+            "cell-cauchy-stress.si-value":cell_cauchy_stress_Pa,
+            "temperature.si-value":temperature_K
+        },
+        fields={
+            "a.si-value":1,
+            "parameter-names.source-value":1,
+            "parameter-values.source-value":1,
+            "library-prototype-label.source-value":1,
+            "short-name.source-value":1,
+            },
+        database="data", limit=0, flat='on') # can't use project because parameter-values won't always exist
+
+    list_of_cg_des = []
+
+    for parameter_set in query_result:
+        curr_cg_des = {}        
+        curr_cg_des["stoichiometric_species"] = stoichiometric_species # This was part of the query, but we provide it as output for a complete designation
+        curr_cg_des["prototype_label"] = prototype_label # This was part of the query, but we provide it as output for a complete designation
+        if "parameter-names.source-value" in parameter_set:
+            curr_cg_des["parameter_names"] = parameter_set["parameter-names.source-value"]
+        else:
+            curr_cg_des["parameter_names"] = None
+        # first element of parameter_values_angstrom is always present and equal to `a`
+        curr_cg_des["parameter_values_angstrom"] = [parameter_set["a.si-value"]*1e10]
+
+        if "parameter-values.source-value" in parameter_set: # has params other than a
+            curr_cg_des["parameter_values_angstrom"] += parameter_set["parameter-values.source-value"]
+            
+        if "library-prototype-label.source-value" in parameter_set:
+            curr_cg_des["library_prototype_label"] = parameter_set["library-prototype-label.source-value"]
+        else:
+            curr_cg_des["library_prototype_label"] = None
+
+        if "short-name.source-value" in parameter_set:
+            short_name = parameter_set["short-name.source-value"]
+            if not isinstance(short_name,list): # Necessary because we recently changed the property definition to be a list
+                short_name = [short_name]                
+            curr_cg_des["short_name"] = short_name
+        else:
+            curr_cg_des["short_name"] = None
+        list_of_cg_des.append(curr_cg_des)
+
+    return list_of_cg_des
 
 # TODO: Can probably move to different location as its not ASE related 
 class Registry:
@@ -493,3 +646,4 @@ registry = Registry()
 # If called directly, do nothing
 if __name__ == "__main__":
     pass
+
