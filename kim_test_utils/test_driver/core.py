@@ -84,7 +84,8 @@ class KIMTestDriver(ABC):
             ASE atoms object
         _property_instances: str
             A string containing the serialized KIM-EDN formatted property instances.
-
+        _cached_files: Dict
+            keys: filenames to be assigned to files, values: serialized strings to dump into those files. To be used for 'file' type properties
     """
 
     def __init__(self, model: Union[str,Calculator]):
@@ -101,7 +102,7 @@ class KIMTestDriver(ABC):
         else:
             self.kim_model_name = model
             self._calc = KIM(self.kim_model_name)
-        
+        self._cached_files = {}
         self._property_instances = "[]"
 
     def _setup(self, atoms: Optional[Atoms] = None, **kwargs):
@@ -118,8 +119,13 @@ class KIMTestDriver(ABC):
         raise NotImplementedError("Subclasses must implement the _calculate method.")
 
     def write_property_instances_to_file(self,filename="output/results.edn"):
+        # Write the property instances to a file at the requested path. Also dumps any cached files to the same directory
         with open(filename, "w") as f:
             kim_property_dump(self._property_instances, f)
+        for cached_file in self._cached_files:        
+            with open(os.path.join(os.path.dirname(filename),cached_file),"w") as f:
+                f.write(self._cached_files[cached_file])
+        
 
     def __call__(self, atoms: Optional[Atoms] = None, **kwargs):
         """
@@ -515,8 +521,7 @@ class CrystalGenomeTestDriver(KIMTestDriver):
         if self.poscar is not None:
             current_instance_index = len(kim_edn.loads(self._property_instances))
             filename = "instance-%d.poscar"%current_instance_index
-            with open("output/"+filename,"w") as f:
-                f.write(self.poscar)
+            self._cached_files[filename] = self.poscar
             self._add_key_to_current_property_instance("coordinates-file",filename)
 
     def _add_property_instance_and_common_crystal_genome_keys(self, property_name: str, write_stress: bool = False, write_temp: bool = False):
