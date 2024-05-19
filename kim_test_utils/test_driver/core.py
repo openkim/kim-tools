@@ -31,6 +31,7 @@ Helper classes for KIM Test Drivers
 
 """
 import numpy as np
+from numpy.typing import ArrayLike
 from ase import Atoms
 from ase.calculators.kim.kim import KIM
 from ase.calculators.calculator import Calculator
@@ -43,6 +44,7 @@ from kim_query import raw_query
 from tempfile import NamedTemporaryFile
 import os
 from warnings import warn
+from io import StringIO
 
 __version__ = "0.1.0"
 __author__ = ["ilia Nikiforov", "Eric Fuemmeler"]
@@ -149,10 +151,8 @@ class KIMTestDriver(ABC):
                                   "Was self.property_instances edited directly instead of using this package?")
         self._property_instances = kim_property_create(new_instance_index, property_name, self._property_instances)
 
-    def _add_key_to_current_property_instance(self, name: str, value: Any, units: Optional[str] = None):
+    def _add_key_to_current_property_instance(self, name: str, value: ArrayLike, units: Optional[str] = None):
         """
-        TODO: Add uncertainty output
-
         Write a key to the last element of self.property_instances. If the value is an array,
         this function will assume you want to write to the beginning of the array in every dimension.
         This function is intended to write entire keys in one go, and should not be used for modifying
@@ -312,6 +312,8 @@ class CrystalGenomeTestDriver(KIMTestDriver):
             Cauchy stress on the cell in eV/angstrom^3 (ASE units) in [xx,yy,zz,yz,xz,xy] format
         temperature_K: float
             The temperature in Kelvin
+        poscar: Optional[str]
+            String to be dumped as a poscar file
     """
     def _setup(self,
                atoms: Optional[Atoms] = None,
@@ -323,12 +325,13 @@ class CrystalGenomeTestDriver(KIMTestDriver):
                short_name: Optional[Union[List[str],str]] = None,
                cell_cauchy_stress_eV_angstrom3: List[float] = [0,0,0,0,0,0],
                temperature_K: float = 0,
+               rebuild_atoms: bool = True,
                **kwargs
                ):
         """
         Args:
             atoms:
-                ASE atoms objects to use as the initial configuration or to build supercells. 
+                ASE Atoms objects to use as the initial configuration or to build supercells. 
                 If this is provided, none of the arguments that are part of the Crystal Genome 
                 designation should be provided, and vice versa.
             stoichiometric_species:
@@ -352,9 +355,15 @@ class CrystalGenomeTestDriver(KIMTestDriver):
                 Cauchy stress on the cell in eV/angstrom^3 (ASE units) in [xx,yy,zz,yz,xz,xy] format
             temperature_K:
                 The temperature in Kelvin
+            rebuild_atoms:
+                Normally, if you provide an Atoms object, it will be analyzed for its symmetry-reduced AFLOW description,
+                and then rebuilt so that the orientation is always consistent. This can rarely cause an error due to
+                rounding resulting in a higher-symmetry crystal being created during the rebuild. If you do not care
+                about having your Atoms in the standard AFLOW orientation, you can turn the rebuild off.
         """ 
 
         super()._setup(atoms)
+        self.poscar = None
         self.stoichiometric_species = stoichiometric_species        
         self.prototype_label = prototype_label
         self.parameter_names = parameter_names
@@ -390,19 +399,22 @@ class CrystalGenomeTestDriver(KIMTestDriver):
             # It checks to make sure that stoichiometric_species and prototype_label have not changed,
             # But they are both None for now, so the check is skipped            
             self._update_crystal_genome_designation_from_atoms()
-            # rebuild atoms for consistent orientation
-            aflow = aflow_util.AFLOW()
-            self.atoms = aflow.build_atoms_from_prototype(self.stoichiometric_species,self.prototype_label,self.parameter_values_angstrom)
-            # Error check->_update_crystal_genome_designation_from_atoms should catch it 
-            self._update_crystal_genome_designation_from_atoms()
+            if rebuild_atoms:
+                # rebuild atoms for consistent orientation
+                aflow = aflow_util.AFLOW()
+                self.atoms = aflow.build_atoms_from_prototype(self.stoichiometric_species,self.prototype_label,self.parameter_values_angstrom)
+                # Formerly there was a check here yet again to make sure symmetry hasn't changed, but I don't think it's important
         elif self.stoichiometric_species is not None: # we've already checked that if this is not None, other required parts exist as well
             # some checks and cleanup
             if (len(self.parameter_values_angstrom) > 1) and (self.parameter_names is None):
                 warn("You've provided parameter values besides `a`, but no parameter names.\n"
                      "Placeholders will be inserted for debugging.")
-                self.parameter_names = ["dummy"]*(len(self.parameter_values_angstrom[0])-1)
+                self.parameter_names = ["dummy"]*(len(self.parameter_values_angstrom)-1)
             aflow = aflow_util.AFLOW()
             self.atoms = aflow.build_atoms_from_prototype(self.stoichiometric_species,self.prototype_label,self.parameter_values_angstrom)
+            with StringIO() as output:
+                self.atoms.write(output,format='vasp')
+                self.poscar=output.getvalue()                        
         else:
             warn("You've provided neither a Crystal Genome designation nor an Atoms object.\n"
                      "I won't stop you, but you better know what you're doing!")  
@@ -451,7 +463,7 @@ class CrystalGenomeTestDriver(KIMTestDriver):
     def _update_crystal_genome_designation_from_atoms(self, atoms: Optional[Atoms] = None, loose_triclinic_and_monoclinic = False):
         """
         Update the Crystal Genome crystal description fields from the corresponding self.atoms object
-        or the provided atoms object        
+        or the provided atoms object. Additionally, cache a poscar file to write later.
 
         Args:
             loose_triclinic_and_monoclinic:
@@ -464,6 +476,10 @@ class CrystalGenomeTestDriver(KIMTestDriver):
 
         # get designation and check that symmetry has not changed (symmetry will not be checked if own CG designation has not been set)
         crystal_genome_designation = self._get_crystal_genome_designation_from_atoms_and_verify_unchanged_symmetry(atoms, loose_triclinic_and_monoclinic)
+
+        with StringIO() as output:
+            atoms.write(output,format='vasp')
+            self.poscar=output.getvalue()
 
         self.stoichiometric_species = crystal_genome_designation["stoichiometric_species"]
         self.prototype_label = crystal_genome_designation["prototype_label"]
@@ -496,6 +512,12 @@ class CrystalGenomeTestDriver(KIMTestDriver):
             self._add_key_to_current_property_instance("cell-cauchy-stress",self.cell_cauchy_stress_eV_angstrom3,"eV/angstrom^3")
         if write_temp:
             self._add_key_to_current_property_instance("temperature",self.temperature_K,"K")
+        if self.poscar is not None:
+            current_instance_index = len(kim_edn.loads(self._property_instances))
+            filename = "instance-%d.poscar"%current_instance_index
+            with open("output/"+filename,"w") as f:
+                f.write(self.poscar)
+            self._add_key_to_current_property_instance("coordinates-file",filename)
 
     def _add_property_instance_and_common_crystal_genome_keys(self, property_name: str, write_stress: bool = False, write_temp: bool = False):
         """
