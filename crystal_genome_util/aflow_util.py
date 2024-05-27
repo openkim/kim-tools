@@ -137,9 +137,6 @@ def read_shortnames() -> Dict:
                 sname = sname[:-1]
             # add prototype to shortnames dictionary
             shortnames[prototype] = sname.rstrip()
-        # TODO: remove this if AFLOW fixes it. Right now the readme is incommensurate with the CLI
-        if "AB3C6_cI80_206_b_d_e-001" in shortnames:
-            shortnames["AB3C6_cI80_206_b_d_e-001"] = shortnames.pop("AB3C6_cI80_206_a_d_e-001")
     return shortnames
 
 def get_formula_from_prototype(prototype_label: str) -> Tuple[str,int,int]:
