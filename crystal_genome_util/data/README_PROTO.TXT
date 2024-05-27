@@ -1339,7 +1339,7 @@ AB3C16_cF160_203_a_bc_eg-001.{ABC}               cF160     Fd-3                -
 AB32C48_cI162_204_a_2efg_2gh-001.{ABC}           cI162     Im-3                -         Mg32(Al,Zn)49       #204      Bergman [Mg32(Al,Zn)49] (part 1)
 A2B3C6_cP264_205_2d_ab2c2d_6d-001.{ABC}          cP264     Pa-3                -         Ca3Al2O6            #205      Ca3Al2O6 (part 2)   
 AB3C2_cI96_206_c_e_ad-001.{ABC}                  cI96      Ia-3                E9_{d}    AlLi3N2             #206      AlLi3N2 (part 2)    
-AB3C6_cI80_206_a_d_e-001.{ABC}                   cI80      Ia-3                D5_3      (Mn,Fe)2O3          #206      Bixbyite (part 1)   
+AB3C6_cI80_206_b_d_e-001.{ABC}                   cI80      Ia-3                D5_3      (Mn,Fe)2O3          #206      Bixbyite (part 1)
 A24BC_cF104_209_j_a_b-001.{ABC}                  cF104     F432                -         F6KP                #209      F6KP (part 2)       
 A12B6C_cF608_210_4h_2h_e-001.{ABC}               cF608     F4_{1}32            -         Te[OH]6             #210      Te6 (part 2)        
 A3B3C_cI56_214_g_h_a-001.{ABC}                   cI56      I4_{1}32            -         Ca3PI3              #214      Ca3PI3 (part 2)     
