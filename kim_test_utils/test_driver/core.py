@@ -38,6 +38,7 @@ from ase.calculators.calculator import Calculator
 from typing import Any, Optional, List, Union, Dict
 from abc import ABC, abstractmethod
 from kim_property import kim_property_create, kim_property_modify, kim_property_dump
+from kim_property.modify import STANDARD_KEYS_SCLAR_OR_WITH_EXTENT
 import kim_edn
 from crystal_genome_util import aflow_util
 from kim_query import raw_query
@@ -125,7 +126,6 @@ class KIMTestDriver(ABC):
         for cached_file in self._cached_files:        
             with open(os.path.join(os.path.dirname(filename),cached_file),"w") as f:
                 f.write(self._cached_files[cached_file])
-        
 
     def __call__(self, atoms: Optional[Atoms] = None, **kwargs):
         """
@@ -157,7 +157,7 @@ class KIMTestDriver(ABC):
                                   "Was self.property_instances edited directly instead of using this package?")
         self._property_instances = kim_property_create(new_instance_index, property_name, self._property_instances)
 
-    def _add_key_to_current_property_instance(self, name: str, value: ArrayLike, units: Optional[str] = None):
+    def _add_key_to_current_property_instance(self, name: str, value: ArrayLike, units: Optional[str] = None, uncertainty_info: Optional[dict] = None):
         """
         Write a key to the last element of self.property_instances. If the value is an array,
         this function will assume you want to write to the beginning of the array in every dimension.
@@ -182,31 +182,55 @@ class KIMTestDriver(ABC):
                 Data type of the elements should be str, float, or int
             units:
                 The units
+            uncertainty_info:
+                dictionary containing any uncertainty keys you wish to include. See https://openkim.org/doc/schema/properties-framework/
+                for the possible uncertainty key names. These must be the same dimension as `value`, or they may be scalars regardless
+                of the shape of `value`.
         """
+        
+        def recur_dimensions(prev_indices: List[int], sub_value: np.ndarray, modify_args: list, key_name: str='source-value'):
+            sub_shape = sub_value.shape
+            assert len(sub_shape) != 0, "Should not have gotten to zero dimensions in the recursive function"
+            if len(sub_shape) == 1:
+                # only if we have gotten to a 1-dimensional sub-array do we write stuff
+                modify_args += [key_name, *prev_indices, "1:%d" % sub_shape[0], *sub_value]
+            else:
+                for i in range(sub_shape[0]):
+                    prev_indices.append(i + 1)  # convert to 1-based indices
+                    recur_dimensions(prev_indices, sub_value[i], modify_args, key_name)
+                    prev_indices.pop()
+
+
         value_arr = np.array(value)
         value_shape = value_arr.shape
+
         current_instance_index = len(kim_edn.loads(self._property_instances))
         modify_args = ["key", name]
         if len(value_shape) == 0:
             modify_args += ["source-value", value]
         else:
-            def recur_dimensions(prev_indices: List[int], sub_value: np.ndarray, modify_args: list):
-                sub_shape = sub_value.shape
-                assert len(sub_shape) != 0, "Should not have gotten to zero dimensions in the recursive function"
-                if len(sub_shape) == 1:
-                    # only if we have gotten to a 1-dimensional sub-array do we write stuff
-                    modify_args += ["source-value", *prev_indices, "1:%d" % sub_shape[0], *sub_value]
-                else:
-                    for i in range(sub_shape[0]):
-                        prev_indices.append(i + 1)  # convert to 1-based indices
-                        recur_dimensions(prev_indices, sub_value[i], modify_args)
-                        prev_indices.pop()
-
             prev_indices = []
             recur_dimensions(prev_indices, value_arr, modify_args)
 
         if units is not None:
             modify_args += ["source-unit", units]
+
+        if uncertainty_info is not None:
+            for uncertainty_key in uncertainty_info:
+                if not uncertainty_key in STANDARD_KEYS_SCLAR_OR_WITH_EXTENT:
+                    raise KIMTestDriverError("Uncertainty key %s is not one of the allowed options %s."%(uncertainty_key,str(STANDARD_KEYS_SCLAR_OR_WITH_EXTENT)))
+                uncertainty_value = uncertainty_info[uncertainty_key]
+                uncertainty_value_arr = np.array(uncertainty_value)
+                uncertainty_value_shape = uncertainty_value_arr.shape
+
+                if not(len(uncertainty_value_shape) == 0 or uncertainty_value_shape == value_shape):
+                    raise KIMTestDriverError("The value %s provided for uncertainty key %s has shape %s.\n"%(uncertainty_value_arr,uncertainty_key,str(uncertainty_value_shape))+\
+                                             "It must either be a scalar or match the shape %s of the source value you provided."%str(value_shape))
+                if len(uncertainty_value_shape) == 0:
+                    modify_args += [uncertainty_key, uncertainty_value]
+                else:
+                    prev_indices = []
+                    recur_dimensions(prev_indices, uncertainty_value_arr, modify_args, uncertainty_key)
 
         self._property_instances = kim_property_modify(self._property_instances, current_instance_index, *modify_args)
 
