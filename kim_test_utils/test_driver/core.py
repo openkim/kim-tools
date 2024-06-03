@@ -641,40 +641,6 @@ def query_crystal_genome_structures(
         list_of_cg_des.append(curr_cg_des)
 
     return list_of_cg_des
-
-# TODO: Can probably move to different location as its not ASE related 
-class Registry:
-    r"""Class for registry object which acts as central source of truth."""
-    __entries__ = {
-        "test-drivers": {},
-        "verification-checks": {},
-    }
-
-    @classmethod
-    def register_test_driver(cls, name):
-        def wrap(func):
-            cls.__entries__["test-drivers"][name] = func
-            return func
-
-        return wrap
-
-    @classmethod
-    def register_verification_check(cls, name):
-        def wrap(func):
-            cls.__entries__["verification-checks"][name] = func
-            return func
-
-        return wrap
-
-    @classmethod
-    def get_test_driver_class(cls, name):
-        return cls.__entries__["test-drivers"].get(name, None)
-
-    @classmethod
-    def get_verification_check_class(cls, name):
-        return cls.__entries__["verification-checks"].get(name, None)
-
-registry = Registry()
         
 # If called directly, do nothing
 if __name__ == "__main__":
