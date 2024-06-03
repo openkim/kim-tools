@@ -584,6 +584,8 @@ def query_crystal_genome_structures(
             short_name: Optional[List[str]]
                 List of human-readable short names (e.g. "FCC"), if present
     """
+    stoichiometric_species.sort()
+
     # TODO: Some kind of generalized query interface for all tests, this is very hand-made
     cell_cauchy_stress_Pa = [component*1.6021766e+11 for component in cell_cauchy_stress_eV_angstrom3]
     query_result=raw_query(
