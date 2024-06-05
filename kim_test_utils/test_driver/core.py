@@ -664,6 +664,8 @@ def query_crystal_genome_structures(
             curr_cg_des["short_name"] = None
         list_of_cg_des.append(curr_cg_des)
 
+    print('\n!!! Found %d unique equilibrium structures from query_crystal_genome_structures() !!!\n'%len(list_of_cg_des))
+
     return list_of_cg_des
         
 # If called directly, do nothing
