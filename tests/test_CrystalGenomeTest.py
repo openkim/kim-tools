@@ -24,7 +24,7 @@ class TestTestDriver(CrystalGenomeTestDriver):
         binding_energy_per_atom = binding_energy_per_formula/sum(reduced_stoichiometry)
 
         # add property instance and common fields
-        self._add_property_instance_and_common_crystal_genome_keys("binding-energy-crystal",write_stress=False, write_temp=False)
+        self._add_property_instance_and_common_crystal_genome_keys("binding-energy-crystal",False,False,"This is an example disclaimer.")
 
         # add the fields unique to this property
         self._add_key_to_current_property_instance("binding-potential-energy-per-atom",binding_energy_per_atom,"eV")

@@ -9,7 +9,7 @@ class TestTestDriver(KIMTestDriver):
         example calculate method
         """
         self.species = self.atoms.get_chemical_symbols()[0]
-        self._add_property_instance("atomic-mass")
+        self._add_property_instance("atomic-mass","This is an example disclaimer.")
         self._add_key_to_current_property_instance("species", self.atoms.get_chemical_symbols()[0])
         self._add_key_to_current_property_instance("mass", self.atoms.get_masses()[0], "amu", {'source-std-uncert-value':1})
 
