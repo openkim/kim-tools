@@ -647,7 +647,7 @@ class CrystalGenomeTestDriver(KIMTestDriver):
             self._cached_files[filename] = self.poscar
             self._add_key_to_current_property_instance("coordinates-file",filename) 
         if self.crystal_genome_material_id is not None:
-            self._add_key_to_current_property_instance("crystal_genome_material_id",self.crystal_genome_material_id)
+            self._add_key_to_current_property_instance("crystal-genome-material-id",self.crystal_genome_material_id)
 
     def _add_property_instance_and_common_crystal_genome_keys(self, property_name: str, write_stress: bool = False, write_temp: bool = False, disclaimer: Optional[str] = None):
         """
