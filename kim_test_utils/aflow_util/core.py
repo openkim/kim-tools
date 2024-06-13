@@ -10,6 +10,17 @@ from ase.spacegroup.symmetrize import refine_symmetry
 from curses.ascii import isalpha, isupper, isdigit
 from typing import Dict, List, Tuple, Union
 
+__author__ = ["ilia Nikiforov", "Ellad Tadmor"]
+__all__ = [
+    "get_stoich_reduced_list_from_prototype",
+    "get_species_list_from_string",
+    "read_shortnames",
+    "get_formula_from_prototype",
+    "get_wyckoff_info_and_cell",
+    "AFLOW"
+]
+
+
 def get_stoich_reduced_list_from_prototype(prototype_label: str) -> List[int]:
     """
     Get numerical list of stoichiometry from prototype label, i.e. "AB3\_...." -> [1,3]
@@ -356,7 +367,7 @@ class AFLOW:
         res_json = json.loads(output)
         return res_json    
 
-    def get_library_prototype_label_and_shortname(self, poscar_file: str,shortnames: Dict) -> Tuple[Union[str,None],Union[str,None]]:
+    def get_library_prototype_label_and_shortname(self, poscar_file: str,shortnames: Dict = read_shortnames()) -> Tuple[Union[str,None],Union[str,None]]:
         """
         Use the aflow command line tool to determine the library prototype label for a structure and look up its human-readable shortname.
         In the case of multiple results, the enumeration with the smallest misfit that is in the prototypes list is returned. If none

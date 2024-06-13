@@ -42,14 +42,13 @@ from abc import ABC, abstractmethod
 from kim_property import kim_property_create, kim_property_modify, kim_property_dump
 from kim_property.modify import STANDARD_KEYS_SCLAR_OR_WITH_EXTENT
 import kim_edn
-from crystal_genome_util import aflow_util
+from .. import aflow_util
 from kim_query import raw_query
 from tempfile import NamedTemporaryFile
 import os
 from warnings import warn
 from io import StringIO
 
-__version__ = "0.1.0"
 __author__ = ["ilia Nikiforov", "Eric Fuemmeler"]
 __all__ = [
     "KIMTestDriverError",
