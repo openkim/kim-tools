@@ -8,7 +8,14 @@ with open("README.md", "r") as fh:
 try:
     subprocess.check_output('aflow --proto=A_cF4_225_a')
 except Exception:
-    warn("aflow executable not found in PATH. You will not be able to run any Crystal Genome tests.")
+    message = "aflow executable not found in PATH. You will not be able to run any Crystal Genome tests."
+    lines =   "========================================================================================="
+    warn(message)
+    print()
+    print(lines)
+    print(message)
+    print(lines)
+    print()
 
 setuptools.setup(
     name="kim-test-utils",
