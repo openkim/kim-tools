@@ -1,2 +1,6 @@
 sphinx
 sphinx-autodoc-typehints
+ase
+numpy
+kim-property
+kim-query
