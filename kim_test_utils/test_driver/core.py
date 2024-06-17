@@ -39,6 +39,7 @@ from typing import Any, Optional, List, Union, Dict, IO
 from ase.optimize import LBFGSLineSearch
 from ase.constraints import ExpCellFilter
 from abc import ABC, abstractmethod
+import kim_property
 from kim_property import kim_property_create, kim_property_modify, kim_property_dump
 from kim_property.modify import STANDARD_KEYS_SCLAR_OR_WITH_EXTENT
 import kim_edn
@@ -48,6 +49,8 @@ from tempfile import NamedTemporaryFile
 import os
 from warnings import warn
 from io import StringIO
+from packaging import version
+from pprint import PrettyPrinter
 
 __author__ = ["ilia Nikiforov", "Eric Fuemmeler"]
 __all__ = [
@@ -60,6 +63,19 @@ __all__ = [
     "minimize_wrapper"
 ]
 
+def add_or_update_property(property_path:str):
+    assert os.access(kim_property.__path__[0],os.W_OK), 'kim_property must be installed in an editable location in order to add properties'
+    properties=kim_property.get_properties()
+    property=kim_edn.load(property_path)
+    property_id=property['property-id']
+    properties[property_id]=property
+    if version.parse(kim_property.__version__) < version.parse('2.6.0'):
+        kim_property.pickle.pickle_kim_properties(properties)
+    else:
+        kim_property.ednify.ednify_kim_properties(properties)
+    PrettyPrinter().pprint(kim_property.get_properties()[property_id])
+    print('\n\nSuccessfully pickled or ednified properties! Scroll up to check the property you just added.')
+
 FMAX_INITIAL = 1e-5 # Force tolerance for the optional initial relaxation of the provided cell
 MAXSTEPS_INITIAL = 10000 # Maximum steps for the optional initial relaxation of the provided cell
 def minimize_wrapper(supercell:Atoms, fmax:float=1e-5, steps:int=10000, \
@@ -69,6 +85,7 @@ def minimize_wrapper(supercell:Atoms, fmax:float=1e-5, steps:int=10000, \
     internal atom positions.
 
     LBFGSLineSearch convergence behavior is as follows:
+    
     - The solver returns True if it is able to converge within the optimizer
       iteration limits (which can be changed by the `steps` argument passed
       to `run`), otherwise it returns False.
