@@ -6,7 +6,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 try:
-    subprocess.check_output('aflow --proto=A_cF4_225_a')
+    subprocess.check_output(['aflow','--proto=A_cF4_225_a'])
 except Exception:
     message = "aflow executable not found in PATH. You will not be able to run any Crystal Genome tests."
     lines =   "========================================================================================="
@@ -36,5 +36,6 @@ setuptools.setup(
         "Operating System :: OS Independent",
         "Topic :: Scientific/Engineering :: Physics",
     ],
-    include_package_data=True
+    include_package_data=True,
+    scripts=['bin/add_or_update_property']
 )

@@ -1,0 +1,14 @@
+#!/usr/bin/python
+
+from kim_test_utils import add_or_update_property
+from sys import argv
+from os.path import isfile
+
+if len(argv) != 2:
+    raise RuntimeError('This script must be passed exactly one command-line argument.')
+if not isfile(argv[1]):
+    raise RuntimeError('The argument passed is not a valid file path.')
+try:
+    add_or_update_property(argv[1])
+except Exception:
+    raise RuntimeError('Failed to add or update property from definition file located at:\n%s'%argv[1])

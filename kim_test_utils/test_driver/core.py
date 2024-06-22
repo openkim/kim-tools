@@ -37,7 +37,8 @@ from ase.calculators.kim.kim import KIM
 from ase.calculators.calculator import Calculator
 from typing import Any, Optional, List, Union, Dict, IO
 from ase.optimize import LBFGSLineSearch
-from ase.constraints import ExpCellFilter
+from ase.optimize.optimize import Optimizer
+from ase.constraints import ExpCellFilter, UnitCellFilter
 from abc import ABC, abstractmethod
 import kim_property
 from kim_property import kim_property_create, kim_property_modify, kim_property_dump
@@ -60,7 +61,8 @@ __all__ = [
     "verify_unchanged_symmetry",
     "CrystalGenomeTestDriver",
     "query_crystal_genome_structures",
-    "minimize_wrapper"
+    "minimize_wrapper",
+    "add_or_update_property",
 ]
 
 def add_or_update_property(property_path:str):
@@ -78,8 +80,12 @@ def add_or_update_property(property_path:str):
 
 FMAX_INITIAL = 1e-5 # Force tolerance for the optional initial relaxation of the provided cell
 MAXSTEPS_INITIAL = 10000 # Maximum steps for the optional initial relaxation of the provided cell
+
 def minimize_wrapper(supercell:Atoms, fmax:float=1e-5, steps:int=10000, \
-                         variable_cell:bool=True, logfile:Optional[Union[str,IO]]='-') -> None:
+                         variable_cell:bool=True, logfile:Optional[Union[str,IO]]='-',
+                         algorithm: Optimizer = LBFGSLineSearch, 
+                         CellFilter: UnitCellFilter = ExpCellFilter,
+                         opt_kwargs: Dict = {}) -> None:
     """
     Use LBFGSLineSearch to Minimize cell energy with respect to cell shape and
     internal atom positions.
@@ -99,7 +105,7 @@ def minimize_wrapper(supercell:Atoms, fmax:float=1e-5, steps:int=10000, \
     further progress can be made, either due to reaching the iteration step
     limit, or a stalled minimization due to line search failures.
 
-    Parameters:
+    Args:
         supercell:
             Atomic configuration to be minimized.
         fmax:
@@ -109,12 +115,20 @@ def minimize_wrapper(supercell:Atoms, fmax:float=1e-5, steps:int=10000, \
             Maximum number of iterations for the minimization
         variable_cell:
             True to allow relaxation with respect to cell shape
+        logfile:
+            Log file. `'-'` means STDOUT
+        algorithm:
+            ASE optimizer algorithm
+        CellFilter:
+            Filter to use if variable_cell is requested
+        opt_kwargs:
+            Dictionary of kwargs to pass to optimizer
     """
     if variable_cell:
-        supercell_wrapped = ExpCellFilter(supercell)
-        opt = LBFGSLineSearch(supercell_wrapped, logfile=logfile)
+        supercell_wrapped = CellFilter(supercell)
+        opt = algorithm(supercell_wrapped, logfile=logfile, **opt_kwargs)
     else:
-        opt = LBFGSLineSearch(supercell, logfile=logfile)
+        opt = algorithm(supercell, logfile=logfile, **opt_kwargs)
     try:
         converged = opt.run(fmax=fmax, steps=steps)
         iteration_limits_reached = not converged
@@ -458,7 +472,7 @@ class CrystalGenomeTestDriver(KIMTestDriver):
                short_name: Optional[Union[List[str],str]] = None,
                cell_cauchy_stress_eV_angstrom3: List[float] = [0,0,0,0,0,0],
                temperature_K: float = 0,
-               crystal_genome_material_id: Optional[str] = None,
+               crystal_genome_source_structure_id: Optional[List[str]] = None,
                rebuild_atoms: bool = True,
                **kwargs
                ):
@@ -492,9 +506,9 @@ class CrystalGenomeTestDriver(KIMTestDriver):
                 Cauchy stress on the cell in eV/angstrom^3 (ASE units) in [xx,yy,zz,yz,xz,xy] format
             temperature_K:
                 The temperature in Kelvin
-            crystal_genome_material_id:
-                A provenance identifier of the format '[KIM test result uuid]:[instance-id]'. 
-                The chain of dependencies of this test that produced this structure ends in the test listed in the test result, 
+            crystal_genome_source_structure_id:
+                Provenance identifiers of the format '[KIM test result uuid]:[instance-id]'. 
+                The chains of dependencies of this test that produced this structure ends in the test listed in the test result, 
                 and started with the structure computed in the specific test result and instance-id referenced. May be
                 None if this test has no dependencies.
             rebuild_atoms:
@@ -511,7 +525,7 @@ class CrystalGenomeTestDriver(KIMTestDriver):
         self.parameter_names = parameter_names
         self.parameter_values_angstrom = parameter_values_angstrom
         self.library_prototype_label = library_prototype_label
-        self.crystal_genome_material_id = crystal_genome_material_id
+        self.crystal_genome_source_structure_id = crystal_genome_source_structure_id
         if isinstance(short_name,str):
             self.short_name = [short_name]
         else:
@@ -662,8 +676,8 @@ class CrystalGenomeTestDriver(KIMTestDriver):
             filename = "instance-%d.poscar"%current_instance_index
             self._cached_files[filename] = self.poscar
             self._add_key_to_current_property_instance("coordinates-file",filename) 
-        if self.crystal_genome_material_id is not None:
-            self._add_key_to_current_property_instance("crystal-genome-material-id",self.crystal_genome_material_id)
+        if self.crystal_genome_source_structure_id is not None:
+            self._add_key_to_current_property_instance("crystal-genome-source-structure-id",self.crystal_genome_source_structure_id)
 
     def _add_property_instance_and_common_crystal_genome_keys(self, property_name: str, write_stress: bool = False, write_temp: bool = False, disclaimer: Optional[str] = None):
         """
