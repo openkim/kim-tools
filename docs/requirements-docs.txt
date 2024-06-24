@@ -1,5 +1,6 @@
 sphinx
 sphinx-autodoc-typehints
+sphinx-gallery
 ase
 numpy
 kim-property

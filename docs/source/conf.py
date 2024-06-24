@@ -18,7 +18,12 @@ release = '0.1.0'
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
-extensions = ["sphinx.ext.autodoc","sphinx.ext.napoleon","sphinx_autodoc_typehints","sphinx.ext.intersphinx","sphinx.ext.todo"]
+extensions = ["sphinx.ext.autodoc","sphinx.ext.napoleon","sphinx_autodoc_typehints","sphinx.ext.intersphinx",'sphinx_gallery.gen_gallery']
+
+sphinx_gallery_conf = {
+     'examples_dirs': '../../examples',   # path to your example scripts
+     'gallery_dirs': 'auto_examples',  # path to where to save gallery generated output
+}
 
 intersphinx_mapping = {'ase': ('https://wiki.fysik.dtu.dk/ase/', None)}
 
@@ -45,10 +50,4 @@ html_static_path = ['_static']
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'classic'
-
-# Theme options are theme-specific and customize the look and feel of a theme
-# further.  For a list of options available for each theme, see the
-# documentation.
-#
-html_theme_options = {"stickysidebar":True}
+html_theme = 'alabaster'
