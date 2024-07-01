@@ -18,7 +18,7 @@ release = '0.1.0'
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
-extensions = ["sphinx.ext.autodoc","sphinx.ext.napoleon","sphinx_autodoc_typehints","sphinx.ext.intersphinx",'sphinx_gallery.gen_gallery']
+extensions = ["sphinx.ext.autodoc","sphinx.ext.napoleon","sphinx_autodoc_typehints","sphinx.ext.intersphinx",'sphinx_gallery.gen_gallery','sphinx_rtd_theme']
 
 sphinx_gallery_conf = {
      'examples_dirs': '../../examples',   # path to your example scripts
@@ -34,7 +34,8 @@ autodoc_inherit_docstrings = False
 autodoc_default_options = {
     'member-order': 'bysource',
     'inherited-members': False,
-    'show-inheritance': False
+    'show-inheritance': False,
+    'private-members': True
 }
 
 templates_path = ['_templates']
@@ -50,4 +51,4 @@ html_static_path = ['_static']
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'alabaster'
+html_theme = 'sphinx_rtd_theme'
