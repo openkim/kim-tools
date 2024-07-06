@@ -7,8 +7,6 @@ This is a tutorial for creating OpenKIM Test Drivers in the Crystal Genome frame
 .. note::
     If you are working in the KIM Developer Platform and intend to test the integration of your Test Driver into the OpenKIM pipeline, you should put your Test Driver in ``/home/openkim/test-drivers/<Extended KIM ID Prefix>__TD_DDDDDDDDDDDDD_VVV``, where ``<Extended KIM ID Prefix>`` is a short alphanumeric description of your test driver, ``DDDDDDDDDDDD`` is an arbitrary unique 12-digit integer code (it is conventional for in-development codes to start with `000000`), and ``VVV`` is the version starting with ``000``. For more info see https://openkim.org/doc/schema/kim-ids/.
 
-The Crystal Genome framework uses AFLOW Prototype Labels to describe arbitrary crystal structures in a complete, concise, and human-readable manner. A thorough description of the AFLOW prototype label can be found in Part IIB here: https://arxiv.org/abs/2401.06875.
-
 .. _doc.tutorial.property:
 
 Property Definition
@@ -21,14 +19,14 @@ Property Definition
 
 The first step is to create an OpenKIM *Property Definition* to describe the material property your Test Driver will calculate. 
 
-Learn how to do so here: :doc:`tutorial_property`. Once you have created your property definition file, you need to run the ``add_or_update_this_property`` command-line utility with the path to the property definition in order for this package to be able to use it. Pass the path to the property definition file as a command line argument. For example, to add the property provided with the ``CrystalGenomeASEExample__TD_000000654321_000``, assuming you have placed the driver into ``/home/openkim/test-drivers/``, run
+Learn how to do so here: :doc:`tutorial_property`. Once you have created your property definition file, you need to run the ``add_or_update_this_property`` command-line utility included with this package. Pass the path to the property definition file as a command line argument. For example, to add the property provided with the ``CrystalGenomeASEExample__TD_000000654321_000``, assuming you have placed the driver into ``/home/openkim/test-drivers/``, run
 
 .. code-block:: bash
 
     add_or_update_this_property /home/openkim/test-drivers/CrystalGenomeASEExample__TD_000000654321_000/local-props/energy-vs-volume-isotropic-crystal.edn
 
-``test_driver.py``
-==================
+Main Computational Code
+=======================
 
 .. toctree::
    :maxdepth: 2
@@ -36,5 +34,13 @@ Learn how to do so here: :doc:`tutorial_property`. Once you have created your pr
    auto_examples/CrystalGenomeASEExample__TD_000000654321_000/test_driver
 
 The next step is to write the main computational code. It must be contained in a Python file named ``test_driver.py``, although you may include as many other Python files as you wish for utility functions. The file included in the example Test Driver doubles as a tutorial and can be found here: :doc:`auto_examples/CrystalGenomeASEExample__TD_000000654321_000/test_driver`
+
+Metadata and KIM Processing Pipeline Integration
+================================================
+
+.. toctree::
+    :maxdepth: 2
+
+    tutorial_pipeline
 
 

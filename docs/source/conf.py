@@ -18,7 +18,7 @@ release = '0.1.0'
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
-extensions = ["sphinx.ext.autodoc","sphinx.ext.napoleon","sphinx_autodoc_typehints","sphinx.ext.intersphinx",'sphinx_gallery.gen_gallery','sphinx_rtd_theme']
+extensions = ['sphinx.ext.autodoc','sphinx.ext.napoleon','sphinx_autodoc_typehints','sphinx.ext.intersphinx','sphinx_gallery.gen_gallery','sphinx_rtd_theme','sphinx.ext.todo']
 
 sphinx_gallery_conf = {
      'examples_dirs': '../../examples',   # path to your example scripts
@@ -27,7 +27,7 @@ sphinx_gallery_conf = {
 
 intersphinx_mapping = {'ase': ('https://wiki.fysik.dtu.dk/ase/', None)}
 
-autoclass_content="both"
+autoclass_content='both'
 todo_include_todos = True
 
 autodoc_inherit_docstrings = False
