@@ -373,7 +373,7 @@ def get_crystal_genome_designation_from_atoms(atoms: Atoms,) -> Dict:
             library_prototype_label: Optional[str]
                 AFLOW library prototype label
             short_name: Optional[List[str]]
-                List of human-readable short names (e.g. "FCC"), if present
+                List of human-readable short names (e.g. "Face-Centered Cubic"), if present
     """
     aflow = aflow_util.AFLOW()
     cg_des = {}
@@ -419,6 +419,10 @@ def verify_unchanged_symmetry(
             For triclinic and monoclinic space groups (1-15), the Wyckoff letters can be assigned in a non-unique way. Therefore,
             it may be useful to only check the first three parts of the prototype label: stoichiomerty, Pearson symbol and space
             group number.
+
+    Raises:
+        KIMTestDriverError:
+            If the symmetries of the reference and test structures are different.
     """
     checking_full_label = True
     if (int(reference_prototype_label.split("_")[2]) < 16) and loose_triclinic_and_monoclinic: # triclinic or monoclinic space group
@@ -453,7 +457,7 @@ class CrystalGenomeTestDriver(KIMTestDriver):
         library_prototype_label: Optional[str]
             AFLOW library prototype label, may be `None`. 
         short_name: Optional[List[str]]
-            List of human-readable short names (e.g. "FCC"), if present
+            List of human-readable short names (e.g. "Face-Centered Cubic"), if present
         cell_cauchy_stress_eV_angstrom3: List[float]
             Cauchy stress on the cell in eV/angstrom^3 (ASE units) in [xx,yy,zz,yz,xz,xy] format
         temperature_K: float
@@ -500,7 +504,7 @@ class CrystalGenomeTestDriver(KIMTestDriver):
             library_prototype_label: 
                 AFLOW library prototype label, may be `None`. Optional part of the Crystal Genome designation.  
             short_name: 
-                List of any human-readable short names (e.g. "FCC") associated with the crystal. 
+                List of any human-readable short names (e.g. "Face-Centered Cubic") associated with the crystal. 
                 Optional part of the Crystal Genome designation.
             cell_cauchy_stress_eV_angstrom3:
                 Cauchy stress on the cell in eV/angstrom^3 (ASE units) in [xx,yy,zz,yz,xz,xy] format
@@ -579,34 +583,42 @@ class CrystalGenomeTestDriver(KIMTestDriver):
                      "I won't stop you, but you better know what you're doing!")  
 
     def _get_crystal_genome_designation_from_atoms_and_verify_unchanged_symmetry(
-            self, atoms: Optional[Atoms] = None, loose_triclinic_and_monoclinic = False
+            self, atoms: Optional[Atoms] = None, loose_triclinic_and_monoclinic: bool = False
     ) -> Dict:
         """
-        Get crystal genome designation from an ASE atoms object, and check if symmetry is consistent with 
+        Get Crystal Genome designation from ``self.atoms`` or a provided :class:`ase.Atoms` object, and check if symmetry is consistent with 
         existing symmetry in this class
 
         Args:
+            atoms:
+                The atoms object to analyze, if different from ``self.atoms``
             loose_triclinic_and_monoclinic:
                 For triclinic and monoclinic space groups (1-15), the Wyckoff letters can be assigned in a non-unique way. Therefore,
                 it may be useful to only check the first three parts of the prototype label: stoichiomerty, Pearson symbol and space
                 group number. Use this if you are getting unexpected errors for monoclinic and triclinic crystals
 
         Returns:
-            A dictionary with the following keys:
-                stoichiometric_species: List[str]
-                    List of unique species in the crystal
-                prototype_label: str
-                    AFLOW prototype label for the crystal
-                parameter_names: Optional[List[str]]
-                    Names of free parameters of the crystal besides 'a'. May be None if the crystal is cubic with no internal DOF.
-                    Should have length one less than `parameter_values_angstrom`
-                parameter_values_angstrom: List[float]
-                    Free parameter values of the crystal. The first element in each inner list is the 'a' lattice parameter in 
-                    angstrom, the rest (if present) are in degrees or unitless
-                library_prototype_label: Optional[str]
-                    AFLOW library prototype label
-                short_name: Optional[List[str]]
-                    List of human-readable short names (e.g. "FCC"), if present
+            Dict:
+                A dictionary with the following keys:
+                    stoichiometric_species: List[str]
+                        List of unique species in the crystal
+                    prototype_label: str
+                        AFLOW prototype label for the crystal
+                    parameter_names: Optional[List[str]]
+                        Names of free parameters of the crystal besides 'a'. May be None if the crystal is cubic with no internal DOF.
+                        Should have length one less than `parameter_values_angstrom`
+                    parameter_values_angstrom: List[float]
+                        Free parameter values of the crystal. The first element in each inner list is the 'a' lattice parameter in 
+                        angstrom, the rest (if present) are in degrees or unitless
+                    library_prototype_label: Optional[str]
+                        AFLOW library prototype label
+                    short_name: Optional[List[str]]
+                        List of human-readable short names (e.g. "Face-Centered Cubic"), if present
+
+        Raises:
+            KIMTestDriverError:
+                If the symmetry of the crystal has changed
+
         """
         if atoms is None:
             atoms = self.atoms
@@ -619,16 +631,21 @@ class CrystalGenomeTestDriver(KIMTestDriver):
                         
         return crystal_genome_designation
     
-    def _update_crystal_genome_designation_from_atoms(self, atoms: Optional[Atoms] = None, loose_triclinic_and_monoclinic = False):
+    def _update_crystal_genome_designation_from_atoms(self, atoms: Optional[Atoms] = None, loose_triclinic_and_monoclinic: bool = False):
         """
-        Update the Crystal Genome crystal description fields from the corresponding self.atoms object
-        or the provided atoms object. Additionally, cache a poscar file to write later.
+        Update the Crystal Genome crystal description fields from ``self.atoms`` or a provided :class:`ase.Atoms` object. Additionally, cache a poscar file to write later.
 
         Args:
+            atoms:
+                The atoms object to analyze, if different from ``self.atoms``
             loose_triclinic_and_monoclinic:
                 For triclinic and monoclinic space groups (1-15), the Wyckoff letters can be assigned in a non-unique way. Therefore,
                 it may be useful to only check the first three parts of the prototype label: stoichiomerty, Pearson symbol and space
                 group number. Use this if you are getting unexpected errors for monoclinic and triclinic crystals
+
+        Raises:
+            KIMTestDriverError:
+                If the symmetry of the crystal has changed                
         """
         if atoms is None:
             atoms = self.atoms
@@ -742,7 +759,7 @@ def query_crystal_genome_structures(
             library_prototype_label: Optional[str]
                 AFLOW library prototype label
             short_name: Optional[List[str]]
-                List of human-readable short names (e.g. "FCC"), if present
+                List of human-readable short names (e.g. "Face-Centered Cubic"), if present
     """
     stoichiometric_species.sort()
 

@@ -52,3 +52,7 @@ html_static_path = ['_static']
 # a list of builtin themes.
 #
 html_theme = 'sphinx_rtd_theme'
+
+rst_prolog = """
+.. |example_url| replace:: https://github.com/openkim-hackathons/CrystalGenomeASEExample__TD_000000654321_000
+"""
