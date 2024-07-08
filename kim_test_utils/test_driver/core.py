@@ -221,9 +221,6 @@ class KIMTestDriver(ABC):
             print("Minimized cell parameters:")
             print(self.atoms.cell)
             print()
-            self.o_cell = self.atoms.get_cell()
-            self.o_volume = self.atoms.get_volume()
-            self.refpositions = self.atoms.get_positions()
 
     @abstractmethod
     def _calculate(self, **kwargs):
@@ -379,7 +376,7 @@ def get_crystal_genome_designation_from_atoms(atoms: Atoms,) -> Dict:
     cg_des = {}
     
     with NamedTemporaryFile('w',delete=False) as fp: #KDP has python3.8 which is missing the convenient `delete_on_close` option
-        atoms.write(fp,format='vasp')
+        atoms.write(fp,sort=True,format='vasp')
         fp.close()
         with open(fp.name) as f:
             proto_des = aflow.get_prototype(f.name)
