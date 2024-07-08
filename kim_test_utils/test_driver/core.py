@@ -347,7 +347,8 @@ class KIMTestDriver(ABC):
 
         self._property_instances = kim_property_modify(self._property_instances, current_instance_index, *modify_args)
 
-    def get_property_instances(self) -> Dict:
+    @property
+    def property_instances(self) -> Dict:
         return kim_edn.loads(self._property_instances)
 
 ################################################################################
@@ -459,6 +460,11 @@ class CrystalGenomeTestDriver(KIMTestDriver):
             Cauchy stress on the cell in eV/angstrom^3 (ASE units) in [xx,yy,zz,yz,xz,xy] format
         temperature_K: float
             The temperature in Kelvin
+        crystal_genome_source_structure_id: Optional[List[str]]
+            Provenance identifiers of the format '[KIM test result uuid]:[instance-id]'. 
+            The chains of dependencies of this test that produced this structure ends in the test listed in the test result, 
+            and started with the structure computed in the specific test result and instance-id referenced. May be
+            None if this test has no dependencies.
         poscar: Optional[str]
             String to be dumped as a poscar file
     """

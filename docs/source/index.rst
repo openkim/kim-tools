@@ -23,7 +23,7 @@ Introduction
 
 This package is designed to facilitate writing `OpenKIM Test Drivers <https://openkim.org/doc/evaluation/kim-tests/>`_ in the Crystal Genome framework for arbitrary crystals. Fundamentally, a KIM Test Driver is an arbitrary executable named ``runner`` that takes custom inputs from ``stdin`` using custom and standard Jinja2 templating, and writes a file named ``output/results.edn`` containing one or more `KIM Property Instances <https://openkim.org/doc/schema/properties-framework/>`_. This minimal specification is all the *KIM Processing Pipeline* needs to run KIM Tests and allows a great amount of flexibility for developers. However, the open-endedness makes creation of new Test Drivers difficult to tutorialize, and the resulting Test Drivers have a non-uniform input syntax, making them cumbersome to use outside of the KIM Pipeline.
 
-Crystal Genome is the OpenKIM thrust for generalizing our testing framework to apply to arbitrary crystals. It uses AFLOW Prototype Labels (see figure below) to describe arbitrary crystal structures in a complete, concise, and human-readable manner. A thorough description of the AFLOW prototype label can be found in Part IIB here: https://arxiv.org/abs/2401.06875. Because it is unreasonable for every OpenKIM test developer to learn the crystallography required to write Crystal Genome tests from scratch, common input, output, and analysis tasks must be easy to use automatically.
+*Crystal Genome* is the OpenKIM thrust for generalizing our testing framework to apply to arbitrary crystals. It uses AFLOW Prototype Labels (see figure below) to describe arbitrary crystal structures in a complete, concise, and human-readable manner. A thorough description of the AFLOW prototype label can be found in Part IIB here: https://arxiv.org/abs/2401.06875. Because it is unreasonable for every OpenKIM test developer to learn the crystallography required to write Crystal Genome tests from scratch, common input, output, and analysis tasks must be easy to use automatically.
 
 .. figure:: aflow.png
    :align: center
@@ -41,10 +41,14 @@ Test Driver Creation Tutorial
 
 If you wish to use this package to develop an OpenKIM Test Driver, after setting up a suitable development environment (detailed on the rest of this page), follow the :doc:`tutorial`. 
 
+.. _doc.KDP:
+
 KIM Developer Platform
 ======================
 
 The `KIM Developer Platform (KDP) <https://openkim.org/doc/evaluation/kim-developer-platform/>`_ is a Docker image providing an emulation of the KIM Processing Pipeline. It is the recommended environment for developing OpenKIM content, and is required to fully test integration of Test Drivers into the pipeline before they are submitted to `openkim.org <https://openkim.org/>`_. ``kim-test-utils`` and all requirements are included in KDP version 1.4.0 and higher.
+
+.. _doc.standalone_installation:
 
 Standalone Installation
 =======================
