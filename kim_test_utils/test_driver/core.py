@@ -179,7 +179,7 @@ class KIMTestDriver(ABC):
             ASE calculator
         atoms: Optional[Atoms]
             ASE atoms object
-        property_instances: str
+        _property_instances: str
             A string containing the serialized KIM-EDN formatted property instances.
         _cached_files: Dict
             keys: filenames to be assigned to files, values: serialized strings to dump into those files. To be used for 'file' type properties
@@ -200,7 +200,7 @@ class KIMTestDriver(ABC):
             self.kim_model_name = model
             self._calc = KIM(self.kim_model_name)
         self._cached_files = {}
-        self.property_instances = "[]"
+        self._property_instances = "[]"
 
     def _setup(self, atoms: Optional[Atoms] = None, optimize: bool = False, **kwargs):
         """
@@ -229,10 +229,10 @@ class KIMTestDriver(ABC):
         """
         raise NotImplementedError("Subclasses must implement the _calculate method.")
 
-    def writeproperty_instances_to_file(self,filename="output/results.edn"):
+    def write_property_instances_to_file(self,filename="output/results.edn"):
         # Write the property instances to a file at the requested path. Also dumps any cached files to the same directory
         with open(filename, "w") as f:
-            kim_property_dump(self.property_instances, f)
+            kim_property_dump(self._property_instances, f)
         for cached_file in self._cached_files:        
             with open(os.path.join(os.path.dirname(filename),cached_file),"w") as f:
                 f.write(self._cached_files[cached_file])
@@ -262,13 +262,13 @@ class KIMTestDriver(ABC):
                 "This relaxation did not reach the desired tolerance."
         """
         # DEV NOTE: I like to use the package name when using kim_edn so there's no confusion with json.loads etc.
-        property_instances_deserialized = kim_edn.loads(self.property_instances)
+        property_instances_deserialized = kim_edn.loads(self._property_instances)
         new_instance_index = len(property_instances_deserialized) + 1
         for property_instance in property_instances_deserialized:
             if property_instance["instance-id"] == new_instance_index:
                 raise KIMTestDriverError("instance-id that matches the length of self.property_instances already exists.\n"
                                   "Was self.property_instances edited directly instead of using this package?")
-        self.property_instances = kim_property_create(new_instance_index, property_name, self.property_instances, disclaimer)
+        self._property_instances = kim_property_create(new_instance_index, property_name, self._property_instances, disclaimer)
 
     def _add_key_to_current_property_instance(self, name: str, value: ArrayLike, units: Optional[str] = None, uncertainty_info: Optional[dict] = None):
         """
@@ -317,7 +317,7 @@ class KIMTestDriver(ABC):
         value_arr = np.array(value)
         value_shape = value_arr.shape
 
-        current_instance_index = len(kim_edn.loads(self.property_instances))
+        current_instance_index = len(kim_edn.loads(self._property_instances))
         modify_args = ["key", name]
         if len(value_shape) == 0:
             modify_args += ["source-value", value]
@@ -345,10 +345,10 @@ class KIMTestDriver(ABC):
                     prev_indices = []
                     recur_dimensions(prev_indices, uncertainty_value_arr, modify_args, uncertainty_key)
 
-        self.property_instances = kim_property_modify(self.property_instances, current_instance_index, *modify_args)
+        self._property_instances = kim_property_modify(self._property_instances, current_instance_index, *modify_args)
 
-    def getproperty_instances(self) -> Dict:
-        return kim_edn.loads(self.property_instances)
+    def get_property_instances(self) -> Dict:
+        return kim_edn.loads(self._property_instances)
 
 ################################################################################
 def get_crystal_genome_designation_from_atoms(atoms: Atoms,) -> Dict:
@@ -686,7 +686,7 @@ class CrystalGenomeTestDriver(KIMTestDriver):
         if write_temp:
             self._add_key_to_current_property_instance("temperature",self.temperature_K,"K")
         if self.poscar is not None:
-            current_instance_index = len(kim_edn.loads(self.property_instances))
+            current_instance_index = len(kim_edn.loads(self._property_instances))
             filename = "instance-%d.poscar"%current_instance_index
             self._cached_files[filename] = self.poscar
             self._add_key_to_current_property_instance("coordinates-file",filename) 
