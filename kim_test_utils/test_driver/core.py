@@ -748,21 +748,22 @@ def query_crystal_genome_structures(
             The temperature in Kelvin
 
     Returns:
-        A list of dictionaries with the following keys:
-            stoichiometric_species: List[str]
-                List of unique species in the crystal
-            prototype_label: str
-                AFLOW prototype label for the crystal
-            parameter_names: Optional[List[str]]
-                Names of free parameters of the crystal besides 'a'. May be None if the crystal is cubic with no internal DOF.
-                Should have length one less than `parameter_values_angstrom`
-            parameter_values_angstrom: List[float]
-                Free parameter values of the crystal. The first element in each inner list is the 'a' lattice parameter in 
-                angstrom, the rest (if present) are in degrees or unitless
-            library_prototype_label: Optional[str]
-                AFLOW library prototype label
-            short_name: Optional[List[str]]
-                List of human-readable short names (e.g. "Face-Centered Cubic"), if present
+        List[Dict]:        
+            A list of dictionaries with the following keys:
+                stoichiometric_species: List[str]
+                    List of unique species in the crystal
+                prototype_label: str
+                    AFLOW prototype label for the crystal
+                parameter_names: Optional[List[str]]
+                    Names of free parameters of the crystal besides 'a'. May be None if the crystal is cubic with no internal DOF.
+                    Should have length one less than `parameter_values_angstrom`
+                parameter_values_angstrom: List[float]
+                    Free parameter values of the crystal. The first element in each inner list is the 'a' lattice parameter in 
+                    angstrom, the rest (if present) are in degrees or unitless
+                library_prototype_label: Optional[str]
+                    AFLOW library prototype label
+                short_name: Optional[List[str]]
+                    List of human-readable short names (e.g. "Face-Centered Cubic"), if present
     """
     stoichiometric_species.sort()
 
