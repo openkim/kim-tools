@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-from kim_test_utils import add_or_update_property
+from kim_tools import add_or_update_property
 from sys import argv
 from os.path import isfile
 

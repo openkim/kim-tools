@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.abspath('../../'))
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = 'kim-test-utils'
+project = 'kim-tools'
 copyright = '2024, ilia Nikiforov, Ellad Tadmor, and Eric Fuemmeler'
 author = 'ilia Nikiforov, Ellad Tadmor, and Eric Fuemmeler'
 release = '0.1.0'

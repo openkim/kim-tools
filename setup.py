@@ -18,7 +18,7 @@ except Exception:
     print()
 
 setuptools.setup(
-    name="kim-test-utils",
+    name="kim-tools",
     version="0.1.0",
     description=(
         "Helper routines for writing KIM Tests"

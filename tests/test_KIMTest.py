@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-from kim_test_utils.test_driver import KIMTestDriver
+from kim_tools.test_driver import KIMTestDriver
 from ase.atoms import Atoms
 
 class TestTestDriver(KIMTestDriver):

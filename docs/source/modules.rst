@@ -1,7 +1,7 @@
-kim_test_utils
-==============
+kim_tools
+=========
 
 .. toctree::
    :maxdepth: 4
 
-   kim_test_utils
+   kim_tools

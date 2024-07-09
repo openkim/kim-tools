@@ -1,5 +1,5 @@
-kim\_test\_utils package
-========================
+kim\_tools package
+==================
 
 Subpackages
 -----------
@@ -7,13 +7,13 @@ Subpackages
 .. toctree::
    :maxdepth: 4
 
-   kim_test_utils.aflow_util
-   kim_test_utils.test_driver
+   kim_tools.aflow_util
+   kim_tools.test_driver
 
 Module contents
 ---------------
 
-.. automodule:: kim_test_utils
+.. automodule:: kim_tools
    :members:
    :undoc-members:
    :show-inheritance:

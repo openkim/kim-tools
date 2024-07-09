@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-from kim_test_utils.test_driver import CrystalGenomeTestDriver, query_crystal_genome_structures
+from kim_tools.test_driver import CrystalGenomeTestDriver, query_crystal_genome_structures
 from kim_python_utils.ase import get_isolated_energy_per_atom
 from crystal_genome_util.aflow_util import get_stoich_reduced_list_from_prototype
 
