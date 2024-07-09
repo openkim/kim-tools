@@ -36,5 +36,5 @@ list_of_crystal_descriptions = query_crystal_genome_structures("MEAM_LAMMPS_KoJi
 print(list_of_crystal_descriptions)
 test(**list_of_crystal_descriptions[0])
 test(**list_of_crystal_descriptions[1])
-print(test.get_property_instances())
+print(test.property_instances)
 test.write_property_instances_to_file()
