@@ -61,7 +61,7 @@ Assuming you have left the first few lines of ``test_generator.json`` intact, yo
 
     kimitems install -D  EAM_Dynamo_AcklandTichyVitek_1987_Ag__MO_212700056563_005
     add_or_update_property ~/test-drivers/CrystalGenomeASEExample__TD_000000654321_000/local-props/energy-vs-volume-isotropic-crystal.edn
-    pipeline-run-pair pipeline-run-pair CrystalGenomeASEExample_A_cF4_225_a_Ag_0_1__TE_* EAM_Dynamo_AcklandTichyVitek_1987_Ag__MO_212700056563_005 -v
+    pipeline-run-pair CrystalGenomeASEExample_A_cF4_225_a_Ag_0_1__TE_* EAM_Dynamo_AcklandTichyVitek_1987_Ag__MO_212700056563_005 -v
 
 You should see the output of the test, and there should be a new directory in ``~/test-results/`` with the ``results.edn`` file containing the resulting KIM Property Instance, 
 as well as several other files documenting the run.
@@ -101,4 +101,4 @@ These are the other required files in a Test Driver. In most cases, other than t
     * ``test_template/runner``: This is a wrapper executable in each Test that invokes the Test Driver's ``runner``. You should never have to change this file.
     * ``test_template/pipeline.stdin.tpl.genie``: This is the Jinja2 template file for passing inputs to the ``runner``.
     * ``test_template/dependencies.edn.genie``: This Jinja2 template file specifies the Tests that the generated Tests are dependent on.
-    * ``Makefile``, ``LICENCE``: Always leave these as-is.
+    * ``Makefile``, ``LICENSE``: Always leave these as-is.
