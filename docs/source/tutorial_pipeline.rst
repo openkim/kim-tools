@@ -85,7 +85,6 @@ in the fields below. See https://openkim.org/doc/schema/kimspec/ for a detailed 
 
     * ``title`` and ``description``: change these to be relevant to your Test Driver and descriptive of the individual Tests.
     * ``extended-id``: See https://openkim.org/doc/schema/kim-ids/ for recommendations. Note how a ``replace`` operation is used on ``crystal_genome_test_args.max_volume_scale``, as ``.`` is not an allowed character.
-    * ``developer``: List of all developers' OpenKIM User IDs. To get a User ID, sign up for an account at https://openkim.org/new-account. You may also add an additional optional key ``implementer`` for anyone who contributed only programming, not core intellectial content. The two lists should not share any entries.
 
 In most cases, this should be all you need to change. Use ``kimgenie`` to generate some Tests and check that ``kimspec.edn`` looks correct.
 
