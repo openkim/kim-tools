@@ -578,12 +578,27 @@ class CrystalGenomeTestDriver(KIMTestDriver):
                 self.parameter_names = ["dummy"]*(len(self.parameter_values_angstrom)-1)
             aflow = aflow_util.AFLOW()
             self.atoms = aflow.build_atoms_from_prototype(self.stoichiometric_species,self.prototype_label,self.parameter_values_angstrom)
-            with StringIO() as output:
-                self.atoms.write(output,format='vasp')
-                self.poscar=output.getvalue()                        
+            self._update_poscar()                     
         else:
             warn("You've provided neither a Crystal Genome designation nor an Atoms object.\n"
                      "I won't stop you, but you better know what you're doing!")  
+
+    def _update_poscar(self, atoms: Optional[Atoms] = None):
+        """
+        Update self.poscar string from self.atoms or a provided Atoms object
+
+        Args:
+            atoms:
+                The atoms object to dump, if different from ``self.atoms``
+        """
+
+        if atoms is None:
+            atoms = self.atoms
+
+        with StringIO() as output:
+            atoms.write(output,format='vasp',sort=True)
+            self.poscar=output.getvalue()
+        
 
     def _get_crystal_genome_designation_from_atoms_and_verify_unchanged_symmetry(
             self, atoms: Optional[Atoms] = None, loose_triclinic_and_monoclinic: bool = False
@@ -656,9 +671,7 @@ class CrystalGenomeTestDriver(KIMTestDriver):
         # get designation and check that symmetry has not changed (symmetry will not be checked if own CG designation has not been set)
         crystal_genome_designation = self._get_crystal_genome_designation_from_atoms_and_verify_unchanged_symmetry(atoms, loose_triclinic_and_monoclinic)
 
-        with StringIO() as output:
-            atoms.write(output,format='vasp')
-            self.poscar=output.getvalue()
+        self._update_poscar(atoms)
 
         self.stoichiometric_species = crystal_genome_designation["stoichiometric_species"]
         self.prototype_label = crystal_genome_designation["prototype_label"]
