@@ -23,7 +23,7 @@ setuptools.setup(
     description=(
         "Helper routines for writing KIM Tests"
     ),
-    author=["ilia Nikiforov, Eric Fuemmler, Ellad Tadmor"],
+    author=["ilia Nikiforov, Eric Fuemmeler, Ellad Tadmor"],
     long_description=long_description,
     long_description_content_type="text/markdown",
     packages=setuptools.find_packages(),

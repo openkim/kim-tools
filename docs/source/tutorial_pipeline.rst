@@ -100,4 +100,4 @@ These are the other required files in a Test Driver. In most cases, other than t
     * ``test_template/runner``: This is a wrapper executable in each Test that invokes the Test Driver's ``runner``. You should never have to change this file.
     * ``test_template/pipeline.stdin.tpl.genie``: This is the Jinja2 template file for passing inputs to the ``runner``.
     * ``test_template/dependencies.edn.genie``: This Jinja2 template file specifies the Tests that the generated Tests are dependent on.
-    * ``Makefile``, ``LICENSE``: Always leave these as-is.
+    * ``test_template/Makefile``, ``test_template/LICENSE``: Always leave these as-is.

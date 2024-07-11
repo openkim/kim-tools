@@ -4,8 +4,28 @@ Main Computational Code
 
 .. contents:: Table of Contents
 
-The next step is to write the main computational code. It must be contained in a Python file named ``test_driver.py``, 
+The next step is to write the main computational code. It must be contained in a Python file named ``test_driver/test_driver.py``, 
 although you may include as many other Python files as you wish for utility functions.
+
+.. note::
+
+  Your ``test_driver`` directory should be structured as a Python package. This means that it contains a (probably empty) ``__init__.py``,
+  and you should use relative imports to import any other Python files from your ``test_driver.py``. For example, if you want to put
+  some function ``my_helper_function`` in a Python file ``helper_functions.py``, you shoud structure your ``test_driver`` directory like this:
+
+  ::
+
+    test_driver/
+    ├─ __init__.py
+    ├─ test_driver.py
+    ├─ helper_functions.py
+
+  Then, in your ``test_driver.py`` you would import ``my_helper_function`` like this:
+
+  .. code-block:: Python
+
+    from .helper_functions import my_helper_function
+
 
 You must create a class named ``TestDriver`` inheriting from  :class:`~kim_tools.CrystalGenomeTestDriver`.
 In your ``TestDriver`` class, you must overload the function :func:`~kim_tools.KIMTestDriver._calculate`. 
@@ -30,7 +50,7 @@ to debug your code by invoking it directly in Python. See how to do that here: :
 Example ``test_driver.py``
 ==========================
 
-.. literalinclude:: ../../examples/CrystalGenomeASEExample__TD_000000654321_000/test_driver.py
+.. literalinclude:: ../../examples/CrystalGenomeASEExample__TD_000000654321_000/test_driver/test_driver.py
     :language: Python
 
 Other functionality of :mod:`kim_tools`
