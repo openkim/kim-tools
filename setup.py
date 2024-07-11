@@ -28,7 +28,7 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     packages=setuptools.find_packages(),
     license="CDDL",
-    install_requires=["ase >= 3.19.0b1", "kim-property >= 2.6.2", "kim-edn >= 1.4.1", "kimpy >= 2.1.1", "spglib >= 2.1.0", "kim-query >= 3.0.0"],
+    install_requires=["ase >= 3.19.0b1", "kim-property >= 2.6.2", "kim-edn >= 1.4.1", "spglib >= 2.1.0", "kim-query >= 3.0.0"],
     classifiers=[
         "Development Status :: 4 - Beta"
         "License :: OSI Approved :: Common Development and Distribution License 1.0 (CDDL-1.0)",

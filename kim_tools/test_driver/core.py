@@ -33,7 +33,6 @@ Helper classes for KIM Test Drivers
 import numpy as np
 from numpy.typing import ArrayLike
 from ase import Atoms
-from ase.calculators.kim.kim import KIM
 from ase.calculators.calculator import Calculator
 from typing import Any, Optional, List, Union, Dict, IO
 from ase.optimize import LBFGSLineSearch
@@ -197,6 +196,7 @@ class KIMTestDriver(ABC):
             self._calc = model
             self.kim_model_name = None
         else:
+            from ase.calculators.kim.kim import KIM
             self.kim_model_name = model
             self._calc = KIM(self.kim_model_name)
         self._cached_files = {}
