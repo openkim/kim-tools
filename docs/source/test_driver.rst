@@ -47,6 +47,8 @@ to debug your code by invoking it directly in Python. See how to do that here: :
     *  :attr:`~kim_tools.CrystalGenomeTestDriver.temperature_K`
     *  :attr:`~kim_tools.CrystalGenomeTestDriver.cell_cauchy_stress_eV_angstrom3`
 
+.. _doc.example_test_driver:
+
 Example ``test_driver.py``
 ==========================
 

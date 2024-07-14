@@ -10,7 +10,11 @@ An example Property Definition is provided with the example Test Driver |example
 
 We strive to make all Crystal Genome properties as universally applicable to arbitrary crystals as possible. You should think carefully about what is needed for a minimal, yet complete, description of your material property when applied to a generic crystal with arbitrary symmetry. To demonstrate this point, consider that the example property here is *NOT* suitable for general crystals. This is because isotropic expansion and contraction is an arbitrary displacement boundary condition for any non-cubic crystal not corresponding to any specific loading. For cubic crystals it is a meaningful property, as it always corresponds to hydrostatic stress -- see the non-Crystal Genome version of the property here: https://openkim.org/properties/show/2014-04-15/staff@noreply.openkim.org/cohesive-energy-relation-cubic-crystal. You are encouraged to work with the OpenKIM team to develop your property definition (contact us individually or at https://openkim.org/contact/).
 
-It is possible that your Test Driver will write multiple material properties. In this case, create a separate property definition file for each. For example, bulk modulus and elastic constants are separate properties.
+Here are some examples of existing Crystal Genome properties:
+    * https://openkim.org/properties/show/2024-07-10/staff@noreply.openkim.org/bulk-modulus-isothermal-npt
+    * https://openkim.org/properties/show/2024-07-10/staff@noreply.openkim.org/elastic-constants-isothermal-npt
+
+It is possible that your Test Driver will write multiple material properties. In this case, create a separate property definition file for each. For example, the bulk modulus and elastic constants shown above are separate properties.
 
 Once you have created your property definition file, you need to run the ``add_or_update_this_property`` command-line utility included with this package. Pass the path to the property definition file as a command line argument. For example, to add the property provided with ``CrystalGenomeASEExample__TD_000000654321_000``, assuming you have placed the driver into ``/home/openkim/test-drivers/``, run 
 
