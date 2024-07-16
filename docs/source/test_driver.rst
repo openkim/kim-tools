@@ -38,7 +38,7 @@ See the comments for explanations. Documentation regarding more complex usage of
 
 Once ``test_driver.py`` is written, you will have to make some small modifications to the auxiliary files provided in the example 
 Test Driver in order for your Driver to work in the OpenKIM pipeline: :doc:`tutorial_pipeline`. Before this, you will likely wish
-to debug your code by invoking it directly in Python. See how to do that here: :doc:`auto_examples/CrystalGenomeASEExample__TD_000000654321_000/debug`
+to debug your code by invoking it directly in Python. See how to do that here: :doc:`tutorial_debug`
 
 .. note::
 
