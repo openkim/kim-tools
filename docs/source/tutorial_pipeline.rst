@@ -91,9 +91,11 @@ In most cases, this should be all you need to change. Use ``kimgenie`` to genera
 Other files
 ===========
 
-These are the other required files in a Test Driver. In most cases, other than the README, you can copy them from the example Test Driver as-is.
+These are the other required files in a Test Driver. In most cases, other than the readme and ``requirements.txt`` you can copy them from the example Test Driver as-is.
 
-    * ``README.txt``: Your Test Driver should include some kind of documentation, but the format is up to you.
+    * ``README.rst``: Your Test Driver should include some kind of documentation, but the format is up to you.
+    * ``requirements.txt``: This is the requirements file for Python dependencies. It should include ``kim-tools`` at the minimum, as well as any other packages
+      your Python code imports directly (i.e. you don't need to add ``ase`` or any other requirements of ``kim-tools``)
     * ``kimspec.edn``: This is the metadata for the Test Driver itself. You may leave this in the minimal form provided in the example Test Driver, or you can fill in some of the fields following https://openkim.org/doc/schema/kimspec/. Any missing fields will be populated by the Web form when you :ref:`submit your Driver <doc.submit>`.
     * ``Makefile``: Unless your Test Driver requires compilation, leave this dummy Makefile untouched.
     * ``runner``: This is the executable that invokes the ``TestDriver`` class when running in the KIM Pipeline.
