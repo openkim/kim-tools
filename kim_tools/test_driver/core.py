@@ -270,7 +270,12 @@ class KIMTestDriver(ABC):
                                   "Was self.property_instances edited directly instead of using this package?")
         self._property_instances = kim_property_create(new_instance_index, property_name, self._property_instances, disclaimer)
 
-    def _add_key_to_current_property_instance(self, name: str, value: ArrayLike, units: Optional[str] = None, uncertainty_info: Optional[dict] = None):
+    def _add_key_to_current_property_instance(self, 
+                                              name: str, 
+                                              value: ArrayLike, 
+                                              units: Optional[str] = None, 
+                                              uncertainty_info: Optional[dict] = None,
+                                              cached_file: str = None):
         """
         Write a key to the last element of self.property_instances. If the value is an array,
         this function will assume you want to write to the beginning of the array in every dimension.
@@ -299,6 +304,8 @@ class KIMTestDriver(ABC):
                 dictionary containing any uncertainty keys you wish to include. See https://openkim.org/doc/schema/properties-framework/
                 for the possible uncertainty key names. These must be the same dimension as `value`, or they may be scalars regardless
                 of the shape of `value`.
+            cached_file:
+                a serialized file to add to _cached_files
         """
         
         def recur_dimensions(prev_indices: List[int], sub_value: np.ndarray, modify_args: list, key_name: str='source-value'):
@@ -344,7 +351,8 @@ class KIMTestDriver(ABC):
                 else:
                     prev_indices = []
                     recur_dimensions(prev_indices, uncertainty_value_arr, modify_args, uncertainty_key)
-
+        if cached_file is not None:
+            self._cached_files[value] = cached_file
         self._property_instances = kim_property_modify(self._property_instances, current_instance_index, *modify_args)
 
     @property

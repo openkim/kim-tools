@@ -2,7 +2,7 @@
 
 from kim_tools.test_driver import CrystalGenomeTestDriver, query_crystal_genome_structures
 from kim_python_utils.ase import get_isolated_energy_per_atom
-from crystal_genome_util.aflow_util import get_stoich_reduced_list_from_prototype
+from kim_tools.aflow_util import get_stoich_reduced_list_from_prototype
 
 class TestTestDriver(CrystalGenomeTestDriver):
     def _calculate(self,**kwargs):
@@ -29,6 +29,9 @@ class TestTestDriver(CrystalGenomeTestDriver):
         # add the fields unique to this property
         self._add_key_to_current_property_instance("binding-potential-energy-per-atom",binding_energy_per_atom,"eV")
         self._add_key_to_current_property_instance("binding-potential-energy-per-formula",binding_energy_per_formula,"eV")
+
+        self._add_property_instance_and_common_crystal_genome_keys("crystal-structure-npt",write_temp=True,write_stress=True)
+        self._add_key_to_current_property_instance("restart-file","restart.dump",cached_file="dummy\nfile")
 
         
 test = TestTestDriver("MEAM_LAMMPS_KoJimLee_2012_FeP__MO_179420363944_002")

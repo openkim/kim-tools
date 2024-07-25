@@ -85,6 +85,24 @@ changed structure. To update the crystal description from ``self.atoms`` or a di
   This is intended and it is expected that you do not handle this exception. In the Crystal Genome framework, it is our convention that if the 
   crystal undergoes a symmetry-changing phase transition, the result is invalid and the Test Driver should exit with an error.
 
+.. note::
+
+  If you are running an MD simulation, the structure you report should be time-averaged and likely averaged over the supercell folded back into the unit cell. 
+  This will give you more robust averages. Additionally, if you are performing an NPT simulation, you may as well write an instance of the 
+  `crystal-structure-npt <https://openkim.org/properties/show/crystal-structure-npt>`_ property for future re-use. Note the optional ``restart-file`` key. 
+  It is recommended that you save a restart file to the ``output`` directory (for example, ``output/restart.dump``) and add its filename to the property instance
+  as follows:
+
+  .. code-block:: Python
+
+    self._add_property_instance_and_common_crystal_genome_keys("crystal-structure-npt",write_temp=True,write_stress=True)
+    self._add_key_to_current_property_instance("restart-file","restart.dump")
+
+
+.. todo::
+
+  This should be an integrated part of ``kim-tools`` along with general ability to read and write LAMMPS files.
+
 You may also find it useful to check for a symmetry change without changing the stored description of the crystal. This is useful, for example,
 if your Test Driver is changing temperature or stress around some reference value, and you wish to make sure that the state changes have not
 induced a phase transition. To do this, use ``self._get_crystal_genome_designation_from_atoms_and_verify_unchanged_symmetry`` (see below, it is likely that you can ignore the returned values). 
