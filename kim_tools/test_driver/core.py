@@ -51,6 +51,7 @@ from warnings import warn
 from io import StringIO
 from packaging import version
 from pprint import PrettyPrinter
+import shutil
 
 __author__ = ["ilia Nikiforov", "Eric Fuemmeler"]
 __all__ = [
@@ -270,12 +271,11 @@ class KIMTestDriver(ABC):
                                   "Was self.property_instances edited directly instead of using this package?")
         self._property_instances = kim_property_create(new_instance_index, property_name, self._property_instances, disclaimer)
 
-    def _add_key_to_current_property_instance(self, 
+    def _add_key_to_current_property_instance(self,
                                               name: str, 
                                               value: ArrayLike, 
                                               units: Optional[str] = None, 
-                                              uncertainty_info: Optional[dict] = None,
-                                              cached_file: str = None):
+                                              uncertainty_info: Optional[dict] = None):
         """
         Write a key to the last element of self.property_instances. If the value is an array,
         this function will assume you want to write to the beginning of the array in every dimension.
@@ -304,8 +304,6 @@ class KIMTestDriver(ABC):
                 dictionary containing any uncertainty keys you wish to include. See https://openkim.org/doc/schema/properties-framework/
                 for the possible uncertainty key names. These must be the same dimension as `value`, or they may be scalars regardless
                 of the shape of `value`.
-            cached_file:
-                a serialized file to add to _cached_files
         """
         
         def recur_dimensions(prev_indices: List[int], sub_value: np.ndarray, modify_args: list, key_name: str='source-value'):
@@ -351,9 +349,49 @@ class KIMTestDriver(ABC):
                 else:
                     prev_indices = []
                     recur_dimensions(prev_indices, uncertainty_value_arr, modify_args, uncertainty_key)
-        if cached_file is not None:
-            self._cached_files[value] = cached_file
         self._property_instances = kim_property_modify(self._property_instances, current_instance_index, *modify_args)
+
+    def _add_file_to_current_property_instance(self,
+                                              name: str, 
+                                              filename: str,
+                                              add_instance_index: bool = True):
+        """
+        add a "file" type key-value pair to the current property instance.
+
+        Args:
+            name:
+                Name of the key, e.g. "restart-file"
+            filename:
+                The relative path to the filename. If it does not start with "output/", the file will be moved to the "output/" directory
+            add_instance_index:
+                By default, a numerical index will be added before the file extension or at the end of a file with no extension. This is to 
+                ensure files do not get overwritten when the _calculate method is called repeatedly.
+        
+        Raises:
+            KIMTestDriverError:
+                If the provided filename does not exist
+        """
+
+        if not os.path.isfile(filename):
+            raise KIMTestDriverError("Provided filename %s does not exist." % filename)
+        
+        if filename.split('/')[0] == 'output':
+            filename_final = filename
+        else:
+            filename_final = os.path.join('output',filename)            
+
+        current_instance_index = len(kim_edn.loads(self._property_instances))
+        
+        if add_instance_index:
+            root, ext = os.path.splitext(filename_final)
+            root = root + "-" + str(current_instance_index)
+            filename_final = root + ext
+        
+        if filename_final != filename:
+            shutil.move(filename,filename_final)
+        
+        self._property_instances = kim_property_modify(self._property_instances, current_instance_index, "key", name, "source-value", filename_final)
+
 
     @property
     def property_instances(self) -> Dict:

@@ -90,13 +90,14 @@ changed structure. To update the crystal description from ``self.atoms`` or a di
   If you are running an MD simulation, the structure you report should be time-averaged and likely averaged over the supercell folded back into the unit cell. 
   This will give you more robust averages. Additionally, if you are performing an NPT simulation, you may as well write an instance of the 
   `crystal-structure-npt <https://openkim.org/properties/show/crystal-structure-npt>`_ property for future re-use. Note the optional ``restart-file`` key. 
-  It is recommended that you save a restart file to the ``output`` directory (for example, ``output/restart.dump``) and add its filename to the property instance
-  as follows:
+  It is recommended that you save a restart file (for example, ``restart.dump``). You can then use the :func:`kim_tools.KIMTestDriver._add_file_to_current_property_instance`
+  to add it to the property instance. It will automatically be numbered according to the current property instance and moved to the ``output`` directory if it is not already
+  there (e.g. ``restart.dump`` will be automatically moved to the path ``output/restart-1.dump`` and reported in the property accordingly.)
 
   .. code-block:: Python
 
     self._add_property_instance_and_common_crystal_genome_keys("crystal-structure-npt",write_temp=True,write_stress=True)
-    self._add_key_to_current_property_instance("restart-file","restart.dump")
+    self._add_file_to_current_property_instance("restart-file","restart.dump")
 
 
 .. todo::

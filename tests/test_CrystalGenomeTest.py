@@ -31,7 +31,9 @@ class TestTestDriver(CrystalGenomeTestDriver):
         self._add_key_to_current_property_instance("binding-potential-energy-per-formula",binding_energy_per_formula,"eV")
 
         self._add_property_instance_and_common_crystal_genome_keys("crystal-structure-npt",write_temp=True,write_stress=True)
-        self._add_key_to_current_property_instance("restart-file","restart.dump",cached_file="dummy\nfile")
+        with open("restart.dump","w") as f:
+            f.write("dummy\nfile")
+        self._add_file_to_current_property_instance("restart-file","restart.dump")
 
         
 test = TestTestDriver("MEAM_LAMMPS_KoJimLee_2012_FeP__MO_179420363944_002")

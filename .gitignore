@@ -16,3 +16,5 @@ kim.log
 /tests/*/output/results.edn
 /tests/output/instance*
 /tests/*/output/instance*
+/tests/output/restart*
+/tests/*/output/restart*
