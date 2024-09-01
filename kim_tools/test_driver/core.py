@@ -398,7 +398,7 @@ class KIMTestDriver(ABC):
         return kim_edn.loads(self._property_instances)
 
 ################################################################################
-def get_crystal_genome_designation_from_atoms(atoms: Atoms,) -> Dict:
+def get_crystal_genome_designation_from_atoms(atoms: Atoms, aflow_np = 1) -> Dict:
     """
     Get crystal genome designation from an ASE atoms object.
 
@@ -419,7 +419,7 @@ def get_crystal_genome_designation_from_atoms(atoms: Atoms,) -> Dict:
             short_name: Optional[List[str]]
                 List of human-readable short names (e.g. "Face-Centered Cubic"), if present
     """
-    aflow = aflow_util.AFLOW()
+    aflow = aflow_util.AFLOW(np=aflow_np)
     cg_des = {}
     
     with NamedTemporaryFile('w',delete=False) as fp: #KDP has python3.8 which is missing the convenient `delete_on_close` option

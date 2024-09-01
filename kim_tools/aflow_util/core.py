@@ -448,7 +448,7 @@ class AFLOW:
         res_json = json.loads(output)
         return res_json
 
-    def build_atoms_from_prototype(self, species: List[str], prototype_label: str, parameter_values: List[float], verbose: bool=True):
+    def build_atoms_from_prototype(self, species: List[str], prototype_label: str, parameter_values: List[float], primitive_cell: bool = False, verbose: bool=True):
         """
         Build an atoms object from an AFLOW prototype designation
         
@@ -459,6 +459,8 @@ class AFLOW:
                 An AFLOW prototype label, without an enumeration suffix, without specified atomic species
             parameter_values: 
                 The free parameters of the AFLOW prototype designation
+            primitive_cell:
+                Request the primitive cell
             verbose:
                 Print details
 
@@ -481,8 +483,26 @@ class AFLOW:
             if character.isdigit():
                 num_conv_cell *= 10
                 num_conv_cell += int(character)
-        if pearson.startswith("hR"):
-            num_conv_cell *= 3        
+
+        centering = pearson[1]
+        
+        if centering == 'R':
+            num_conv_cell *= 3
+
+        if (not primitive_cell) or (centering == 'P'):
+            num_lattice = 1
+        elif (centering == 'C') or (centering == 'I'):
+            num_lattice = 2
+        elif centering == 'F':
+            num_lattice = 4
+        elif centering == 'R':
+            num_lattice = 3
+        
+        if num_conv_cell % num_lattice != 0:
+            raise self.incorrectNumAtomsException("WARNING: Number of atoms in conventional cell %d derived from Pearson symbol of prototype %s is not divisible by the number of lattice points %d"%(num_conv_cell,prototype_label,num_lattice))
+        
+        num_cell = num_conv_cell/num_lattice
+        
 
         sgdata = self.get_sgdata_from_prototype(species, prototype_label, parameter_values)
         wyckoff_types,wyckoff_coordinates,cell = get_wyckoff_info_and_cell(sgdata)
@@ -507,9 +527,12 @@ class AFLOW:
             basis=wyckoff_coordinates,
             spacegroup=spacegroup,
             cell=cell,
+            primitive_cell=primitive_cell
         )
-        if len(atoms)!=num_conv_cell:
+
+        if len(atoms)!=num_cell:
             raise self.incorrectNumAtomsException("WARNING: Number of ASE atoms %d does not match Pearson symbol of prototype %s"%(len(atoms),prototype_label))
+
 
         try:
             dataset=refine_symmetry(atoms)
