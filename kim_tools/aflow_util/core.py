@@ -1,14 +1,17 @@
 """Tools for working with crystal prototypes using the AFLOW command line tool"""
 import numpy as np
+from numpy.typing import ArrayLike
 import json
 import subprocess
 import sys
 import os
 import ase
+from ase import Atoms
 import ase.spacegroup
 from ase.spacegroup.symmetrize import refine_symmetry
 from curses.ascii import isalpha, isupper, isdigit
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Tuple, Union, Optional
+from tempfile import NamedTemporaryFile
 
 __author__ = ["ilia Nikiforov", "Ellad Tadmor"]
 __all__ = [
@@ -19,6 +22,13 @@ __all__ = [
     "get_wyckoff_info_and_cell",
     "AFLOW"
 ]
+
+CENTROSYMMETRIC_SPACE_GROUPS_WITH_MORE_THAN_ONE_SETTING = (
+    48 , 50 , 59 , 68 , 70 ,
+    85 , 86 , 88 , 125 , 126 ,
+    129 , 130 , 133 , 134 , 137 ,
+   	138 , 141 , 142 , 201 , 203 ,
+    222 , 224 , 227 , 228)
 
 
 def get_stoich_reduced_list_from_prototype(prototype_label: str) -> List[int]:
@@ -268,7 +278,7 @@ class AFLOW:
         Returns:
             Output of the AFLOW command
         """
-        cmd_list = [self.aflow_executable + " --np=" + str(self.np) + cmd_inst
+        cmd_list = [self.aflow_executable + " --np=" + str(self.np) + " " + cmd_inst
             for cmd_inst in cmd]
         cmd_str = " | ".join(cmd_list)                
         try:
@@ -425,7 +435,7 @@ class AFLOW:
 
         return matching_library_prototype_label, shortname
 
-    def get_sgdata_from_prototype(self, species: List[str], prototype_label: str, parameter_values: List[float]) -> Dict:
+    def get_sgdata_from_prototype(self, species: List[str], prototype_label: str, parameter_values: List[float], setting_aflow: Optional[Union[int,str]] = None, debug_file: Optional[str] = None) -> Dict:
         """
         Without writing any files, pipe the output from aflow --prototype to aflow --sgdata to get the wyckoff info and cell
 
@@ -436,19 +446,86 @@ class AFLOW:
                 An AFLOW prototype label, without an enumeration suffix, without specified atomic species
             parameter_values: 
                 The free parameters of the AFLOW prototype designation
-
+            setting_aflow:
+                setting to pass to --sgdata command
+            debug_file:
+                Do save an intermediate file to this path.
         Returns:
             JSON dict containing space group information of the structure
         """
-        command = [
-            " --proto="+":".join([prototype_label]+species)+" --params=" + ",".join([str(param) for param in parameter_values]),
-            " --sgdata --print=json"
-            ]
-        output = self.aflow_command(command)
+        
+        if setting_aflow is not None:
+            setting_argument = " --setting=" + str(setting_aflow)
+        else:
+            setting_argument = ""
+
+        if debug_file is None:
+            command = [
+                " --proto="+":".join([prototype_label]+species)+" --params=" + ",".join([str(param) for param in parameter_values]),
+                " --sgdata --print=json%s" % setting_argument
+                ]
+            output = self.aflow_command(command)
+        else:
+            # two separate commands, one to write file, one to get the sgdata
+            command = [
+                " --proto="+":".join([prototype_label]+species)+" --params=" + ",".join([str(param) for param in parameter_values]) + " > " + debug_file
+                ]
+            self.aflow_command(command)
+            command = [ " --sgdata --print=json%s < %s" % (setting_argument,debug_file) ]
+            output = self.aflow_command(command)
         res_json = json.loads(output)
         return res_json
 
-    def build_atoms_from_prototype(self, species: List[str], prototype_label: str, parameter_values: List[float], primitive_cell: bool = False, verbose: bool=True):
+    
+    def _compare_poscars(self, poscar1: str, poscar2: str) -> Dict:
+        return json.loads(self.aflow_command([' --print=JSON --compare_materials=%s,%s --screen_only --quiet'%(poscar1,poscar2)]))
+            
+    def _compare_Atoms(self, atoms1: Atoms, atoms2: Atoms) -> Dict:        
+        with NamedTemporaryFile() as f1, NamedTemporaryFile() as f2:
+            atoms1.write(f1.name,'vasp',sort=True)
+            atoms2.write(f2.name,'vasp',sort=True)
+            f1.seek(0)
+            f2.seek(0)
+            compare = self._compare_poscars(f1.name,f2.name)
+        return compare
+
+    def get_basistransformation_rotation_originshift_from_atoms(self, atoms1: Atoms, atoms2: Atoms) -> Optional[Tuple[ArrayLike,ArrayLike]]:
+        """
+        Get operations to transform atoms2 to atoms1
+
+        Returns:
+            Tuple of arrays in the order: basis transformation, rotation, origin shift
+        """
+        comparison_result = self._compare_Atoms(atoms1,atoms2)
+        if 'structures_duplicate' in comparison_result[0]:            
+            return (
+                np.asarray(comparison_result[0]['structures_duplicate'][0]['basis_transformation']),
+                np.asarray(comparison_result[0]['structures_duplicate'][0]['rotation']),
+                np.asarray(comparison_result[0]['structures_duplicate'][0]['origin_shift'])
+            )
+        else:
+            return None
+        
+    def get_basistransformation_rotation_originshift_from_poscars(self, poscar1: str, poscar2: str) -> Optional[Tuple[ArrayLike,ArrayLike,ArrayLike]]:
+        """
+        Get operations to transform poscar2 to poscar1
+
+        Returns:
+            Tuple of arrays in the order: basis transformation, rotation, origin shift
+        """        
+        comparison_result = self._compare_poscars(poscar1,poscar2)
+        if 'structures_duplicate' in comparison_result[0]:
+            return (
+                np.asarray(comparison_result[0]['structures_duplicate'][0]['basis_transformation']),
+                np.asarray(comparison_result[0]['structures_duplicate'][0]['rotation']),
+                np.asarray(comparison_result[0]['structures_duplicate'][0]['origin_shift'])
+            )
+        else:
+            return None        
+    
+    def build_atoms_from_prototype(
+            self, species: List[str], prototype_label: str, parameter_values: List[float], primitive_cell: bool = False, verbose: bool=True, setting_aflow: Optional[Union[int,str]] = 'auto', setting_ase: Union[int,str] = 'auto', proto_file:Optional[str]=None
+            ):
         """
         Build an atoms object from an AFLOW prototype designation
         
@@ -463,19 +540,37 @@ class AFLOW:
                 Request the primitive cell
             verbose:
                 Print details
+            setting_aflow:
+                setting to pass to --sgdata command. If `'auto'` is chosen, `setting_ase` must be `'auto'` as well.
+            setting_ase:
+                setting to pass to ase.spacegroup_crystal. If `'auto'` is chosen, `setting_aflow` must be `'auto'` as well.
+            proto_file:
+                Print the output of --proto to this file
 
         Returns:
             Object representing conventional unit cell of the material
 
         Raises:
+            AssertionError: if you ask for automatic handling of one but not both space group settings, the automatic handling only works in unison.
             incorrectSpaceGroupException: If space group changes during processing
             incorrectNumAtomsException: If number of atoms changes during processing
             failedRefineSymmetryException: If spglib fails
 
-        """        
+        """
         prototype_label_list = prototype_label.split("_")
         pearson = prototype_label_list[1]
         spacegroup = int(prototype_label_list[2])
+
+        if (setting_aflow == 'auto') and (setting_ase == 'auto'):
+            if spacegroup in CENTROSYMMETRIC_SPACE_GROUPS_WITH_MORE_THAN_ONE_SETTING:
+                setting_aflow = 2
+                setting_ase = 2
+            else:
+                setting_aflow = None
+                setting_ase = 1
+        else:
+            assert (setting_aflow != 'auto') and (setting_ase != 'auto')
+
 
         # get the number of atoms in conventional cell from the Pearson symbol
         num_conv_cell = 0
@@ -502,9 +597,8 @@ class AFLOW:
             raise self.incorrectNumAtomsException("WARNING: Number of atoms in conventional cell %d derived from Pearson symbol of prototype %s is not divisible by the number of lattice points %d"%(num_conv_cell,prototype_label,num_lattice))
         
         num_cell = num_conv_cell/num_lattice
-        
 
-        sgdata = self.get_sgdata_from_prototype(species, prototype_label, parameter_values)
+        sgdata = self.get_sgdata_from_prototype(species, prototype_label, parameter_values, setting_aflow=setting_aflow, debug_file=proto_file)
         wyckoff_types,wyckoff_coordinates,cell = get_wyckoff_info_and_cell(sgdata)
     
         if sgdata["space_group_number"]!=spacegroup:
@@ -527,7 +621,8 @@ class AFLOW:
             basis=wyckoff_coordinates,
             spacegroup=spacegroup,
             cell=cell,
-            primitive_cell=primitive_cell
+            primitive_cell=primitive_cell,
+            setting=setting_ase
         )
 
         if len(atoms)!=num_cell:
