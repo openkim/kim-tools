@@ -87,7 +87,7 @@ def minimize_wrapper(supercell:Atoms, fmax:float=1e-5, steps:int=10000, \
                          CellFilter: UnitCellFilter = ExpCellFilter,
                          opt_kwargs: Dict = {}) -> None:
     """
-    Use LBFGSLineSearch to Minimize cell energy with respect to cell shape and
+    Use LBFGSLineSearch (default) to Minimize cell energy with respect to cell shape and
     internal atom positions.
 
     LBFGSLineSearch convergence behavior is as follows:
@@ -240,11 +240,17 @@ class KIMTestDriver(ABC):
 
     def __call__(self, atoms: Optional[Atoms] = None, optimize: bool = False, **kwargs):
         """
-        runs test
+        Main operation of a Test Driver:
+        
+            * Run :func:`~KIMTestDriver._setup` (the base class provides a barebones version, derived classes may override)
+            * If :attr:`~KIMTestDriver.atoms` is defined, set its :atttr:`~ase.atoms.Atoms.calc` to :attr:`~KIMTestDriver._calc`
+            * Call :func:`~KIMTestDriver._calculate` (implemented by each individual Test Driver)
         """
+        # _setup is likely overridden by 
         self._setup(atoms, optimize, **kwargs)
         if self.atoms is not None:
-            self.atoms.calc = self._calc
+            self.atoms.calc = self._calc            
+        # implemented by each individual Test Driver
         self._calculate(**kwargs)
 
     def _add_property_instance(self, property_name: str, disclaimer: Optional[str]=None):
@@ -644,7 +650,6 @@ class CrystalGenomeTestDriver(KIMTestDriver):
         with StringIO() as output:
             atoms.write(output,format='vasp',sort=True)
             self.poscar=output.getvalue()
-        
 
     def _get_crystal_genome_designation_from_atoms_and_verify_unchanged_symmetry(
             self, atoms: Optional[Atoms] = None, loose_triclinic_and_monoclinic: bool = False

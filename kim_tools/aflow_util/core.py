@@ -524,7 +524,7 @@ class AFLOW:
             return None        
     
     def build_atoms_from_prototype(
-            self, species: List[str], prototype_label: str, parameter_values: List[float], primitive_cell: bool = False, verbose: bool=True, setting_aflow: Optional[Union[int,str]] = 'auto', setting_ase: Union[int,str] = 'auto', proto_file:Optional[str]=None
+            self, species: List[str], prototype_label: str, parameter_values: List[float], primitive_cell: bool = True, verbose: bool=True, proto_file:Optional[str]=None
             ):
         """
         Build an atoms object from an AFLOW prototype designation
@@ -540,10 +540,6 @@ class AFLOW:
                 Request the primitive cell
             verbose:
                 Print details
-            setting_aflow:
-                setting to pass to --sgdata command. If `'auto'` is chosen, `setting_ase` must be `'auto'` as well.
-            setting_ase:
-                setting to pass to ase.spacegroup_crystal. If `'auto'` is chosen, `setting_aflow` must be `'auto'` as well.
             proto_file:
                 Print the output of --proto to this file
 
@@ -551,26 +547,16 @@ class AFLOW:
             Object representing conventional unit cell of the material
 
         Raises:
-            AssertionError: if you ask for automatic handling of one but not both space group settings, the automatic handling only works in unison.
             incorrectSpaceGroupException: If space group changes during processing
             incorrectNumAtomsException: If number of atoms changes during processing
             failedRefineSymmetryException: If spglib fails
 
         """
+        assert primitive_cell, 'Can only generate primitive cells for now'
+
         prototype_label_list = prototype_label.split("_")
         pearson = prototype_label_list[1]
         spacegroup = int(prototype_label_list[2])
-
-        if (setting_aflow == 'auto') and (setting_ase == 'auto'):
-            if spacegroup in CENTROSYMMETRIC_SPACE_GROUPS_WITH_MORE_THAN_ONE_SETTING:
-                setting_aflow = 2
-                setting_ase = 2
-            else:
-                setting_aflow = None
-                setting_ase = 1
-        else:
-            assert (setting_aflow != 'auto') and (setting_ase != 'auto')
-
 
         # get the number of atoms in conventional cell from the Pearson symbol
         num_conv_cell = 0
@@ -593,41 +579,25 @@ class AFLOW:
         elif centering == 'R':
             num_lattice = 3
         
+        # This check is probably really extraneous, but better safe than sorry
         if num_conv_cell % num_lattice != 0:
             raise self.incorrectNumAtomsException("WARNING: Number of atoms in conventional cell %d derived from Pearson symbol of prototype %s is not divisible by the number of lattice points %d"%(num_conv_cell,prototype_label,num_lattice))
         
         num_cell = num_conv_cell/num_lattice
-
-        sgdata = self.get_sgdata_from_prototype(species, prototype_label, parameter_values, setting_aflow=setting_aflow, debug_file=proto_file)
-        wyckoff_types,wyckoff_coordinates,cell = get_wyckoff_info_and_cell(sgdata)
-    
-        if sgdata["space_group_number"]!=spacegroup:
-            raise self.incorrectSpaceGroupException("WARNING: Spacegroup %d recomputed by --sgdata does not match AFLOW prototype %s"%(sgdata["space_group_number"],prototype_label))
-
-        if len(sgdata["wyccar"]["atoms"]) != num_conv_cell:
-            raise self.incorrectNumAtomsException("WARNING: Number of atoms %d recomputed by --sgdata does not match Pearson symbol of prototype %s"%(len(sgdata["wyccar"]["atoms"]),prototype_label))
-
-        if verbose:
-            print("==== Building ASE atoms object with: ====")
-            print("representative atom symbols = ", wyckoff_types)
-            print("representative atom coordinates = ", wyckoff_coordinates)
-            print("spacegroup = ", spacegroup)
-            print("cell = ", cell)
-            print("=========================================")
-
-        # Create the atoms object
-        atoms = ase.spacegroup.crystal(
-            symbols=wyckoff_types,
-            basis=wyckoff_coordinates,
-            spacegroup=spacegroup,
-            cell=cell,
-            primitive_cell=primitive_cell,
-            setting=setting_ase
-        )
-
+        
+        with NamedTemporaryFile(mode='w+') as f, (NamedTemporaryFile(mode='w+') if proto_file is None else open(proto_file,mode='w+')) as f_with_species:            
+            self.write_poscar(prototype_label,f.name,parameter_values)
+            f.seek(0)
+            # Add line containing species
+            for i,line in enumerate(f):
+                f_with_species.write(line)
+                if i == 4:
+                    f_with_species.write(' '.join(species)+'\n')
+            f_with_species.seek(0)
+            atoms = ase.io.read(f_with_species.name,format='vasp')
+            
         if len(atoms)!=num_cell:
             raise self.incorrectNumAtomsException("WARNING: Number of ASE atoms %d does not match Pearson symbol of prototype %s"%(len(atoms),prototype_label))
-
 
         try:
             dataset=refine_symmetry(atoms)
@@ -639,5 +609,7 @@ class AFLOW:
 
         if dataset["number"]!=spacegroup:
             raise self.incorrectSpaceGroupException("WARNING: spglib spacegroup %d does not match AFLOW prototype %s"%(dataset["number"],prototype_label))
-
+        
+        atoms.wrap()
+        
         return atoms

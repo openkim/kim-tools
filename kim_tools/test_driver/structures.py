@@ -2,6 +2,10 @@ __all__ = ["CRYSTAL_GENOME_INITIAL_STRUCTURES","CRYSTAL_FAMILIES"]
 
 CRYSTAL_FAMILIES = {'a':'Triclinic','m':'Monoclinic','o':'Orthorhombic','t':'Tetragonal','h':'Hexagonal', 'c':'Cubic'}
 
+
+
+
+
 CRYSTAL_GENOME_INITIAL_STRUCTURES = \
 [   {"species": ["Ag"], "prototype_label": "A_cF4_225_a", "parameter_names": ["a"], "modeltype": "standard", "version": "002", "kimnum": "960680847270", "num_param_sets": "1", "parameter_sets": [{"library_prototype_label": "A_cF4_225_a", "short_name": "Face-Centered Cubic", "parameter_values": [4.1492], "auids": ["aflow:053b403b95284dbf", "aflow:062ac8d7d1f49a6f", "aflow:5b3d91678c52136e", "aflow:68d29ae8e2b8c34b", "aflow:772e4eaad32e47af", "aflow:7ca56340d28a5c4c", "aflow:a4aa1aaa0198a657", "aflow:af6932071ca34033", "aflow:b3fea1c5b027665b", "aflow:c0fc7948a88e0870", "aflow:c522947214c1587a", "aflow:cae9112d9a0e88ca", "aflow:0e64a1246ff796be", "aflow:d88e5155b1b74176", "aflow:f3de78266ddb6d58", "aflow:f9c682dfda07098e", "aflow:fe225b5bde0c1ce6", "aflow:19326d4748b4184f", "aflow:1a1a3d2032e9f971", "aflow:303f9ec886cea964", "aflow:389a03a5aa7d17a8", "aflow:40efada370a24a28"], "url": "http://aflowlib.duke.edu/AFLOWDATA/ICSD_WEB/FCC/Ag1_ICSD_53762/CONTCAR.relax.vasp"}], "kim_user_id": "4ad03136-ed7f-4316-b586-1e94ccceb311"},
     {"species": ["Ag"], "prototype_label": "A_hP2_194_c", "parameter_names": ["a", "c/a"], "modeltype": "standard", "version": "002", "kimnum": "902368553248", "num_param_sets": "1", "parameter_sets": [{"library_prototype_label": "A_hP2_194_c-001", "short_name": "Hexagonal Close Packed", "parameter_values": [2.933, 1.6373338], "auids": ["aflow:59063b52ef54c3cb"], "url": "http://aflowlib.duke.edu/AFLOWDATA/ICSD_WEB/HEX/Ag1_ICSD_56269/CONTCAR.relax.vasp"}], "kim_user_id": "4ad03136-ed7f-4316-b586-1e94ccceb311"},
