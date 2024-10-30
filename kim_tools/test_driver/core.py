@@ -85,7 +85,8 @@ def minimize_wrapper(supercell:Atoms, fmax:float=1e-5, steps:int=10000, \
                          variable_cell:bool=True, logfile:Optional[Union[str,IO]]='-',
                          algorithm: Optimizer = LBFGSLineSearch, 
                          CellFilter: UnitCellFilter = ExpCellFilter,
-                         opt_kwargs: Dict = {}) -> None:
+                         opt_kwargs: Dict = {},
+                         flt_kwargs: Dict = {}) -> None:
     """
     Use LBFGSLineSearch to Minimize cell energy with respect to cell shape and
     internal atom positions.
@@ -123,9 +124,11 @@ def minimize_wrapper(supercell:Atoms, fmax:float=1e-5, steps:int=10000, \
             Filter to use if variable_cell is requested
         opt_kwargs:
             Dictionary of kwargs to pass to optimizer
+        flt_kwargs:
+            Dictionary of kwargs to pass to filter (e.g. `scalar_pressure`)
     """
     if variable_cell:
-        supercell_wrapped = CellFilter(supercell)
+        supercell_wrapped = CellFilter(supercell, **flt_kwargs)
         opt = algorithm(supercell_wrapped, logfile=logfile, **opt_kwargs)
     else:
         opt = algorithm(supercell, logfile=logfile, **opt_kwargs)
