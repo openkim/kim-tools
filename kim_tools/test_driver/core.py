@@ -34,6 +34,7 @@ import numpy as np
 from numpy.typing import ArrayLike
 from ase import Atoms
 from ase.calculators.calculator import Calculator
+from ase.constraints import FixSymmetry
 from typing import Any, Optional, List, Union, Dict, IO
 from ase.optimize import LBFGSLineSearch
 from ase.optimize.optimize import Optimizer
@@ -85,7 +86,9 @@ def minimize_wrapper(supercell:Atoms, fmax:float=1e-5, steps:int=10000, \
                          variable_cell:bool=True, logfile:Optional[Union[str,IO]]='-',
                          algorithm: Optimizer = LBFGSLineSearch, 
                          CellFilter: UnitCellFilter = ExpCellFilter,
-                         opt_kwargs: Dict = {}) -> None:
+                         fix_symmetry: bool = False,
+                         opt_kwargs: Dict = {},
+                         flt_kwargs: Dict = {}) -> None:
     """
     Use LBFGSLineSearch (default) to Minimize cell energy with respect to cell shape and
     internal atom positions.
@@ -121,11 +124,18 @@ def minimize_wrapper(supercell:Atoms, fmax:float=1e-5, steps:int=10000, \
             ASE optimizer algorithm
         CellFilter:
             Filter to use if variable_cell is requested
+        fix_symmetry:
+            Whether to fix the crystallographic symmetry
         opt_kwargs:
             Dictionary of kwargs to pass to optimizer
+        flt_kwargs:
+            Dictionary of kwargs to pass to filter (e.g. `scalar_pressure`)
     """
+    if fix_symmetry:
+        symmetry = FixSymmetry(supercell)
+        supercell.set_constraint(symmetry)
     if variable_cell:
-        supercell_wrapped = CellFilter(supercell)
+        supercell_wrapped = CellFilter(supercell, **flt_kwargs)
         opt = algorithm(supercell_wrapped, logfile=logfile, **opt_kwargs)
     else:
         opt = algorithm(supercell, logfile=logfile, **opt_kwargs)
