@@ -34,7 +34,14 @@ import numpy as np
 from numpy.typing import ArrayLike
 from ase import Atoms
 from ase.calculators.calculator import Calculator
-from ase.constraints import FixSymmetry
+from ase import constraints
+from ase.spacegroup import symmetrize
+if hasattr(constraints,'FixSymmetry'):
+    from ase.constraints import FixSymmetry
+elif hasattr(symmetrize,'FixSymmetry'):
+    from ase.spacegroup.symmetrize import FixSymmetry
+else:
+    raise ImportError("Can't find `FixSymmetry` in either `ase.constraints` or `ase.spacegroup.symmetrize`")
 from typing import Any, Optional, List, Union, Dict, IO
 from ase.optimize import LBFGSLineSearch
 from ase.optimize.optimize import Optimizer
