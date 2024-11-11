@@ -48,6 +48,7 @@ jobs:
         shell: bash -el {0}
         run: |
           git submodule init
+          git submodule update
           cd examples/CrystalGenomeASEExample__TD_000000654321_000
           ./run.py
 
