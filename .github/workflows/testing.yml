@@ -25,7 +25,6 @@ jobs:
           tar xf aflow.3.2.14.tar.xz
           cd aflow.3.2.14
           make -j4
-          cd ..
 
       - name: Install KIM model
         shell: bash -el {0}
@@ -44,3 +43,10 @@ jobs:
           cd tests
           export KIM_PROPERTY_PATH=$PWD/mock-test-drivers-dir/*/local-props:$PWD/mock-test-drivers-dir/*/local_props          
           pytest
+
+      - name: Run example
+        shell: bash -el {0}
+        run: |
+          cd examples/CrystalGenomeASEExample__TD_000000654321_000
+          ./run.py
+
