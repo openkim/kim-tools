@@ -21,11 +21,10 @@ jobs:
       - name: Install AFLOW
         shell: bash -el {0}
         run: |
-          wget http://materials.duke.edu/auro/aflow3.tar.xz
-          tar xf aflow3.tar.xz
-          cd aflow.3*
+          wget https://materials.duke.edu/AFLOW/aflow.3.2.14.tar.xz
+          tar xf aflow.3.2.14.tar.xz
+          cd aflow.3.2.14
           make -j4
-          export PATH=$PATH:$PWD
           cd ..
 
       - name: Install KIM model
@@ -41,6 +40,7 @@ jobs:
       - name: Run tests
         shell: bash -el {0}
         run: |
+          export PATH=$PATH:$PWD/aflow.3.2.14
           cd tests
-          export KIM_PROPERTY_PATH=$PWD/mock-test-drivers-dir/*/local-props:$PWD/mock-test-drivers-dir/*/local_props
+          export KIM_PROPERTY_PATH=$PWD/mock-test-drivers-dir/*/local-props:$PWD/mock-test-drivers-dir/*/local_props          
           pytest
