@@ -50,5 +50,5 @@ jobs:
           git submodule init
           git submodule update
           cd examples/CrystalGenomeASEExample__TD_000000654321_000
-          ./run.py
+          python run.py
 
