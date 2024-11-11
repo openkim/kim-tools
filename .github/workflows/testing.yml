@@ -23,7 +23,7 @@ jobs:
         run: |
           wget http://materials.duke.edu/auro/aflow3.tar.xz
           tar xf aflow3.tar.xz
-          cd aflow*
+          cd aflow.3*
           make -j4
           make install
 
