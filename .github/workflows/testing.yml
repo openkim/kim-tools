@@ -47,6 +47,7 @@ jobs:
       - name: Run example
         shell: bash -el {0}
         run: |
+          git submodule init
           cd examples/CrystalGenomeASEExample__TD_000000654321_000
           ./run.py
 
