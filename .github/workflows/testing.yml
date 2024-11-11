@@ -25,7 +25,7 @@ jobs:
           tar xf aflow3.tar.xz
           cd aflow.3*
           make -j4
-          export $PATH=$PATH:$PWD
+          export PATH=$PATH:$PWD
           cd ..
 
       - name: Install KIM model
