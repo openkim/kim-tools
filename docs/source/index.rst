@@ -78,7 +78,7 @@ Once the above prerequisites are satisfiied, you can install using ``pip``:
 
    pip install --user git+https://github.com/openkim/kim-tools.git
 
-If you are installing on an HPC cluster, you may need to use different options to achieve the desired result. Note that if you wish to be able to use the included command-line utility ``add_or_update_property`` (you will if you are developing a new Crystal Genome Test Driver), the prerequisite package ``kim-property`` must be installed in an editable location. The ``--user`` option included in the example command does so.
+If you are installing on an HPC cluster, you may need to use different options to achieve the desired result.
 
 API Documentation, Indices and tables
 =====================================

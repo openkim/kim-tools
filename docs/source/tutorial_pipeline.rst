@@ -60,7 +60,6 @@ Assuming you have left the first few lines of ``test_generator.json`` intact, yo
 .. code-block:: bash
 
     kimitems install -D  EAM_Dynamo_AcklandTichyVitek_1987_Ag__MO_212700056563_005
-    add_or_update_property ~/test-drivers/CrystalGenomeASEExample__TD_000000654321_000/local-props/energy-vs-volume-isotropic-crystal.edn
     pipeline-run-pair CrystalGenomeASEExample_A_cF4_225_a_Ag_0_1__TE_* EAM_Dynamo_AcklandTichyVitek_1987_Ag__MO_212700056563_005 -v
 
 You should see the output of the test, and there should be a new directory in ``~/test-results/`` with the ``results.edn`` file containing the resulting KIM Property Instance, 
