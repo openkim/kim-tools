@@ -1,14 +1,9 @@
 #!/usr/bin/python
+from kim_tools.test_driver.core import PROP_SEARCH_PATHS_INFO
 
-from kim_tools import add_or_update_property
-from sys import argv
-from os.path import isfile
-
-if len(argv) != 2:
-    raise RuntimeError('This script must be passed exactly one command-line argument.')
-if not isfile(argv[1]):
-    raise RuntimeError('The argument passed is not a valid file path.')
-try:
-    add_or_update_property(argv[1])
-except Exception:
-    raise RuntimeError('Failed to add or update property from definition file located at:\n%s'%argv[1])
+print('\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n'+\
+      'THIS UTILITY IS DEPRECATED\n'+\
+      'kim-tools should now be able to find your custom properties automatically.\n'+\
+      'It recursively looks in the following places:\n'+\
+      PROP_SEARCH_PATHS_INFO+\
+      '\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n')

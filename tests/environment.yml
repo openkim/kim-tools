@@ -1,0 +1,10 @@
+name: kim-tools-env
+channels:
+  - conda-forge
+dependencies:
+  - kimpy
+  - ase
+  - spglib
+  - kim-property
+  - kim-query
+  - kim-edn
