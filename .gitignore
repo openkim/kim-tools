@@ -7,8 +7,9 @@ dist/
 build/
 dist-old/
 
-# for when we add tests
+# test stuff
 kim.log
+lammps.log
 /tests/kim.log
 /tests/__pycache__/
 /tests/*/__pycache__/

@@ -47,8 +47,7 @@ from ase.optimize import LBFGSLineSearch
 from ase.optimize.optimize import Optimizer
 from ase.constraints import ExpCellFilter, UnitCellFilter
 from abc import ABC, abstractmethod
-import kim_property
-from kim_property import kim_property_create, kim_property_modify, kim_property_dump
+from kim_property import kim_property_create, kim_property_modify, kim_property_dump, get_properties, get_property_id_path
 from kim_property.modify import STANDARD_KEYS_SCLAR_OR_WITH_EXTENT
 import kim_edn
 from .. import aflow_util
@@ -57,9 +56,8 @@ from tempfile import NamedTemporaryFile
 import os
 from warnings import warn
 from io import StringIO
-from packaging import version
-from pprint import PrettyPrinter
 import shutil
+from pathlib import Path
 
 __author__ = ["ilia Nikiforov", "Eric Fuemmeler"]
 __all__ = [
@@ -70,24 +68,15 @@ __all__ = [
     "CrystalGenomeTestDriver",
     "query_crystal_genome_structures",
     "minimize_wrapper",
-    "add_or_update_property",
-]
-
-def add_or_update_property(property_path:str):
-    assert os.access(kim_property.__path__[0],os.W_OK), 'kim_property must be installed in an editable location in order to add properties'
-    properties=kim_property.get_properties()
-    property=kim_edn.load(property_path)
-    property_id=property['property-id']
-    properties[property_id]=property
-    if version.parse(kim_property.__version__) < version.parse('2.6.0'):
-        kim_property.pickle.pickle_kim_properties(properties)
-    else:
-        kim_property.ednify.ednify_kim_properties(properties)
-    PrettyPrinter().pprint(kim_property.get_properties()[property_id])
-    print('\n\nSuccessfully pickled or ednified properties! Scroll up to check the property you just added.')
+]    
 
 FMAX_INITIAL = 1e-5 # Force tolerance for the optional initial relaxation of the provided cell
 MAXSTEPS_INITIAL = 10000 # Maximum steps for the optional initial relaxation of the provided cell
+
+PROP_SEARCH_PATHS_INFO=(\
+'- $KIM_PROPERTY_PATH (expanding globs including recursive **)\n'
+'- $PWD/local-props/**/\n'
+'- $PWD/local_props/**/')
 
 def minimize_wrapper(supercell:Atoms, fmax:float=1e-5, steps:int=10000, \
                          variable_cell:bool=True, logfile:Optional[Union[str,IO]]='-',
@@ -292,6 +281,63 @@ class KIMTestDriver(ABC):
             if property_instance["instance-id"] == new_instance_index:
                 raise KIMTestDriverError("instance-id that matches the length of self.property_instances already exists.\n"
                                   "Was self.property_instances edited directly instead of using this package?")
+        existing_properties = get_properties()
+        property_in_existing_properties = False
+        for existing_property in existing_properties:
+            if existing_property == property_name or get_property_id_path(existing_property)[3] == property_name:
+                property_in_existing_properties = True
+
+        if not property_in_existing_properties:
+            print('\nThe property name or id\n%s\nwas not found in kim-properties.\n'%property_name)
+            print('I will now look for an .edn file containing its definition in the following locations:\n%s\n'%PROP_SEARCH_PATHS_INFO)
+            
+            property_search_paths = []
+            
+            # environment varible
+            if 'KIM_PROPERTY_PATH' in os.environ:
+                property_search_paths += os.environ['KIM_PROPERTY_PATH'].split(':')
+                
+            # CWD
+            property_search_paths.append(os.path.join(Path.cwd(),'local_props','**'))
+            property_search_paths.append(os.path.join(Path.cwd(),'local-props','**'))
+                    
+            # recursively search for .edn files in the paths, check if they are a property definition
+            # with the correct name
+            
+            found_custom_property = False
+            
+            for search_path in property_search_paths:
+                if found_custom_property:
+                    break
+                else:
+                    # hack to expand globs in both absolute and relative paths
+                    if search_path[0] == '/':
+                        base_path = Path('/')
+                        search_glob = os.path.join(search_path[1:],'*.edn')
+                    else:
+                        base_path = Path()
+                        search_glob = os.path.join(search_path,'*.edn')
+                    
+                    for path in base_path.glob(search_glob):
+                        if not os.path.isfile(path): # in case there's a directory named *.edn
+                            continue 
+                        try:
+                            path_str = str(path)
+                            dict_from_edn = kim_edn.load(path_str)
+                            if ('property-id') in dict_from_edn:
+                                property_id = dict_from_edn['property-id']
+                                if property_id == property_name or get_property_id_path(property_id)[3] == property_name:
+                                    property_name = path_str
+                                    found_custom_property = True
+                                    break
+                        except Exception as e:
+                            pass
+        
+            if not found_custom_property:
+                raise KIMTestDriverError(
+                    '\nThe property name or id\n%s\nwas not found in kim-properties.\n'%property_name + \
+                    'I failed to find an .edn file containing a matching "property-id" key in the following locations:\n' + PROP_SEARCH_PATHS_INFO)
+        
         self._property_instances = kim_property_create(new_instance_index, property_name, self._property_instances, disclaimer)
 
     def _add_key_to_current_property_instance(self,

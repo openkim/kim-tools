@@ -1,0 +1,46 @@
+name: Testing
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up micromamba
+        uses: mamba-org/setup-micromamba@v1.9.0
+        with:
+          # the create command looks like this:
+          # `micromamba create -n test-env python=<the corresponding version> kim-api=2.3.0`
+          environment-name: test-env
+          cache-environment: true
+          create-args: >-
+            -f tests/environment.yml
+
+      - name: Install AFLOW
+        shell: bash -el {0}
+        run: |
+          wget https://materials.duke.edu/AFLOW/aflow.3.2.14.tar.xz
+          tar xf aflow.3.2.14.tar.xz
+          cd aflow.3.2.14
+          make -j4
+          cd ..
+
+      - name: Install KIM model
+        shell: bash -el {0}
+        run: |
+          kim-api-collections-management install user LJ_Shifted_Bernardes_1958LowCutoff_Ar__MO_720819638419_004
+
+      - name: Install
+        shell: bash -el {0}
+        run: |
+          python -m pip install .
+
+      - name: Run tests
+        shell: bash -el {0}
+        run: |
+          export PATH=$PATH:$PWD/aflow.3.2.14
+          cd tests
+          export KIM_PROPERTY_PATH=$PWD/mock-test-drivers-dir/*/local-props:$PWD/mock-test-drivers-dir/*/local_props          
+          pytest
