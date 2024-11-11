@@ -49,6 +49,7 @@ jobs:
         run: |
           git submodule init
           git submodule update
+          kim-api-collections-management install user SW_ZhouWardMartin_2013_CdTeZnSeHgS__MO_503261197030_003 
           cd examples/CrystalGenomeASEExample__TD_000000654321_000
           python run.py
 
