@@ -18,6 +18,15 @@ jobs:
           create-args: >-
             -f tests/environment.yml
 
+      - name: Install AFLOW
+        shell: bash -el {0}
+        run: |
+          wget http://materials.duke.edu/auro/aflow3.tar.xz
+          tar xf aflow3.tar.xz
+          cd aflow*
+          make -j4
+          make install
+
       - name: Install KIM model
         shell: bash -el {0}
         run: |
