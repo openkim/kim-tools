@@ -15,6 +15,7 @@ from tempfile import NamedTemporaryFile
 
 __author__ = ["ilia Nikiforov", "Ellad Tadmor"]
 __all__ = [
+    "split_parameter_array",
     "get_stoich_reduced_list_from_prototype",
     "get_species_list_from_string",
     "read_shortnames",
@@ -30,6 +31,57 @@ CENTROSYMMETRIC_SPACE_GROUPS_WITH_MORE_THAN_ONE_SETTING = (
    	138 , 141 , 142 , 201 , 203 ,
     222 , 224 , 227 , 228)
 
+def split_parameter_array(parameter_names: List[str], list_to_split: Optional[List] = None) -> Tuple[List,List]:
+    """
+    Split a list of parameters into cell and internal parameters.
+    
+    Args:
+        parameter_names:
+            List of AFLOW parameter names, e.g.
+            `["a", "c/a", "x1", "x2", "y2", "z2"]`
+            Proper AFLOW order is assumed, i.e. cell parameters
+            first, then internal.
+        list_to_split:
+            List to split, must be same length as `parameter_names`
+            If omitted, `parameter_names` itself will be split
+    
+    Returns:
+        `list_to_split` (or `parameter_names` if `list_to_split` is omitted),
+        split into lists corresponding to the split between cell and internal parameters
+        
+    Raises:
+        AssertionError:
+            If lengths are incompatible or if `parameter_names` fails an (incomplete)
+            check that it is a sensible list of AFLOW parameters
+    """
+    if list_to_split is None:
+        list_to_split = parameter_names
+    
+    assert (len(list_to_split) == len(parameter_names)), \
+        "`list_to_split` must have the same length as `parameter_names`"
+    
+    in_internal_part = False
+    
+    cell_part = []
+    internal_part = []
+    
+    CARTESIAN_AXES = ['x','y','z']
+    
+    for name,value in zip(parameter_names,list_to_split):
+        assert (isinstance(name,str)), "At least one element of `parameter_names` is not a string."
+        if not in_internal_part: 
+            if name[0] in CARTESIAN_AXES:
+                in_internal_part = True
+        else: # means we have already encountered an internal coordinate in a past iteration
+            assert (name[0] in CARTESIAN_AXES), \
+                "`parameter_names` seems to have an internal parameter followed by a non-internal one"
+        
+        if in_internal_part:
+            internal_part.append(value)
+        else:
+            cell_part.append(value)
+            
+    return cell_part, internal_part
 
 def get_stoich_reduced_list_from_prototype(prototype_label: str) -> List[int]:
     """
@@ -475,7 +527,6 @@ class AFLOW:
             output = self.aflow_command(command)
         res_json = json.loads(output)
         return res_json
-
     
     def _compare_poscars(self, poscar1: str, poscar2: str) -> Dict:
         return json.loads(self.aflow_command([' --print=JSON --compare_materials=%s,%s --screen_only --quiet'%(poscar1,poscar2)]))
@@ -525,7 +576,7 @@ class AFLOW:
     
     def build_atoms_from_prototype(
             self, species: List[str], prototype_label: str, parameter_values: List[float], primitive_cell: bool = True, verbose: bool=True, proto_file:Optional[str]=None
-            ):
+            ) -> Atoms:
         """
         Build an atoms object from an AFLOW prototype designation
         
@@ -539,12 +590,12 @@ class AFLOW:
             primitive_cell:
                 Request the primitive cell
             verbose:
-                Print details
+                Print details. TODO: Go through references to this and possibly remove this
             proto_file:
                 Print the output of --proto to this file
 
         Returns:
-            Object representing conventional unit cell of the material
+            Object representing unit cell of the material
 
         Raises:
             incorrectSpaceGroupException: If space group changes during processing
@@ -613,3 +664,27 @@ class AFLOW:
         atoms.wrap()
         
         return atoms
+    
+    def get_equations_from_prototype(self, prototype_label: str, parameter_values: List[float], species: Optional[List[str]] = None) -> \
+        Tuple[List[Dict],List[str]]:
+        """
+        Get the symbolic equations for the fractional positions in the unit cell of an AFLOW prototype
+        
+        Args:
+            prototype_label: 
+                An AFLOW prototype label, without an enumeration suffix, without specified atomic species
+            parameter_values: 
+                The free parameters of the AFLOW prototype designation
+            species:
+                Stoichiometric species, e.g. ``['Mo','S']`` corresponding to A and B respectively for prototype label AB2_hP6_194_c_f indicating molybdenite.
+                If this is omitted, the equations will be returned with symbolic species (i.e. A, B, etc.)
+            
+        Returns:
+            Two lists. The second list is a list of the names internal free parameters of the crystal sorted according to AFLOW convention (e.g. ['x1','x2','y2'])
+            The first list contains one dictionary for each atomic position. It has keys 'equation' and 'species'. The 'equation' is a 3-by-n numpy matrix, where
+            n is the number of internal free parameters. This way, multiplying this matrix by the vector of internal free parameters results in a column vector
+            of fractional coordinates for that atom.
+    
+        """
+        
+        
