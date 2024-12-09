@@ -36,3 +36,7 @@ def test_kimtest():
         
     assert len(test.property_instances) == 6
     test.write_property_instances_to_file()
+
+
+if __name__ == '__main__':
+    test_kimtest()

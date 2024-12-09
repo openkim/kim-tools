@@ -35,3 +35,6 @@ def test_cg():
     test(**list_of_crystal_descriptions[0])    
     assert len(test.property_instances) == 2
     test.write_property_instances_to_file()
+    
+if __name__ == '__main__':
+    test_cg()

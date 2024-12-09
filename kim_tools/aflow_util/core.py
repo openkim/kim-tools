@@ -12,10 +12,12 @@ from ase.spacegroup.symmetrize import refine_symmetry
 from curses.ascii import isalpha, isupper, isdigit
 from typing import Dict, List, Tuple, Union, Optional
 from tempfile import NamedTemporaryFile
+from sympy import parse_expr,matrix2numpy,linear_eq_to_matrix,Symbol
 
 __author__ = ["ilia Nikiforov", "Ellad Tadmor"]
 __all__ = [
     "split_parameter_array",
+    "internal_parameter_sort_key",
     "get_stoich_reduced_list_from_prototype",
     "get_species_list_from_string",
     "read_shortnames",
@@ -82,6 +84,16 @@ def split_parameter_array(parameter_names: List[str], list_to_split: Optional[Li
             cell_part.append(value)
             
     return cell_part, internal_part
+
+def internal_parameter_sort_key(parameter_name: Union[Symbol,str] ) -> int:
+    """
+    Sorting key for internal free parameters. Sort by number first, then letter
+    """
+    parameter_name_str = str(parameter_name)
+    axis = parameter_name_str[0]
+    assert axis == 'x' or axis == 'y' or axis == 'z', 'Parameter name must start with x, y, or z'
+    number = int(parameter_name_str[1:])
+    return 1000*number + ord(axis)
 
 def get_stoich_reduced_list_from_prototype(prototype_label: str) -> List[int]:
     """
@@ -316,7 +328,7 @@ class AFLOW:
         else:
             self.aflow_work_dir = aflow_work_dir
 
-    def aflow_command(self, cmd: List[str]) -> str:
+    def aflow_command(self, cmd: Union[str,List[str]]) -> str:
         """
         Run AFLOW executable with specified arguments and return the output, possibly multiple times piping outputs to each other     
 
@@ -330,6 +342,9 @@ class AFLOW:
         Returns:
             Output of the AFLOW command
         """
+        if not isinstance(cmd,list):
+            cmd = [cmd]
+        
         cmd_list = [self.aflow_executable + " --np=" + str(self.np) + " " + cmd_inst
             for cmd_inst in cmd]
         cmd_str = " | ".join(cmd_list)                
@@ -665,7 +680,7 @@ class AFLOW:
         
         return atoms
     
-    def get_equations_from_prototype(self, prototype_label: str, parameter_values: List[float], species: Optional[List[str]] = None) -> \
+    def get_equations_from_prototype(self, prototype_label: str, parameter_values: List[float]) -> \
         Tuple[List[Dict],List[str]]:
         """
         Get the symbolic equations for the fractional positions in the unit cell of an AFLOW prototype
@@ -675,16 +690,41 @@ class AFLOW:
                 An AFLOW prototype label, without an enumeration suffix, without specified atomic species
             parameter_values: 
                 The free parameters of the AFLOW prototype designation
-            species:
-                Stoichiometric species, e.g. ``['Mo','S']`` corresponding to A and B respectively for prototype label AB2_hP6_194_c_f indicating molybdenite.
-                If this is omitted, the equations will be returned with symbolic species (i.e. A, B, etc.)
             
         Returns:
             Two lists. The second list is a list of the names internal free parameters of the crystal sorted according to AFLOW convention (e.g. ['x1','x2','y2'])
-            The first list contains one dictionary for each atomic position. It has keys 'equation' and 'species'. The 'equation' is a 3-by-n numpy matrix, where
-            n is the number of internal free parameters. This way, multiplying this matrix by the vector of internal free parameters results in a column vector
-            of fractional coordinates for that atom.
-    
+            The first list contains one dictionary for each atomic position. It has keys 'equations' and 'species'. The 'equations' is a 3-by-(n+1) numpy matrix, where
+            n is the number of internal free parameters. This way, multiplying this matrix by the vector of internal free parameters plus '1' (for the constant terms)
+            results in a column vector of fractional coordinates for that atom. 'species' is the virtual species (e.g. A,B etc)
         """
         
+        equation_poscar = self.aflow_command(f'--proto={prototype_label} --params={",".join([str(param) for param in parameter_values])} --add_equations') # equations_only is buggy
         
+        # First, parse the lines into equations and construct set of free parameters. While at it, populate the symbols for return
+        list_of_systems_of_equations = [] # list of lists
+        free_params_set = set() # data type: sympy.Symbol
+        return_list = []
+        seen_this_many_lines_starting_with_direct = 0
+        for line in equation_poscar.splitlines():
+            if seen_this_many_lines_starting_with_direct < 2:
+                if line.startswith('Direct('):
+                    seen_this_many_lines_starting_with_direct += 1
+                continue
+            line_split = line.split()
+            return_list.append({'species':line_split[3]})
+            system_of_equations = []
+            for expression_string in line_split[:3]:
+                coordinate_expr = parse_expr(expression_string)
+                free_params_set.update(coordinate_expr.free_symbols)
+                system_of_equations.append(coordinate_expr)
+            list_of_systems_of_equations.append(system_of_equations)
+            
+        free_params_list = list(free_params_set) # data type: sympy.Symbol
+        free_params_list.sort(key = internal_parameter_sort_key)
+        
+        # loop a second time (necessary because we needed to have constructed the set of free parameters first)
+        for return_dict,system_of_equations in zip(return_list,list_of_systems_of_equations):
+            a,b = linear_eq_to_matrix(system_of_equations,free_params_list)
+            return_dict['equations'] = np.concatenate((matrix2numpy(a,dtype=np.float64),matrix2numpy(-b,dtype=np.float64)),axis=1)
+        
+        return return_list,[str(free_param) for free_param in free_params_list]
