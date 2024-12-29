@@ -8,9 +8,7 @@ build/
 dist-old/
 
 # test stuff
-kim.log
-lammps.log
-/tests/kim.log
+*.log
 /tests/__pycache__/
 /tests/*/__pycache__/
 /tests/output/

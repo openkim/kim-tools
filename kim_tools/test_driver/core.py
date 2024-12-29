@@ -467,9 +467,14 @@ class KIMTestDriver(ABC):
         return kim_edn.loads(self._property_instances)
 
 ################################################################################
-def get_crystal_genome_designation_from_atoms(atoms: Atoms, aflow_np = 1) -> Dict:
+def get_crystal_genome_designation_from_atoms(atoms: Atoms, get_library_prototype: bool = True, aflow_np: int = 4) -> Dict:
     """
     Get crystal genome designation from an ASE atoms object.
+    
+    Args:
+        atoms: Atoms object to analyze
+        get_library_prototype: whether to compare against prototype library
+        aflow_np: Number of processors to use with AFLOW executable
 
     Returns:
         A dictionary with the following keys:
@@ -496,7 +501,9 @@ def get_crystal_genome_designation_from_atoms(atoms: Atoms, aflow_np = 1) -> Dic
         fp.close()
         with open(fp.name) as f:
             proto_des = aflow.get_prototype(f.name)
-            libproto,short_name = aflow.get_library_prototype_label_and_shortname(f.name,aflow_util.read_shortnames())
+            libproto,short_name = \
+                aflow.get_library_prototype_label_and_shortname(f.name,aflow_util.read_shortnames()) \
+                if get_library_prototype else None,None
         os.remove(fp.name)
 
     cg_des["prototype_label"] = proto_des["aflow_prototype_label"]

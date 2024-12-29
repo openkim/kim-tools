@@ -6,6 +6,7 @@ import subprocess
 import sys
 import os
 import ase
+from ase.cell import Cell
 from ase import Atoms
 import ase.spacegroup
 from ase.spacegroup.symmetrize import refine_symmetry
@@ -13,6 +14,10 @@ from curses.ascii import isalpha, isupper, isdigit
 from typing import Dict, List, Tuple, Union, Optional
 from tempfile import NamedTemporaryFile
 from sympy import parse_expr,matrix2numpy,linear_eq_to_matrix,Symbol
+import logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(filename='kim-tools.log',level=logging.INFO,force=True)
+
 
 __author__ = ["ilia Nikiforov", "Ellad Tadmor"]
 __all__ = [
@@ -328,12 +333,13 @@ class AFLOW:
         else:
             self.aflow_work_dir = aflow_work_dir
 
-    def aflow_command(self, cmd: Union[str,List[str]]) -> str:
+    def aflow_command(self, cmd: Union[str,List[str]],verbose=True) -> str:
         """
         Run AFLOW executable with specified arguments and return the output, possibly multiple times piping outputs to each other     
 
         Args:
-            cmd: List of arguments to pass to each AFLOW executable. If it's longer than 1, multiple commands will be piped to each other
+            cmd: List of arguments to pass to each AFLOW executable. If it's longer than 1, multiple commands will be piped to each other            
+            verbose: Whether to echo command to log file
 
         Raises:
             tooSymmetricException: if an ``aflow --proto=`` command complains that 
@@ -347,7 +353,9 @@ class AFLOW:
         
         cmd_list = [self.aflow_executable + " --np=" + str(self.np) + " " + cmd_inst
             for cmd_inst in cmd]
-        cmd_str = " | ".join(cmd_list)                
+        cmd_str = " | ".join(cmd_list)
+        if verbose:
+            logger.info(cmd_str)
         try:
             return subprocess.check_output(cmd_str, shell=True, stderr=subprocess.PIPE,encoding="utf-8")
         except subprocess.CalledProcessError as exc:
@@ -356,7 +364,7 @@ class AFLOW:
             else:
                 raise RuntimeError("ERROR: unexpected error from aflow command %s , error code = %d\nstderr: %s" % (cmd_str, exc.returncode, exc.stderr))
     
-    def write_poscar(self, prototype_label: str, output_file: Union[str,None]=None, free_params: Union[List[float],None]=None):
+    def write_poscar(self, prototype_label: str, output_file: Union[str,None]=None, free_params: Union[List[float],None]=None, verbose: bool=True):
         """
         Run the ``aflow --proto`` command to write a POSCAR coordinate file corresponding to the provided AFLOW prototype designation
 
@@ -364,13 +372,14 @@ class AFLOW:
             prototype_label: An AFLOW prototype label, with or without an enumeration suffix, with or without specified atomic species
             output_file: Name of the output file. If not provided, the output is written to stdout
             free_params: The free parameters of the AFLOW prototype designation. If an enumeration suffix is not included in `prototype_label` and the prototype has free parameters besides `a`, this must be provided
+            verbose: Whether to echo command to log file
         """
         command = " --proto=" + prototype_label
         if free_params:
             command += " --params=" + ",".join([str(param) for param in free_params])
         if output_file is not None:
             command += " > " + self.aflow_work_dir + output_file
-        return self.aflow_command([command])
+        return self.aflow_command([command], verbose=verbose)
 
     def compare_materials_dir(self, materials_subdir: str, no_scale_volume: bool=True) -> List[Dict]:
         """
@@ -426,13 +435,14 @@ class AFLOW:
         res_json = json.loads(output)
         return res_json
     
-    def get_prototype(self,input_file: str) -> Dict:
+    def get_prototype(self,input_file: str, verbose: bool=False) -> Dict:
         """
         Run the ``aflow --prototype`` command to get the AFLOW prototype designation of the input structure
 
         Args:
             input_file: path to the POSCAR file containing the structure to analyze
-
+            verbose: Whether to echo command to log file
+            
         Returns:
             JSON dictionaries describing the AFLOW prototype designation (label and parameters) of the input structure.
        
@@ -440,7 +450,7 @@ class AFLOW:
         output=self.aflow_command([
             " --prim < " + self.aflow_work_dir + input_file,
             " --prototype --print=json"
-            ])
+            ],verbose=verbose)
         res_json = json.loads(output)
         return res_json    
 
@@ -543,8 +553,38 @@ class AFLOW:
         res_json = json.loads(output)
         return res_json
     
+    def get_pointgroup_crystal(self, input_file: str, verbose: bool=False) -> List[Dict]:
+        """
+        Run the ``aflow --pointgroup_crystal`` command to get the point group operations of the provided coordinate file
+
+        Args:
+            input_file: path to the POSCAR file containing the structure to analyze
+
+        Returns:
+            JSON dictionaries describing the point group of the input structure.            
+            verbose: Whether to echo command to log file
+        """
+        return json.loads(self.aflow_command(
+            [" --pointgroup_crystal --screen_only --print=json < " + self.aflow_work_dir + input_file],
+            verbose=verbose))['pgroup_xtal']
+    
+    def get_pointgroup_crystal_from_atoms(self, atoms: Atoms, verbose: bool=False) -> List[Dict]:
+        """
+        Run the ``aflow --pointgroup_crystal`` command to get the point group operations of the provided atoms object
+
+        Args:
+            atoms: Atoms object containing the structure to analyze
+
+        Returns:
+            JSON dictionaries describing the point group of the input structure.            
+            verbose: Whether to echo command to log file
+        """
+        with NamedTemporaryFile() as f:
+            atoms.write(f.name,'vasp',sort=True)
+            return self.get_pointgroup_crystal(f.name,verbose=verbose)
+    
     def _compare_poscars(self, poscar1: str, poscar2: str) -> Dict:
-        return json.loads(self.aflow_command([' --print=JSON --compare_materials=%s,%s --screen_only --quiet'%(poscar1,poscar2)]))
+        return json.loads(self.aflow_command([' --print=JSON --compare_materials=%s,%s --screen_only --quiet'%(poscar1,poscar2)],verbose=False))
             
     def _compare_Atoms(self, atoms1: Atoms, atoms2: Atoms) -> Dict:        
         with NamedTemporaryFile() as f1, NamedTemporaryFile() as f2:
@@ -555,7 +595,8 @@ class AFLOW:
             compare = self._compare_poscars(f1.name,f2.name)
         return compare
 
-    def get_basistransformation_rotation_originshift_from_atoms(self, atoms1: Atoms, atoms2: Atoms) -> Optional[Tuple[ArrayLike,ArrayLike]]:
+    def get_basistransformation_rotation_originshift_from_atoms(self, atoms1: Atoms, atoms2: Atoms) -> \
+        Tuple[Optional[ArrayLike],Optional[ArrayLike],Optional[ArrayLike]]:
         """
         Get operations to transform atoms2 to atoms1
 
@@ -563,16 +604,17 @@ class AFLOW:
             Tuple of arrays in the order: basis transformation, rotation, origin shift
         """
         comparison_result = self._compare_Atoms(atoms1,atoms2)
-        if 'structures_duplicate' in comparison_result[0]:            
+        if 'structures_duplicate' in comparison_result[0] and comparison_result[0]['structures_duplicate'] != []:
             return (
                 np.asarray(comparison_result[0]['structures_duplicate'][0]['basis_transformation']),
                 np.asarray(comparison_result[0]['structures_duplicate'][0]['rotation']),
                 np.asarray(comparison_result[0]['structures_duplicate'][0]['origin_shift'])
             )
         else:
-            return None
+            return None,None,None
         
-    def get_basistransformation_rotation_originshift_from_poscars(self, poscar1: str, poscar2: str) -> Optional[Tuple[ArrayLike,ArrayLike,ArrayLike]]:
+    def get_basistransformation_rotation_originshift_from_poscars(self, poscar1: str, poscar2: str) -> \
+        Tuple[Optional[ArrayLike],Optional[ArrayLike],Optional[ArrayLike]]:
         """
         Get operations to transform poscar2 to poscar1
 
@@ -580,14 +622,14 @@ class AFLOW:
             Tuple of arrays in the order: basis transformation, rotation, origin shift
         """        
         comparison_result = self._compare_poscars(poscar1,poscar2)
-        if 'structures_duplicate' in comparison_result[0]:
+        if 'structures_duplicate' in comparison_result[0] and comparison_result[0]['structures_duplicate'] != []:
             return (
                 np.asarray(comparison_result[0]['structures_duplicate'][0]['basis_transformation']),
                 np.asarray(comparison_result[0]['structures_duplicate'][0]['rotation']),
                 np.asarray(comparison_result[0]['structures_duplicate'][0]['origin_shift'])
             )
         else:
-            return None        
+            return None,None,None
     
     def build_atoms_from_prototype(
             self, species: List[str], prototype_label: str, parameter_values: List[float], primitive_cell: bool = True, verbose: bool=True, proto_file:Optional[str]=None
@@ -605,7 +647,7 @@ class AFLOW:
             primitive_cell:
                 Request the primitive cell
             verbose:
-                Print details. TODO: Go through references to this and possibly remove this
+                Print details in the log file
             proto_file:
                 Print the output of --proto to this file
 
@@ -652,7 +694,7 @@ class AFLOW:
         num_cell = num_conv_cell/num_lattice
         
         with NamedTemporaryFile(mode='w+') as f, (NamedTemporaryFile(mode='w+') if proto_file is None else open(proto_file,mode='w+')) as f_with_species:            
-            self.write_poscar(prototype_label,f.name,parameter_values)
+            self.write_poscar(prototype_label,f.name,parameter_values,verbose=verbose)
             f.seek(0)
             # Add line containing species
             for i,line in enumerate(f):
@@ -680,7 +722,7 @@ class AFLOW:
         
         return atoms
     
-    def get_equations_from_prototype(self, prototype_label: str, parameter_values: List[float]) -> \
+    def get_equation_matrices_from_prototype(self, prototype_label: str, parameter_values: List[float]) -> \
         Tuple[List[Dict],List[str]]:
         """
         Get the symbolic equations for the fractional positions in the unit cell of an AFLOW prototype
@@ -728,3 +770,63 @@ class AFLOW:
             return_dict['equations'] = np.concatenate((matrix2numpy(a,dtype=np.float64),matrix2numpy(-b,dtype=np.float64)),axis=1)
         
         return return_list,[str(free_param) for free_param in free_params_list]
+    
+    def confirm_unrotated_prototype_designation(      
+            self,
+            reference_atoms: Atoms,
+            species: List[str],
+            prototype_label: str,
+            parameter_values: List[float],
+        ) -> bool:
+        """
+        Check whether the provided prototype designation recreates ``reference_atoms`` as follows:
+        When the cells are in :func:`ase.cell.Cell.standard_form()`, the cells are identical.
+        When both crystals are rotated to standard form (rotating the cell and keeping the fractional
+        coordinates unchanged), the rotation part of the mapping the two crystals to each other found by AFLOW
+        is in the point group of the reference crystal (using the generated crystal would give the same
+        result). In other words, the crystals are identically oriented (but possibly translated) in reference
+        to their lattice vectors, which in turn must be identical up to a rotation in reference to 
+        some Cartesian coordinate system.
+        
+        Args:
+            species:
+                Stoichiometric species, e.g. ``['Mo','S']`` corresponding to A and B respectively for prototype label AB2_hP6_194_c_f indicating molybdenite
+            prototype_label: 
+                An AFLOW prototype label, without an enumeration suffix, without specified atomic species
+            parameter_values: 
+                The free parameters of the AFLOW prototype designation
+
+        Returns:
+            Whether or not the crystals match
+        """
+        test_atoms = self.build_atoms_from_prototype(species,prototype_label,parameter_values)
+        
+        if not np.allclose(reference_atoms.get_cell_lengths_and_angles(),test_atoms.get_cell_lengths_and_angles(),atol=1e-4):
+            logger.info(f"Cell lengths and angles do not match.\nOriginal: {reference_atoms.get_cell_lengths_and_angles()}\n"
+                        f"Regenerated: {test_atoms.get_cell_lengths_and_angles()}")
+            return False
+        else:
+            cell_lengths_and_angles = reference_atoms.get_cell_lengths_and_angles()
+        
+        reference_atoms_copy = reference_atoms.copy()
+        
+        test_atoms.set_cell(Cell.fromcellpar(cell_lengths_and_angles),scale_atoms=True)
+        reference_atoms_copy.set_cell(Cell.fromcellpar(cell_lengths_and_angles),scale_atoms=True)
+        
+        # the rotations below are Cartesian.
+        
+        _,cart_rot,_ = self.get_basistransformation_rotation_originshift_from_atoms(test_atoms,reference_atoms_copy)
+        
+        if cart_rot is None:
+            logger.info("AFLOW failed to match the crystals")
+            return False
+        
+        point_group_ops = self.get_pointgroup_crystal_from_atoms(reference_atoms_copy)
+        
+        for op in point_group_ops:
+            if np.allclose(cart_rot,op['Uc'],atol=1e-4):
+                logger.info("Found matching rotation")
+                return True
+        
+        logger.info("No matching rotation found")
+        return False
