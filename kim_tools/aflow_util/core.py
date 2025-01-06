@@ -38,6 +38,9 @@ __all__ = [
     "internal_parameter_sort_key",
     "get_stoich_reduced_list_from_prototype",
     "get_wyckoff_lists_from_prototype",
+    "get_space_group_number_from_prototype",
+    "get_pearson_symbol_from_prototype",
+    "get_centering_divisor_from_prototype",
     "get_species_list_from_string",
     "read_shortnames",
     "get_formula_from_prototype",
@@ -359,6 +362,18 @@ def get_wyckoff_lists_from_prototype(prototype_label: str) -> List[str]:
 
 def get_space_group_number_from_prototype(prototype_label: str) -> int:
     return int(prototype_label.split('_')[2])
+
+def get_pearson_symbol_from_prototype(prototype_label: str) -> str:
+    return prototype_label.split('_')[1]
+
+def get_centering_from_prototype(prototype_label: str) -> str:
+    return get_pearson_symbol_from_prototype(prototype_label)[1]
+
+def get_centering_divisor_from_prototype(prototype_label: str) -> int:
+    """
+    Get number of lattice points per conventional (hexagonal for rhombohedral) unit cell
+    """
+    return CENTERING_DIVISORS[get_centering_from_prototype(prototype_label)]
 
 def get_species_list_from_string(species_string: str) -> List[str]:
     """
@@ -927,7 +942,9 @@ class AFLOW:
             coeff_matrix_list = []
             const_terms_list = []
             # the next n positions should be equivalent corresponding to this Wyckoff position
-            for _ in range(WYCKOFF_MULTIPLICITIES[space_group_number][wyckoff_letter]):
+            multiplicity_per_primitive_cell = WYCKOFF_MULTIPLICITIES[space_group_number][wyckoff_letter]/get_centering_divisor_from_prototype(prototype_label)
+            assert np.isclose(multiplicity_per_primitive_cell,round(multiplicity_per_primitive_cell))
+            for _ in range(round(multiplicity_per_primitive_cell)):
                 line_split = next(coord_iter).split()
                 if species is None:
                     species = line_split[3]
@@ -944,10 +961,14 @@ class AFLOW:
                     curr_line_free_params.update(coordinate_expr.free_symbols)
                     coordinate_expr_list.append(coordinate_expr)
                 
+                # They should all have the same number, i.e. x2,y2,z2 or x14,z14, so we can just string sort them
+                curr_line_free_params = list(curr_line_free_params)
+                curr_line_free_params.sort(key = lambda param: str(param))
+                                
                 # Each line within a Wyckoff position should have the same set of free parameters
                 if param_names is None:
-                    param_names = sorted(list(curr_line_free_params))
-                elif param_names != sorted(list(curr_line_free_params)):
+                    param_names = curr_line_free_params
+                elif param_names != curr_line_free_params:
                     raise inconsistentWyckoffException(
                         f'Encountered different free params within what I thought should be the lines corresponding to Wyckoff position {wyckoff_letter}\n'
                         f'Equations obtained from prototype label {prototype_label}:\n{equation_poscar}'
@@ -961,7 +982,8 @@ class AFLOW:
                 
                 coeff_matrix_list.append(matrix2numpy(a,dtype=np.float64))
                 const_terms_list.append(matrix2numpy(-b,dtype=np.float64))
-            
+
+            # Done looping over this set of equivalent positions
             equation_sets.append(EquivalentEqnSet(
                 species=species,
                 wyckoff_letter=wyckoff_letter,
@@ -986,57 +1008,7 @@ class AFLOW:
                 species = equation_set.species
                 species_must_change = False
 
-        return equation_sets
-        
-    
-    def get_equation_matrices_from_prototype(self, prototype_label: str, parameter_values: List[float]) -> \
-        Tuple[List[Dict],List[str]]:
-        """
-        Get the symbolic equations for the fractional positions in the unit cell of an AFLOW prototype
-        
-        Args:
-            prototype_label: 
-                An AFLOW prototype label, without an enumeration suffix, without specified atomic species
-            parameter_values: 
-                The free parameters of the AFLOW prototype designation
-            
-        Returns:
-            Two lists. The second list is a list of the names internal free parameters of the crystal sorted according to AFLOW convention (e.g. ['x1','x2','y2'])
-            The first list contains one dictionary for each atomic position. It has keys 'equations' and 'species'. The 'equations' is a 3-by-(n+1) numpy matrix, where
-            n is the number of internal free parameters. This way, multiplying this matrix by the vector of internal free parameters plus '1' (for the constant terms)
-            results in a column vector of fractional coordinates for that atom. 'species' is the virtual species (e.g. A,B etc)
-        """
-        
-        equation_poscar = self.aflow_command(f'--proto={prototype_label} --params={",".join([str(param) for param in parameter_values])} --add_equations') # equations_only is buggy
-        
-        # First, parse the lines into equations and construct set of free parameters. While at it, populate the symbols for return
-        list_of_systems_of_equations = [] # list of lists
-        free_params_set = set() # data type: sympy.Symbol
-        return_list = []
-        seen_this_many_lines_starting_with_direct = 0
-        for line in equation_poscar.splitlines():
-            if seen_this_many_lines_starting_with_direct < 2:
-                if line.startswith('Direct('):
-                    seen_this_many_lines_starting_with_direct += 1
-                continue
-            line_split = line.split()
-            return_list.append({'species':line_split[3]})
-            system_of_equations = []
-            for expression_string in line_split[:3]:
-                coordinate_expr = parse_expr(expression_string)
-                free_params_set.update(coordinate_expr.free_symbols)
-                system_of_equations.append(coordinate_expr)
-            list_of_systems_of_equations.append(system_of_equations)
-            
-        free_params_list = list(free_params_set) # data type: sympy.Symbol
-        free_params_list.sort(key = internal_parameter_sort_key)
-        
-        # loop a second time (necessary because we needed to have constructed the set of free parameters first)
-        for return_dict,system_of_equations in zip(return_list,list_of_systems_of_equations):
-            a,b = linear_eq_to_matrix(system_of_equations,free_params_list)
-            return_dict['equations'] = np.concatenate((matrix2numpy(a,dtype=np.float64),matrix2numpy(-b,dtype=np.float64)),axis=1)
-        
-        return return_list,[str(free_param) for free_param in free_params_list]
+        return equation_sets        
     
     def confirm_unrotated_prototype_designation(      
             self,
