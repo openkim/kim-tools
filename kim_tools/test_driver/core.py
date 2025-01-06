@@ -504,9 +504,9 @@ def get_crystal_genome_designation_from_atoms(atoms: Atoms, get_library_prototyp
         fp.close()
         with open(fp.name) as f:
             proto_des = aflow.get_prototype(f.name)
-            libproto,short_name = \
+            (libproto,short_name) = \
                 aflow.get_library_prototype_label_and_shortname(f.name,aflow_util.read_shortnames()) \
-                if get_library_prototype else None,None
+                if get_library_prototype else (None,None)
         os.remove(fp.name)
 
     cg_des["prototype_label"] = proto_des["aflow_prototype_label"]
