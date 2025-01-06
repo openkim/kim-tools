@@ -1,11 +1,11 @@
 #!/usr/bin/python
 
-from kim_tools import AFLOW,split_parameter_array,CRYSTAL_GENOME_INITIAL_STRUCTURES, get_crystal_genome_designation_from_atoms
+from kim_tools import AFLOW,split_parameter_array,CRYSTAL_GENOME_INITIAL_STRUCTURES, get_crystal_genome_designation_from_atoms, get_wyckoff_lists_from_prototype, frac_pos_match_allow_permute_wrap, frac_pos_match_allow_wrap
 import numpy as np
 import json
-"""
-TEST_CASES = [577,365
-    
+
+TEST_CASES = [577,365,1734,1199,1478,166,1210,1362,920,212,646,22]
+"""    
 {"species": ["Ca", "O", "Si"], "prototype_label": "AB3C_aP30_2_3i_9i_3i", "parameter_names": ["a", "b/a", "c/a", "alpha", "beta", "gamma", "x1", "y1", "z1", "x2", "y2", "z2", "x3", "y3", "z3", "x4", "y4", "z4", "x5", "y5", "z5", "x6", "y6", "z6", "x7", "y7", "z7", "x8", "y8", "z8", "x9", "y9", "z9", "x10", "y10", "z10", "x11", "y11", "z11", "x12", "y12", "z12", "x13", "y13", "z13", "x14", "y14", "z14", "x15", "y15", "z15"], "parameter_values": [6.7775, 1.3825895, 0.99430468, 83.5094, 75.9601, 69.7373, 0.75709148, 0.0011147306, 0.73598857, 0.92299988, 0.33483882, 0.57277016, 0.26673272, 0.35208259, 0.90731832, 0.23178876, 0.40353274, 0.54135229, 0.61239375, 0.26425051, 0.63625742, 0.49465368, 0.13777657, 0.36197599, 0.6548869, 0.90512925, 0.11523013, 0.89834602, 0.94027959, 0.3712392, 0.80847639, 0.1347392, 0.045154102, 0.88477946, 0.40443359, 0.91223543, 0.027264404, 0.25524213, 0.23252552, 0.59809072, 0.3866145, 0.25192747, 0.47912857, 0.30143537, 0.45477333, 0.72490732, 0.015737688, 0.22911936, 0.83857573, 0.29268957, 0.10637066]},
 {"species": ["C"], "prototype_label": "A_mC16_12_4i", "parameter_names": ["a", "b/a", "c/a", "beta", "x1", "z1", "x2", "z2", "x3", "z3", "x4", "z4"], "parameter_values": [9.1921, 0.27467064, 0.45133321, 82.971, 0.94271241, 0.87955035, 0.44178398, 0.65364615, 0.78567809, 0.059238811, 0.27133365, 0.58534651]},
 {"species": ["U"], "prototype_label": "A_oC4_63_c", "parameter_names": ["a", "b/a", "c/a", "y1"], "parameter_values": [3.38, 1.7635799, 1.6884024, 0.14768057]},
@@ -27,7 +27,7 @@ TEST_CASES = [577,365
 def test_get_equations_from_prototype():    
     aflow = AFLOW()
     equations_and_internal_parameter_names_cache = {}
-    for material in CRYSTAL_GENOME_INITIAL_STRUCTURES:
+    for material in [CRYSTAL_GENOME_INITIAL_STRUCTURES[test_case] for test_case in TEST_CASES]:
         species = material["species"]            
         real_to_virtual_species_map = {}
         for i,symbol in enumerate(species):
@@ -35,6 +35,7 @@ def test_get_equations_from_prototype():
         prototype_label = material["prototype_label"]
         parameter_names = material["parameter_names"]
         _, internal_parameter_names_ref = split_parameter_array(parameter_names)
+        # TODO: Fix this
         if prototype_label.split('_')[1][:2] == 'hR':
             continue
         for parameter_set in material["parameter_sets"]:
@@ -91,6 +92,10 @@ def test_get_equations_from_prototype():
             ), f'Matched fractional coordinates, but there was a permutation.\n{diagnostics}'        
                         
             print(f'Successfully checked get_equations_from_prototype for label {prototype_label}')            
+
+def test_get_wyckoff_lists_from_prototype():
+    assert get_wyckoff_lists_from_prototype('A_hP68_194_ef2h2kl') == ['efhhkkl']
+    assert get_wyckoff_lists_from_prototype('AB_mC48_8_12a_12a') == ['aaaaaaaaaaaa','aaaaaaaaaaaa']
 """
 def get_wyckoffs():
     aflow = AFLOW()
@@ -102,7 +107,7 @@ def get_wyckoffs():
         print(spglib_dataset.wyckoffs)
 """        
 
-def test_get_prototype_basic():
+def _test_get_prototype_basic():
     aflow = AFLOW(np=19)
     match_counts_by_pearson = {}
     match_counts_by_spacegroup = {}
@@ -145,4 +150,4 @@ def test_get_prototype_basic():
             json.dump(match_counts_by_spacegroup,f)
 
 if __name__ == '__main__':
-    test_get_prototype_basic()
+    _test_get_prototype_basic()

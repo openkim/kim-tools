@@ -58,6 +58,9 @@ from warnings import warn
 from io import StringIO
 import shutil
 from pathlib import Path
+import logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(filename='kim-tools.log',level=logging.INFO,force=True)
 
 __author__ = ["ilia Nikiforov", "Eric Fuemmeler"]
 __all__ = [
@@ -903,8 +906,9 @@ def query_crystal_genome_structures(
 
     # TODO: Some kind of generalized query interface for all tests, this is very hand-made
     cell_cauchy_stress_Pa = [component*1.6021766e+11 for component in cell_cauchy_stress_eV_angstrom3]
-    query_result=raw_query(
-        query={
+    
+    raw_query_args={
+        "query":{
             "meta.type":"tr",
             "property-id":"tag:staff@noreply.openkim.org,2023-02-21:property/crystal-structure-npt",
             "meta.subject.extended-id":kim_model_name,
@@ -916,15 +920,24 @@ def query_crystal_genome_structures(
             "cell-cauchy-stress.si-value":cell_cauchy_stress_Pa,
             "temperature.si-value":temperature_K
         },
-        fields={
+        "fields":{
             "a.si-value":1,
             "parameter-names.source-value":1,
-            "parameter-values.source-value":1,
+            "parameter-values.source-value":1, # can't use project because parameter-values and -names won't always exist
             "library-prototype-label.source-value":1,
             "short-name.source-value":1,
             },
-        database="data", limit=0, flat='on') # can't use project because parameter-values won't always exist
-
+        "database":"data",
+        "limit":0,
+        "flat":"on"
+    }
+    
+    logger.info(f"Sending below query:\n{raw_query_args}")
+    
+    query_result=raw_query(**raw_query_args)
+    
+    logger.info(f"Query result:\n{query_result}")
+    
     list_of_cg_des = []
 
     for parameter_set in query_result:
