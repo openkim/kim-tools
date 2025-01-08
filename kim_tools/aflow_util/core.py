@@ -375,34 +375,6 @@ def get_centering_divisor_from_prototype(prototype_label: str) -> int:
     """
     return CENTERING_DIVISORS[get_centering_from_prototype(prototype_label)]
 
-def get_species_list_from_string(species_string: str) -> List[str]:
-    """
-    Get list of chemical symbols from concatenated string of chemical symbols, i.e. "CSi" -> ["C","Si"]
-    
-    Args:
-        species_string:
-            Concatenated string of chemical symbols
-
-    Returns:
-        List of individual chemical symbols
-
-    Raises:
-        RuntimeError:
-            If passed a non-alphabetical string
-    """
-    if any (not isalpha(character) for character in species_string):
-        raise RuntimeError("Non-alphabetical character in input")
-
-    species_list=[]
-    curr_species_string=""
-    for character in species_string:
-        if isupper(character) and curr_species_string != "":
-            species_list.append(curr_species_string)
-            curr_species_string = ""
-        curr_species_string+=character
-    species_list.append(curr_species_string)
-    return species_list
-
 def read_shortnames() -> Dict:
     """
     This function parses ``README_PROTO.TXT``. It finds each line that (after stripping whitespace) starts with ``ANRL Label``. These are headers of sections of prototype listings. 
@@ -472,65 +444,6 @@ def read_shortnames() -> Dict:
             # add prototype to shortnames dictionary
             shortnames[prototype] = sname.rstrip()
     return shortnames
-
-def get_formula_from_prototype(prototype_label: str) -> Tuple[str,int,int]:
-    """
-    Returns the stoichiometric formula, number of independent species in it,
-    and the number of atoms per formula by analyzing the stoichiometric prefix
-    in an AFLOW prototype label.
-
-    Args:
-        prototype_label :
-            AFLOW prototype label
-
-    Returns:
-        * The stoichimetric formula (e.g. `AB2C3`)
-        * Number of independent atoms in the stoichiometric formula (e.g. `AB2C3` has 3 independent species: `A`, `B` and `C`)
-        * Number of independent atoms in the stoichiometric formula (e.g. `AB2C3` has 1 `A` + 2 `B` + 3 `C`  for 6 atoms in the formula)
-
-    """
-    # Verify that the number species matches the prototype
-    formula = prototype_label.split("_")[0]
-    letters = "".join([char for char in formula if not char.isdigit()])
-    number_independent_species = len(letters)
-
-    # Compute number of atoms per formula
-    number_atoms_per_formula = 0
-    for i in range(number_independent_species):
-        i1 = formula.index(letters[i])
-        if i < number_independent_species - 1:
-            i2 = formula.index(letters[i + 1])
-        else:
-            i2 = len(formula)
-        if i2 - i1 > 1:
-            number_atoms_per_formula += int(formula[i1 + 1 : i2])
-        else:
-            number_atoms_per_formula += 1
-
-    # Return results
-    return formula, number_independent_species, number_atoms_per_formula
-
-def get_wyckoff_info_and_cell(sgdata: Dict) -> Tuple[List[str],np.ndarray,np.ndarray]:
-    """
-    Parse the output from :func:`AFLOW.get_sgdata_from_prototype` to get information about Wyckoff positions and unit cell parameters
-    
-    Args:
-        sgdata:
-            JSON output of aflow --sgdata
-    Returns:
-        * Atomic species of the Wyckoff positions
-        * Coordinates of representative Wyckoff positions
-        * Conventional cell vectors
-    
-    """
-    wyckoff_coordinates_list = []
-    wyckoff_types = [] 
-    for wyck in sgdata["Wyckoff_positions"]:
-        wyckoff_coordinates_list.append(wyck["position"])
-        wyckoff_types.append(wyck["name"])
-    wyckoff_coordinates = np.array(wyckoff_coordinates_list)
-    cell = sgdata["wyccar"]["lattice"]
-    return wyckoff_types, wyckoff_coordinates, cell
 
 class AFLOW:
     """
@@ -740,47 +653,6 @@ class AFLOW:
             matching_library_prototype_label = None
 
         return matching_library_prototype_label, shortname
-
-    def get_sgdata_from_prototype(self, species: List[str], prototype_label: str, parameter_values: List[float], setting_aflow: Optional[Union[int,str]] = None, debug_file: Optional[str] = None) -> Dict:
-        """
-        Without writing any files, pipe the output from aflow --prototype to aflow --sgdata to get the wyckoff info and cell
-
-        Args:
-            species:
-                Stoichiometric species, e.g. ``['Mo','S']`` corresponding to A and B respectively for prototype label AB2_hP6_194_c_f indicating molybdenite
-            prototype_label: 
-                An AFLOW prototype label, without an enumeration suffix, without specified atomic species
-            parameter_values: 
-                The free parameters of the AFLOW prototype designation
-            setting_aflow:
-                setting to pass to --sgdata command
-            debug_file:
-                Do save an intermediate file to this path.
-        Returns:
-            JSON dict containing space group information of the structure
-        """
-        
-        if setting_aflow is not None:
-            setting_argument = " --setting=" + str(setting_aflow)
-        else:
-            setting_argument = ""
-
-        if debug_file is None:
-            command = [
-                " --proto="+":".join([prototype_label]+species)+" --params=" + ",".join([str(param) for param in parameter_values]),
-                " --sgdata --print=json%s" % setting_argument
-                ]
-            output = self.aflow_command(command)
-        else:
-            # two separate commands, one to write file, one to get the sgdata
-            command = [
-                " --proto="+":".join([prototype_label]+species)+" --params=" + ",".join([str(param) for param in parameter_values]) + " > " + debug_file
-                ]
-            self.aflow_command(command)
-            command = [ " --sgdata --print=json%s < %s" % (setting_argument,debug_file) ]
-            output = self.aflow_command(command)
-        res_json = json.loads(output)
-        return res_json
     
     def get_pointgroup_crystal(self, input_file: str, verbose: bool=False) -> List[Dict]:
         """
