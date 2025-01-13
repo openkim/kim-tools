@@ -15,7 +15,7 @@ from typing import Dict, List, Tuple, Union, Optional
 from tempfile import NamedTemporaryFile
 from sympy import parse_expr,matrix2numpy,linear_eq_to_matrix,Symbol
 from dataclasses import dataclass
-from ..symmetry_util import WYCKOFF_SETS, WYCKOFF_MULTIPLICITIES
+from ..symmetry_util import are_in_same_wyckoff_set, WYCKOFF_MULTIPLICITIES, CENTERING_DIVISORS
 from operator import attrgetter
 import logging
 logger = logging.getLogger(__name__)
@@ -41,27 +41,11 @@ __all__ = [
     "get_space_group_number_from_prototype",
     "get_pearson_symbol_from_prototype",
     "get_centering_divisor_from_prototype",
-    "get_species_list_from_string",
     "read_shortnames",
-    "get_formula_from_prototype",
-    "get_wyckoff_info_and_cell",
+    "get_real_to_virtual_species_map",
+    "solve_for_free_params",
     "AFLOW"
 ]
-
-CENTROSYMMETRIC_SPACE_GROUPS_WITH_MORE_THAN_ONE_SETTING = (
-    48 , 50 , 59 , 68 , 70 ,
-    85 , 86 , 88 , 125 , 126 ,
-    129 , 130 , 133 , 134 , 137 ,
-   	138 , 141 , 142 , 201 , 203 ,
-    222 , 224 , 227 , 228)
-
-CENTERING_DIVISORS = {
-     'P': 1,
-     'C': 2,
-     'I': 2,
-     'F': 4,
-     'R': 3,
-}
 
 class incorrectNumAtomsException(Exception):
     """
@@ -96,8 +80,9 @@ class EquivalentEqnSet:
     species: str
     wyckoff_letter: str
     param_names: List[str] # The n free parameters associated with this Wyckoff postition, 0 <= n <= 3
-    coeff_matrix_list: List[ArrayLike] # m x 3 x n matrix of coefficients, where m is the multiplicity of the Wyckoff position
-    const_terms_list: List[ArrayLike] # m x 3 x 1 column of constant terms in the coordinates. This gets subtracted from the RHS when solving
+    coeff_matrix_list: List[ArrayLike] # m x 3 x n matrices of coefficients, where m is the multiplicity of the Wyckoff position
+    const_terms_list: List[ArrayLike] # m x 3 x 1 columns of constant terms in the coordinates. This gets subtracted from the RHS when solving
+    
 
 @dataclass
 class EquivalentAtomSet:
@@ -106,7 +91,7 @@ class EquivalentAtomSet:
     """
     species: str
     wyckoff_letter: str
-    frac_positions: ArrayLike    
+    frac_position_list: List[ArrayLike] # m x 3 x 1 columns
     
 def check_number_of_atoms(atoms: Atoms, prototype_label: str, primitive_cell: bool = True) -> None:
     """
@@ -228,7 +213,7 @@ def group_positions_by_wyckoff(atoms: Atoms, prototype_label: Optional[str] = No
         inconsistentWyckoffException: if ``prototype_label`` is provided and disagrees with spglib Wyckoffs
     Returns:
         List of object each containing string attributes ``species``, ``wyckoff_letter``,
-        and nx3 NDArray ``frac_positions``
+        and list of 3x1 arrays ``frac_position_list``
     """
     if prototype_label is not None:
         check_number_of_atoms(atoms,prototype_label)
@@ -244,37 +229,33 @@ def group_positions_by_wyckoff(atoms: Atoms, prototype_label: Optional[str] = No
     inequivalent_atom_indices = sorted(list(set(ds.crystallographic_orbits)))
     
     # initialize return list    
-    equivalent_atom_sets = []    
+    equivalent_atom_set_list = []    
     for inequivalent_atom_index in inequivalent_atom_indices:
-        equivalent_atom_sets.append(
+        equivalent_atom_set_list.append(
             EquivalentAtomSet(
                 atoms.get_chemical_symbols()[inequivalent_atom_index],
                 ds.wyckoffs[inequivalent_atom_index],
-                np.zeros((0,3))
+                []
             )
         )
     
     # fill with coordinates
     for frac_pos,repr_atom_index in zip(atoms.get_scaled_positions(),ds.crystallographic_orbits):
-        for i,equivalent_atom_set in enumerate(equivalent_atom_sets):
+        for i,equivalent_atom_set in enumerate(equivalent_atom_set_list):
             if inequivalent_atom_indices[i] == repr_atom_index:
-                equivalent_atom_set.frac_positions = \
-                    np.concatenate((
-                        equivalent_atom_set.frac_positions,
-                        [frac_pos]
-                    ))
+                equivalent_atom_set.frac_position_list.append(frac_pos.reshape(3,1))
                 continue
 
     # sort by letter first then species
-    equivalent_atom_sets.sort(key=attrgetter('wyckoff_letter'))
-    equivalent_atom_sets.sort(key=attrgetter('species'))
+    equivalent_atom_set_list.sort(key=attrgetter('wyckoff_letter'))
+    equivalent_atom_set_list.sort(key=attrgetter('species'))
     
     # check consistency with prototype label
     if prototype_label is not None:
-        prototype_label_split = prototype_label.split('_')
-        if ds.number != int(prototype_label_split[2]):
+        space_group_number = get_space_group_number_from_prototype(prototype_label)
+        if ds.number != space_group_number:
             raise incorrectSpaceGroupException(
-                f'spglib detected space group {ds.number}, against label {int(prototype_label_split[2])}')
+                f'spglib detected space group {ds.number}, against label {space_group_number}')
         wyckoff_lists = get_wyckoff_lists_from_prototype(prototype_label)
         if len(wyckoff_lists) != len(set(atoms.get_chemical_symbols())):
             raise incorrectNumSpeciesException(
@@ -283,28 +264,26 @@ def group_positions_by_wyckoff(atoms: Atoms, prototype_label: Optional[str] = No
         wyckoff_lists_concatenated = ''
         for wyckoff_list in wyckoff_lists:
             wyckoff_lists_concatenated += wyckoff_list    
-        if len(wyckoff_lists_concatenated) != len(equivalent_atom_sets):
+        if len(wyckoff_lists_concatenated) != len(equivalent_atom_set_list):
             raise inconsistentWyckoffException(
                 f'Prototype label {prototype_label} indicates {len(wyckoff_lists_concatenated)} '
-                f'inequivalent atoms but I found {len(equivalent_atom_sets)}')
+                f'inequivalent atoms but I found {len(equivalent_atom_set_list)}')
         # everything should be ordered consistently with each other,
         # except within a Wyckoff set which we will have to map later
         for label_wyckoff_letter,equivalent_atom_set in \
-            zip(wyckoff_lists_concatenated,equivalent_atom_sets):
-                for wyckoff_set in WYCKOFF_SETS[ds.number]:
-                    if label_wyckoff_letter in wyckoff_set:
-                        if equivalent_atom_set.wyckoff_letter not in wyckoff_set:
-                            raise inconsistentWyckoffException(
-                                f'Prototype Wyckoff letter {label_wyckoff_letter} and '
-                                f'spglib Wyckoff letter {equivalent_atom_set.wyckoff_letter} '
-                                'are not in the same Wyckoff set'
-                            )
-                        if label_wyckoff_letter != equivalent_atom_set.wyckoff_letter:
-                            logger.info(f'Wyckoff shuffle encountered in {prototype_label}, '
-                                        f'{label_wyckoff_letter} -> {equivalent_atom_set.wyckoff_letter}')
-                        break
+            zip(wyckoff_lists_concatenated,equivalent_atom_set_list):
+                if not are_in_same_wyckoff_set(equivalent_atom_set.wyckoff_letter,label_wyckoff_letter,space_group_number):
+                    raise inconsistentWyckoffException(
+                        f'Prototype Wyckoff letter {label_wyckoff_letter} and '
+                        f'spglib Wyckoff letter {equivalent_atom_set.wyckoff_letter} '
+                        'are not in the same Wyckoff set'
+                    )
+                if label_wyckoff_letter != equivalent_atom_set.wyckoff_letter:
+                    logger.info(f'Wyckoff shuffle encountered in {prototype_label}, '
+                                f'{label_wyckoff_letter} -> {equivalent_atom_set.wyckoff_letter}')
+                break
 
-    return equivalent_atom_sets
+    return equivalent_atom_set_list
 
 def get_stoich_reduced_list_from_prototype(prototype_label: str) -> List[int]:
     """
@@ -444,6 +423,78 @@ def read_shortnames() -> Dict:
             # add prototype to shortnames dictionary
             shortnames[prototype] = sname.rstrip()
     return shortnames
+
+def get_real_to_virtual_species_map(input: Union[List[str],Atoms]) -> Dict:
+    """
+    Map real species to virtual species according to (alphabetized) AFLOW convention, e.g.
+    for SiC return {'C':'A','Si':'B'}
+    """
+    if isinstance(input,Atoms):
+        species = sorted(list(set(input.get_chemical_symbols())))
+    else:
+        species = input
+    
+    real_to_virtual_species_map = {}
+    for i,symbol in enumerate(species):
+        real_to_virtual_species_map[symbol]=chr(65+i)
+    
+    return real_to_virtual_species_map
+
+def solve_for_free_params(atoms: Atoms, equation_set_list: List[EquivalentEqnSet], prototype_label: str, max_resid: float = 1e-5) -> Optional[Dict]:
+    """
+    Match all positions in ``atoms`` to an equation in ``equation_set_list`` to solve for the free parameters
+    """
+    position_set_list = group_positions_by_wyckoff(atoms,prototype_label)
+    real_to_virtual_species_map = get_real_to_virtual_species_map(atoms)
+    if len(position_set_list) != len(equation_set_list):
+        raise inconsistentWyckoffException('Number of equivalent positions detected in Atoms object did not match the number of equivalent equations given')
+
+    space_group_number = get_space_group_number_from_prototype(prototype_label)
+    free_params_dict = {}
+    position_set_matched_list = [False]*len(position_set_list)
+    
+    for equation_set in equation_set_list:
+        # Because both equations and positions are sorted by species and wyckoff letter, this should
+        # be pretty efficient
+        matched_this_equation_set = False
+        for i,position_set in enumerate(position_set_list):
+            if position_set_matched_list[i]:
+                continue
+            if real_to_virtual_species_map[position_set.species] != equation_set.species:
+                continue
+            if not are_in_same_wyckoff_set(equation_set.wyckoff_letter,position_set.wyckoff_letter,space_group_number):
+                continue
+            for coeff_matrix, const_terms in zip(equation_set.coeff_matrix_list,equation_set.const_terms_list):
+                for frac_position in position_set.frac_position_list:
+                    possible_shifts = (-1,0,1)
+                    # explore all possible shifts around zero to bring back in cell. 
+                    # TODO: if this is too slow (27 possibilities), write an algorithm to determine which shifts are possible
+                    for shift_list in [(x,y,z) for x in possible_shifts for y in possible_shifts for z in possible_shifts]:
+                        shift_array = np.asarray(shift_list).reshape(3,1)
+                        candidate_param_values,resid,_,_ = np.linalg.lstsq(coeff_matrix,frac_position-const_terms-shift_array)
+                        if len(resid) == 0 or np.max(resid) < max_resid:
+                            assert len(candidate_param_values) == len(equation_set.param_names)
+                            for param_name,param_value in zip(equation_set.param_names,candidate_param_values):
+                                assert param_name not in free_params_dict
+                                free_params_dict[param_name] = param_value[0] % 1 # wrap to [0,1)
+                            # should only need one to match to check off this Wyckoff position
+                            position_set_matched_list[i] = True
+                            matched_this_equation_set = True
+                            break
+                        # end loop over shifts
+                    if matched_this_equation_set: break
+                    # end loop over positions within a position set
+                if matched_this_equation_set: break
+                # end loop over equations within an equation set
+            if matched_this_equation_set: break
+            # end loop over position sets
+        # end loop over equation sets
+            
+    
+    if not all(position_set_matched_list):
+        return None
+    else:
+        return free_params_dict    
 
 class AFLOW:
     """

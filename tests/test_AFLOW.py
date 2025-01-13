@@ -2,7 +2,8 @@
 
 from kim_tools import AFLOW, split_parameter_array,CRYSTAL_GENOME_INITIAL_STRUCTURES, \
     get_crystal_genome_designation_from_atoms, get_wyckoff_lists_from_prototype, \
-    frac_pos_match_allow_permute_wrap, frac_pos_match_allow_wrap
+    frac_pos_match_allow_permute_wrap, frac_pos_match_allow_wrap, get_real_to_virtual_species_map, \
+    solve_for_free_params
 import numpy as np
 import json
 
@@ -13,9 +14,7 @@ def test_get_equations_from_prototype():
     equation_sets_cache = {} # for large-scale testing, helpful to check that same prototype with different parameters gives the same results
     for material in [CRYSTAL_GENOME_INITIAL_STRUCTURES[test_case] for test_case in TEST_CASES]:
         species = material["species"]
-        real_to_virtual_species_map = {}
-        for i,symbol in enumerate(species):
-            real_to_virtual_species_map[symbol]=chr(65+i)
+        real_to_virtual_species_map = get_real_to_virtual_species_map(species)
         prototype_label = material["prototype_label"]
         parameter_names = material["parameter_names"]
         _, internal_parameter_names_ref = split_parameter_array(parameter_names)
@@ -83,16 +82,28 @@ def test_get_equations_from_prototype():
 def test_get_wyckoff_lists_from_prototype():
     assert get_wyckoff_lists_from_prototype('A_hP68_194_ef2h2kl') == ['efhhkkl']
     assert get_wyckoff_lists_from_prototype('AB_mC48_8_12a_12a') == ['aaaaaaaaaaaa','aaaaaaaaaaaa']
-"""
-def get_wyckoffs():
+
+def test_solve_for_free_params():
     aflow = AFLOW()
-    for case in TEST_CASES:
-        _ = case.pop("parameter_names")
-        atoms = aflow.build_atoms_from_prototype(**case)
-        prototype_label = case.pop("prototype_label")
-        spglib_dataset = check_symmetry(atoms)
-        print(spglib_dataset.wyckoffs)
-"""        
+    equation_sets_cache = {} # for large-scale testing, helpful to check that same prototype with different parameters gives the same results
+    for material in [CRYSTAL_GENOME_INITIAL_STRUCTURES[test_case] for test_case in TEST_CASES]:
+        species = material["species"]
+        prototype_label = material["prototype_label"]
+        parameter_names = material["parameter_names"]
+        # TODO: Fix this
+        if prototype_label.split('_')[1][:2] == 'hR':
+            continue
+        for parameter_set in material["parameter_sets"]:
+            parameter_values = parameter_set["parameter_values"]            
+            atoms = aflow.build_atoms_from_prototype(species,prototype_label,parameter_values)
+            if prototype_label not in equation_sets_cache:
+                equation_sets = aflow.get_equation_sets_from_prototype(prototype_label,parameter_values)
+                equation_sets_cache[prototype_label] = equation_sets
+            else:
+                equation_sets = equation_sets_cache[prototype_label]
+            print(prototype_label)
+            print(solve_for_free_params(atoms,equation_sets,prototype_label))
+            
 
 def _test_get_prototype_basic():
     aflow = AFLOW(np=19)
@@ -137,4 +148,4 @@ def _test_get_prototype_basic():
             json.dump(match_counts_by_spacegroup,f)
 
 if __name__ == '__main__':
-    test_get_equations_from_prototype()
+    test_solve_for_free_params()
