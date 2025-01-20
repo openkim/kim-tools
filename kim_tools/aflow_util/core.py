@@ -10,13 +10,14 @@ from ase.cell import Cell
 from ase import Atoms
 import ase.spacegroup
 from ase.spacegroup.symmetrize import check_symmetry
-from curses.ascii import isalpha, isupper, isdigit
+from curses.ascii import isalpha, isdigit
 from typing import Dict, List, Tuple, Union, Optional
 from tempfile import NamedTemporaryFile
 from sympy import parse_expr,matrix2numpy,linear_eq_to_matrix,Symbol
 from dataclasses import dataclass
-from ..symmetry_util import are_in_same_wyckoff_set, WYCKOFF_MULTIPLICITIES, CENTERING_DIVISORS
+from ..symmetry_util import are_in_same_wyckoff_set, WYCKOFF_MULTIPLICITIES, CENTERING_DIVISORS, C_CENTERED_ORTHORHOMBIC_GROUPS, A_CENTERED_ORTHORHOMBIC_GROUPS
 from operator import attrgetter
+from math import cos, acos, sqrt, radians, degrees
 import logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(filename='kim-tools.log',level=logging.INFO,force=True)
@@ -40,10 +41,12 @@ __all__ = [
     "get_wyckoff_lists_from_prototype",
     "get_space_group_number_from_prototype",
     "get_pearson_symbol_from_prototype",
+    "get_centering_from_prototype",
     "get_centering_divisor_from_prototype",
     "read_shortnames",
     "get_real_to_virtual_species_map",
-    "solve_for_free_params",
+    "solve_for_internal_params",
+    "solve_for_cell_params",
     "AFLOW"
 ]
 
@@ -82,7 +85,6 @@ class EquivalentEqnSet:
     param_names: List[str] # The n free parameters associated with this Wyckoff postition, 0 <= n <= 3
     coeff_matrix_list: List[ArrayLike] # m x 3 x n matrices of coefficients, where m is the multiplicity of the Wyckoff position
     const_terms_list: List[ArrayLike] # m x 3 x 1 columns of constant terms in the coordinates. This gets subtracted from the RHS when solving
-    
 
 @dataclass
 class EquivalentAtomSet:
@@ -440,9 +442,9 @@ def get_real_to_virtual_species_map(input: Union[List[str],Atoms]) -> Dict:
     
     return real_to_virtual_species_map
 
-def solve_for_free_params(atoms: Atoms, equation_set_list: List[EquivalentEqnSet], prototype_label: str, max_resid: float = 1e-5) -> Optional[Dict]:
+def solve_for_internal_params(atoms: Atoms, equation_set_list: List[EquivalentEqnSet], prototype_label: str, max_resid: float = 1e-5) -> Optional[Dict]:
     """
-    Match all positions in ``atoms`` to an equation in ``equation_set_list`` to solve for the free parameters
+    Match all positions in ``atoms`` to an equation in ``equation_set_list`` to solve for the free internal parameters
     """
     position_set_list = group_positions_by_wyckoff(atoms,prototype_label)
     real_to_virtual_species_map = get_real_to_virtual_species_map(atoms)
@@ -489,12 +491,106 @@ def solve_for_free_params(atoms: Atoms, equation_set_list: List[EquivalentEqnSet
             if matched_this_equation_set: break
             # end loop over position sets
         # end loop over equation sets
-            
     
     if not all(position_set_matched_list):
         return None
     else:
-        return free_params_dict    
+        return[free_params_dict[key] for key in sorted(free_params_dict.keys(),key=internal_parameter_sort_key)]
+
+def solve_for_cell_params(cellpar_prim: ArrayLike, prototype_label: str) -> List[float]:
+    """
+    Get conventional cell parameters from primitive cell parameters. It is assumed that the primitive cell is related to the conventional cell
+    as specified in 10.1016/j.commatsci.2017.01.017
+    
+    Args:
+        cellpar_prim:
+            The 6 cell parameters of the primitive unit cell: [a, b, c, alpha, beta, gamma]
+        prototype_label:
+            The AFLOW prototype label of the crystal
+    
+    Returns:
+        The cell parameters expected by AFLOW for the prototype label provided. The first parameter is always 'a' and is given in the same units
+        as ``cellpar_prim``, the others are fractional parameters in terms of 'a', or angles in degrees. For example, if the ``prototype_label``
+        provided indicates a monoclinic crystal, this function will return the values of [a,b/a,c/a,beta]
+    """
+    assert len(cellpar_prim) == 6, 'Got a number of cell parameters that is not 6'
+    
+    for length in cellpar_prim[0:3]:
+        assert length > 0, 'Got a negative cell size'
+    for angle in cellpar_prim[3:]:
+        assert 0 < angle < 180, 'Got a cell angle outside of (0,180)'
+        
+    aprim = cellpar_prim[0]
+    bprim = cellpar_prim[1]
+    cprim = cellpar_prim[2]
+    alphaprim = cellpar_prim[3]
+    betaprim = cellpar_prim[4]
+    gammaprim = cellpar_prim[5]
+    
+    pearson = get_pearson_symbol_from_prototype(prototype_label)
+    
+    if pearson.startswith('aP'):
+        return [aprim,bprim/aprim,cprim/aprim,alphaprim,betaprim,gammaprim]
+    elif pearson.startswith('mP'):
+        return [aprim,bprim/aprim,cprim/aprim,betaprim]
+    elif pearson.startswith('oP'):
+        return [aprim,bprim/aprim,cprim/aprim]
+    elif pearson.startswith('tP') or pearson.startswith('hP'):
+        return [aprim,cprim/aprim]
+    elif pearson.startswith('cP'):
+        return [aprim]
+    elif pearson.startswith('mC'):
+        cos_alphaprim = cos(radians(alphaprim))
+        cos_gammaprim = cos(radians(gammaprim))
+        a = aprim*sqrt(2+2*cos_gammaprim)
+        b = aprim*sqrt(2-2*cos_gammaprim)
+        c = cprim
+        beta = degrees(acos(cos_alphaprim/sqrt((1+cos_gammaprim)/2)))
+        return [a,b/a,c/a,beta]
+    elif pearson.startswith('oC'):
+        # the 'C' is colloquial, and can refer to either C or A-centering
+        space_group_number = get_space_group_number_from_prototype(prototype_label)
+        if space_group_number in C_CENTERED_ORTHORHOMBIC_GROUPS:
+            cos_gammaprim = cos(radians(gammaprim))
+            a = bprim*sqrt(2+2*cos_gammaprim)
+            b = bprim*sqrt(2-2*cos_gammaprim)
+            c = cprim
+        elif space_group_number in A_CENTERED_ORTHORHOMBIC_GROUPS:
+            cos_alphaprim = cos(radians(alphaprim))
+            a = aprim
+            b = bprim*sqrt(2+2*cos_alphaprim)
+            c = bprim*sqrt(2-2*cos_alphaprim)
+        else:
+            raise incorrectSpaceGroupException(f'Space group in prototype label {prototype_label} not found in lists of side-centered orthorhombic groups')
+        return [a,b/a,c/a]
+    elif pearson.startswith('oI'):
+        cos_alphaprim = cos(radians(alphaprim))
+        cos_betaprim = cos(radians(betaprim))
+        a = aprim*sqrt(2+2*cos_alphaprim)
+        b = aprim*sqrt(2+2*cos_betaprim)
+        c = aprim*sqrt(-2*(cos_alphaprim+cos_betaprim)) # I guess the cosines must sum to a negative number!? Will raise a ValueError: math domain error if not
+        return [a,b/a,c/a]
+    elif pearson.startswith('oF'):
+        aprimsq = aprim*aprim
+        bprimsq = bprim*bprim
+        cprimsq = cprim*cprim
+        a = sqrt(2*(-aprimsq+bprimsq+cprimsq))
+        b = sqrt(2*(aprimsq-bprimsq+cprimsq))
+        c = sqrt(2*(aprimsq+bprimsq-cprimsq))
+        return [a,b/a,c/a]
+    elif pearson.startswith('tI'):
+        cos_alphaprim = cos(radians(alphaprim))
+        a = aprim*sqrt(2+2*cos_alphaprim)
+        c = 2*aprim*sqrt(-cos_alphaprim) #  I guess primitive alpha is always obtuse!? Will raise a ValueError: math domain error if not
+        return [a,c/a]
+    elif pearson.startswith('hR'):
+        assert False, 'Punting on rhombohedral for now since it doesn\'t work in AFLOW anyway'
+    elif pearson.startswith('cF'):
+        return [aprim*sqrt(2)]
+    elif pearson.startswith('cI'):
+        return [aprim*2/sqrt(3)]
+    
+    
 
 class AFLOW:
     """
@@ -553,7 +649,9 @@ class AFLOW:
             return subprocess.check_output(cmd_str, shell=True, stderr=subprocess.PIPE,encoding="utf-8")
         except subprocess.CalledProcessError as exc:
             if "--proto=" in cmd_str and "The structure has a higher symmetry than indicated by the label. The correct label and parameters for this structure are:" in str(exc.stderr):
-                raise self.tooSymmetricException("WARNING: the following command refused to write a POSCAR because it detected a higher symmetry: %s"%cmd_str)
+                warn_str = f"WARNING: the following command refused to write a POSCAR because it detected a higher symmetry: {cmd_str}"
+                logger.warning(warn_str)
+                raise self.tooSymmetricException(warn_str)
             else:
                 raise RuntimeError("ERROR: unexpected error from aflow command %s , error code = %d\nstderr: %s" % (cmd_str, exc.returncode, exc.stderr))
     

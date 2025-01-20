@@ -3,9 +3,11 @@
 from kim_tools import AFLOW, split_parameter_array,CRYSTAL_GENOME_INITIAL_STRUCTURES, \
     get_crystal_genome_designation_from_atoms, get_wyckoff_lists_from_prototype, \
     frac_pos_match_allow_permute_wrap, frac_pos_match_allow_wrap, get_real_to_virtual_species_map, \
-    solve_for_free_params
-import numpy as np
+    solve_for_internal_params, shuffle_atoms, get_pearson_symbol_from_prototype, get_centering_from_prototype, \
+    solve_for_cell_params
+from random import random
 import json
+from copy import copy
 
 TEST_CASES = [577,365,1734,1199,1478,166,1210,1362,920,212,646,22]
 
@@ -83,13 +85,12 @@ def test_get_wyckoff_lists_from_prototype():
     assert get_wyckoff_lists_from_prototype('A_hP68_194_ef2h2kl') == ['efhhkkl']
     assert get_wyckoff_lists_from_prototype('AB_mC48_8_12a_12a') == ['aaaaaaaaaaaa','aaaaaaaaaaaa']
 
-def test_solve_for_free_params():
+def test_solve_for_internal_params():
     aflow = AFLOW()
     equation_sets_cache = {} # for large-scale testing, helpful to check that same prototype with different parameters gives the same results
     for material in [CRYSTAL_GENOME_INITIAL_STRUCTURES[test_case] for test_case in TEST_CASES]:
         species = material["species"]
         prototype_label = material["prototype_label"]
-        parameter_names = material["parameter_names"]
         # TODO: Fix this
         if prototype_label.split('_')[1][:2] == 'hR':
             continue
@@ -102,11 +103,12 @@ def test_solve_for_free_params():
             else:
                 equation_sets = equation_sets_cache[prototype_label]
             print(prototype_label)
-            print(solve_for_free_params(atoms,equation_sets,prototype_label))
+            print(solve_for_internal_params(atoms,equation_sets,prototype_label))
             
 
-def _test_get_prototype_basic():
+def test_get_prototype_basic(materials=[CRYSTAL_GENOME_INITIAL_STRUCTURES[test_case] for test_case in TEST_CASES]):
     aflow = AFLOW(np=19)
+    equation_sets_cache = {} # for large-scale testing, helpful to check that same prototype with different parameters gives the same results
     match_counts_by_pearson = {}
     match_counts_by_spacegroup = {}
     INIT_COUNTS = {'match':0,'nonmatch':0}
@@ -117,35 +119,66 @@ def _test_get_prototype_basic():
         match_counts_by_spacegroup[spacegroup] = INIT_COUNTS.copy()
     
     
-    for material in CRYSTAL_GENOME_INITIAL_STRUCTURES:
+    for material in materials:
         species = material["species"]            
         prototype_label = material["prototype_label"]
-        prototype_label_split = prototype_label.split('_')
+        # TODO: Fix this
+        if get_pearson_symbol_from_prototype(prototype_label).startswith('hR'):
+            continue
         
+        prototype_label_split = prototype_label.split('_')
         pearson = prototype_label_split[1][:2]
         spacegroup = int(prototype_label_split[2])
+        parameter_names = material["parameter_names"]
         
         for parameter_set in material["parameter_sets"]:
-            parameter_values = parameter_set["parameter_values"]            
+            parameter_values = parameter_set["parameter_values"]
             atoms = aflow.build_atoms_from_prototype(species,prototype_label,parameter_values)
-            cg_des = get_crystal_genome_designation_from_atoms(atoms,get_library_prototype=False,aflow_np=19)
-            if not aflow.confirm_unrotated_prototype_designation(
+            # cg_des = get_crystal_genome_designation_from_atoms(atoms,get_library_prototype=False,aflow_np=19)
+            # cg_des['stoichiometric_species'],
+            # cg_des['prototype_label'],
+            # cg_des['parameter_values_angstrom']                        
+            
+            if prototype_label not in equation_sets_cache:
+                equation_sets = aflow.get_equation_sets_from_prototype(prototype_label,parameter_values)
+                equation_sets_cache[prototype_label] = equation_sets
+            else:
+                equation_sets = equation_sets_cache[prototype_label]
+                
+            atoms = shuffle_atoms(atoms)
+            
+            atoms.rotate((random(),random(),random()),(random(),random(),random()),rotate_cell=True)            
+                
+            # keep cell parameters, replace internal parameters
+            redetected_parameter_values = solve_for_cell_params(atoms.cell.cellpar(),prototype_label) + \
+                solve_for_internal_params(atoms,equation_sets,prototype_label)
+            
+            try:
+                crystal_did_not_rotate = aflow.confirm_unrotated_prototype_designation(
                     atoms,
-                    cg_des['stoichiometric_species'],
-                    cg_des['prototype_label'],
-                    cg_des['parameter_values_angstrom']
-                ):
+                    species,
+                    prototype_label,
+                    redetected_parameter_values
+                )
+            except AFLOW.tooSymmetricException as e:
+                print(e)
+                continue
+            
+            if not crystal_did_not_rotate:
                 print(f'Failed to confirm unrotated prototype designation for {prototype_label}')
                 match_counts_by_pearson[pearson]['nonmatch'] += 1
-                match_counts_by_spacegroup[spacegroup]['nonmatch'] += 1                
+                match_counts_by_spacegroup[spacegroup]['nonmatch'] += 1
+                filename = 'output/' + prototype_label + '.POSCAR'
+                print(f'Dumping atoms to {filename}')
+                atoms.write(filename,format='vasp',sort=True)
             else:
                 print(f'Successfully confirmed unrotated prototype designation for {prototype_label}')
                 match_counts_by_pearson[pearson]['match'] += 1
                 match_counts_by_spacegroup[spacegroup]['match'] += 1
-        with open('basic_match_counts_by_pearson.json','w') as f:
+        with open('output/basic_match_counts_by_pearson.json','w') as f:
             json.dump(match_counts_by_pearson,f)
-        with open('basic_match_counts_by_spacegroup.json','w') as f:
+        with open('output/basic_match_counts_by_spacegroup.json','w') as f:
             json.dump(match_counts_by_spacegroup,f)
 
 if __name__ == '__main__':
-    test_solve_for_free_params()
+    test_get_prototype_basic()

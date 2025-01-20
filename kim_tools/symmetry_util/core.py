@@ -21,14 +21,22 @@ __all__ = [
     "shuffle_atoms",
     "are_in_same_wyckoff_set",
     "WYCKOFF_MULTIPLICITIES",
-    "CENTERING_DIVISORS"
+    "CENTERING_DIVISORS",
+    "C_CENTERED_ORTHORHOMBIC_GROUPS",
+    "A_CENTERED_ORTHORHOMBIC_GROUPS"
+    
 ]
+
+C_CENTERED_ORTHORHOMBIC_GROUPS = (20,21,35,36,37,63,64,65,66,67,68)
+A_CENTERED_ORTHORHOMBIC_GROUPS = (38,39,40,41)
 
 def shuffle_atoms(
     atoms: Atoms
 ) -> Atoms:
     atoms_shuffled = atoms.copy()
-    atoms_shuffled.set_scaled_positions(np.random.permutation(atoms.get_scaled_positions()))
+    permute = np.random.permutation(len(atoms_shuffled))
+    atoms_shuffled.set_scaled_positions([atoms.get_scaled_positions()[i] for i in permute])
+    atoms_shuffled.set_chemical_symbols([atoms.get_chemical_symbols()[i] for i in permute])
     return atoms_shuffled
 
 def _frac_pos_match_sanity_checks(
