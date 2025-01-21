@@ -802,6 +802,47 @@ class AFLOW:
             matching_library_prototype_label = None
 
         return matching_library_prototype_label, shortname
+
+    def get_sgdata_from_prototype(self, species: List[str], prototype_label: str, parameter_values: List[float], setting_aflow: Optional[Union[int,str]] = None, debug_file: Optional[str] = None) -> Dict:
+        """
+        Without writing any files, pipe the output from aflow --prototype to aflow --sgdata to get the wyckoff info and cell
+
+        Args:
+            species:
+                Stoichiometric species, e.g. ``['Mo','S']`` corresponding to A and B respectively for prototype label AB2_hP6_194_c_f indicating molybdenite
+            prototype_label: 
+                An AFLOW prototype label, without an enumeration suffix, without specified atomic species
+            parameter_values: 
+                The free parameters of the AFLOW prototype designation
+            setting_aflow:
+                setting to pass to --sgdata command
+            debug_file:
+                Do save an intermediate file to this path.
+        Returns:
+            JSON dict containing space group information of the structure
+        """
+        
+        if setting_aflow is not None:
+            setting_argument = " --setting=" + str(setting_aflow)
+        else:
+            setting_argument = ""
+
+        if debug_file is None:
+            command = [
+                " --proto="+":".join([prototype_label]+species)+" --params=" + ",".join([str(param) for param in parameter_values]),
+                " --sgdata --print=json%s" % setting_argument
+                ]
+            output = self.aflow_command(command)
+        else:
+            # two separate commands, one to write file, one to get the sgdata
+            command = [
+                " --proto="+":".join([prototype_label]+species)+" --params=" + ",".join([str(param) for param in parameter_values]) + " > " + debug_file
+                ]
+            self.aflow_command(command)
+            command = [ " --sgdata --print=json%s < %s" % (setting_argument,debug_file) ]
+            output = self.aflow_command(command)
+        res_json = json.loads(output)
+        return res_json
     
     def get_pointgroup_crystal(self, input_file: str, verbose: bool=False) -> List[Dict]:
         """
