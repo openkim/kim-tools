@@ -16,7 +16,8 @@ from typing import Dict, List, Tuple, Union, Optional, Any
 from tempfile import NamedTemporaryFile
 from sympy import parse_expr,matrix2numpy,linear_eq_to_matrix,Symbol
 from dataclasses import dataclass
-from ..symmetry_util import are_in_same_wyckoff_set, WYCKOFF_MULTIPLICITIES, CENTERING_DIVISORS, C_CENTERED_ORTHORHOMBIC_GROUPS, A_CENTERED_ORTHORHOMBIC_GROUPS
+from ..symmetry_util import are_in_same_wyckoff_set, space_group_numbers_are_enantiomorphic, \
+    WYCK_POS_XFORM_UNDER_NORMALIZER, WYCKOFF_MULTIPLICITIES, CENTERING_DIVISORS, C_CENTERED_ORTHORHOMBIC_GROUPS, A_CENTERED_ORTHORHOMBIC_GROUPS
 from operator import attrgetter
 from math import cos, acos, sqrt, radians, degrees
 import logging
@@ -41,13 +42,13 @@ __all__ = [
     "internal_parameter_sort_key",
     "get_stoich_reduced_list_from_prototype",
     "get_wyckoff_lists_from_prototype",
+    "prototype_labels_are_equivalent",
     "get_space_group_number_from_prototype",
     "get_pearson_symbol_from_prototype",
     "get_centering_from_prototype",
     "get_centering_divisor_from_prototype",
     "read_shortnames",
     "get_real_to_virtual_species_map",
-    "solve_for_internal_params",
     "solve_for_cell_params",
     "AFLOW"
 ]
@@ -215,6 +216,8 @@ def internal_parameter_sort_key(parameter_name: Union[Symbol,str] ) -> int:
 def group_positions_by_wyckoff(atoms: Atoms, prototype_label: Optional[str] = None) -> List[EquivalentAtomSet]:
     """
     Return a list of objects representing sets of equivalent atoms
+    TODO: Rewrite this using AFLOW instead of spglib, so that the symmetry-detection methods are consistent
+    TODO: More robust checking of prototype label?
     
     Args:
         atoms: atoms object to analyze
@@ -225,6 +228,7 @@ def group_positions_by_wyckoff(atoms: Atoms, prototype_label: Optional[str] = No
             and that the Wyckoff positions within each species are alphabetized
             as well (as it should be in a valid prototype label)
             TODO: Make a checker for "valid prototype label"
+
             
     Raises:
         spglibFailureException: if spglib fails
@@ -301,7 +305,6 @@ def group_positions_by_wyckoff(atoms: Atoms, prototype_label: Optional[str] = No
                 if label_wyckoff_letter != equivalent_atom_set.wyckoff_letter:
                     logger.info(f'Wyckoff shuffle encountered in {prototype_label}, '
                                 f'{label_wyckoff_letter} -> {equivalent_atom_set.wyckoff_letter}')
-                break
 
     return equivalent_atom_set_list
 
@@ -358,6 +361,63 @@ def get_wyckoff_lists_from_prototype(prototype_label: str) -> List[str]:
                 curr_wyckoff_count *= 10 # if it's zero, we're all good
                 curr_wyckoff_count += int(char)               
     return expanded_wyckoff_letters   
+
+def prototype_labels_are_equivalent(
+    prototype_label_1: str,
+    prototype_label_2: str,
+    allow_enantiomorph: bool = False,
+    allow_species_permutation: bool = False
+    ) -> bool:
+    """
+    Checks if two prototype labels are equivalent
+    
+    TODO: Unify this with 'verify_unchanged_symmetry'
+    """
+    if allow_species_permutation:
+        # TODO: Add this (for checking library prototype labels)
+        raise NotImplementedError('Species permutations not implemented')
+    
+    if not get_stoich_reduced_list_from_prototype(prototype_label_1) \
+        == get_stoich_reduced_list_from_prototype(prototype_label_2):
+            logger.info(f'Found non-matching stoichiometry in labels {prototype_label_1} and {prototype_label_2}')
+            return False
+    if not get_pearson_symbol_from_prototype(prototype_label_1) \
+        == get_pearson_symbol_from_prototype(prototype_label_2):
+            logger.info(f'Found non-matching Pearson symbol in labels {prototype_label_1} and {prototype_label_2}')
+            return False
+    sg_num_1 = get_space_group_number_from_prototype(prototype_label_1)
+    sg_num_2 = get_space_group_number_from_prototype(prototype_label_2)
+    if allow_enantiomorph and not space_group_numbers_are_enantiomorphic(sg_num_2, sg_num_1):
+            logger.info(f'Found non-matching Space group in labels {prototype_label_1} and {prototype_label_2}')
+            return False
+    elif sg_num_2 != sg_num_1:
+            logger.info(f'Found non-matching Space group in labels {prototype_label_1} and {prototype_label_2}')
+            return False
+    
+    # OK, so far everything matches, now check the Wyckoff letters
+    wyckoff_lists_1 = get_wyckoff_lists_from_prototype(prototype_label_1)
+    wyckoff_lists_2 = get_wyckoff_lists_from_prototype(prototype_label_2)
+    assert len(wyckoff_lists_1) == len(wyckoff_lists_2), 'Somehow I got non-matching lists of Wyckoff letters, the prototype labels are probably malformed'
+    if sg_num_1 > 16: 
+        # Unless we are allowing species permuations, orthorhombic and higher SGs should
+        # always have identical prototype labels due to minimal Wyckoff enumeration.
+        # This may not be true for labels generated with older versions of AFLOW, such
+        # as library prototype labels. TODO: Write more sophisticated code for those cases
+        if wyckoff_lists_1 != wyckoff_lists_2:
+            logger.info(f'Labels {prototype_label_1} and {prototype_label_2} have different Wyckoff lists when they should match perfectly')
+            return False
+    else:    
+        for wyckoff_list_1,wyckoff_list_2 in zip(wyckoff_lists_1,wyckoff_lists_2):
+            assert len(wyckoff_list_1) == len(wyckoff_list_2), 'Somehow I got non-matching lists of Wyckoff letters, the prototype labels are probably malformed'
+            for letter_1,letter_2 in zip(wyckoff_list_1,wyckoff_list_2):
+                if not are_in_same_wyckoff_set(letter_1,letter_2,sg_num_1):
+                    logger.info(f'Labels {prototype_label_1} and {prototype_label_2} have corresponding letters {letter_1} and {letter_2} that are not in the same Wyckoff set')
+                    return False
+    
+    if prototype_label_1 != prototype_label_2:
+        logger.warning(f'Labels {prototype_label_1} and {prototype_label_2} were found to be equivalent despite being non-identical')
+        
+    return True
 
 def get_space_group_number_from_prototype(prototype_label: str) -> int:
     return int(prototype_label.split('_')[2])
@@ -459,61 +519,6 @@ def get_real_to_virtual_species_map(input: Union[List[str],Atoms]) -> Dict:
         real_to_virtual_species_map[symbol]=chr(65+i)
     
     return real_to_virtual_species_map
-
-def solve_for_internal_params(atoms: Atoms, equation_set_list: List[EquivalentEqnSet], prototype_label: str, max_resid: float = 1e-5) -> Optional[Dict]:
-    """
-    Match all positions in ``atoms`` to an equation in ``equation_set_list`` to solve for the free internal parameters
-    """
-    position_set_list = group_positions_by_wyckoff(atoms,prototype_label)
-    real_to_virtual_species_map = get_real_to_virtual_species_map(atoms)
-    if len(position_set_list) != len(equation_set_list):
-        raise inconsistentWyckoffException('Number of equivalent positions detected in Atoms object did not match the number of equivalent equations given')
-
-    space_group_number = get_space_group_number_from_prototype(prototype_label)
-    free_params_dict = {}
-    position_set_matched_list = [False]*len(position_set_list)
-    
-    for equation_set in equation_set_list:
-        # Because both equations and positions are sorted by species and wyckoff letter, this should
-        # be pretty efficient
-        matched_this_equation_set = False
-        for i,position_set in enumerate(position_set_list):
-            if position_set_matched_list[i]:
-                continue
-            if real_to_virtual_species_map[position_set.species] != equation_set.species:
-                continue
-            if not are_in_same_wyckoff_set(equation_set.wyckoff_letter,position_set.wyckoff_letter,space_group_number):
-                continue
-            for coeff_matrix, const_terms in zip(equation_set.coeff_matrix_list,equation_set.const_terms_list):
-                for frac_position in position_set.frac_position_list:
-                    possible_shifts = (-1,0,1)
-                    # explore all possible shifts around zero to bring back in cell. 
-                    # TODO: if this is too slow (27 possibilities), write an algorithm to determine which shifts are possible
-                    for shift_list in [(x,y,z) for x in possible_shifts for y in possible_shifts for z in possible_shifts]:
-                        shift_array = np.asarray(shift_list).reshape(3,1)
-                        candidate_param_values,resid,_,_ = np.linalg.lstsq(coeff_matrix,frac_position-const_terms-shift_array)
-                        if len(resid) == 0 or np.max(resid) < max_resid:
-                            assert len(candidate_param_values) == len(equation_set.param_names)
-                            for param_name,param_value in zip(equation_set.param_names,candidate_param_values):
-                                assert param_name not in free_params_dict
-                                free_params_dict[param_name] = param_value[0] % 1 # wrap to [0,1)
-                            # should only need one to match to check off this Wyckoff position
-                            position_set_matched_list[i] = True
-                            matched_this_equation_set = True
-                            break
-                        # end loop over shifts
-                    if matched_this_equation_set: break
-                    # end loop over positions within a position set
-                if matched_this_equation_set: break
-                # end loop over equations within an equation set
-            if matched_this_equation_set: break
-            # end loop over position sets
-        # end loop over equation sets
-    
-    if not all(position_set_matched_list):
-        return None
-    else:
-        return[free_params_dict[key] for key in sorted(free_params_dict.keys(),key=internal_parameter_sort_key)]
 
 def solve_for_cell_params(cellpar_prim: ArrayLike, prototype_label: str) -> List[float]:
     """
@@ -623,6 +628,11 @@ class AFLOW:
         """
         Raised when ``aflow --proto=...`` detects that the parameters requested indicate a higher symmetry
         """
+    
+    class failedToMatchException(Exception):
+        """
+        Raised when ``aflow --compare...`` fails to match
+        """        
 
     def __init__(self, aflow_executable:str="aflow", aflow_work_dir:str="",np:int=1):
         """
@@ -778,7 +788,7 @@ class AFLOW:
         Returns:
             Dictionary describing the AFLOW prototype designation (label and parameters) of the input structure.       
         """
-        return write_tmp_poscar_from_atoms_and_run_function(atoms,self.get_prototy)
+        return write_tmp_poscar_from_atoms_and_run_function(atoms,self.get_prototype_designation_from_file,prim=prim,verbose=verbose)
     
     def get_library_prototype_label_and_shortname_from_file(
         self, poscar_file: str, prim: bool = True, shortnames: Dict = read_shortnames()) -> Tuple[Union[str,None],Union[str,None]]:
@@ -903,6 +913,41 @@ class AFLOW:
         """
         return write_tmp_poscar_from_atoms_and_run_function(atoms,self.get_sgdata_from_file,setting_aflow)
     
+    def get_spacegroup_from_file(self, input_file: str) -> List[Dict]:
+        """
+        run the ``aflow --spacegroup`` command to get space group operations               
+        """
+        return json.loads(self.aflow_command(f'--spacegroup --quiet --print=json --screen_only < {input_file}'))['sgroup']
+    
+    def get_spacegroup_from_atoms(self, atoms: Atoms) -> List[Dict]:
+        """
+        run the ``aflow --spacegroup`` command to get space group operations               
+        """
+        return write_tmp_poscar_from_atoms_and_run_function(atoms,self.get_spacegroup_from_file)
+    
+    def get_unique_internal_cartesian_translations_from_atoms(self, atoms: Atoms) -> List[List[float]]:
+        """
+        Get all unique internal translations in the atoms' spacegroup in Cartesian coordinates
+        """   
+        spacegroup = self.get_spacegroup_from_atoms(atoms)
+        internal_fractional_translations = []
+        internal_cartesian_translations = []
+        shifts = [0,-1]
+        for op in spacegroup:
+            accounted_for = False
+            for existing_translation in internal_fractional_translations:
+                for shift_list in [(x,y,z) for x in shifts for y in shifts for z in shifts]:
+                    if np.allclose(np.asarray(op['ftau'])+shift_list,existing_translation,atol=1e-4):
+                        accounted_for = True
+                        break
+                if accounted_for:
+                    break
+            if not accounted_for:
+                internal_fractional_translations.append(op['ftau'])
+                internal_cartesian_translations.append(op['ctau'])
+                
+        return internal_cartesian_translations
+    
     def get_pointgroup_crystal_from_file(self, input_file: str, verbose: bool=False) -> List[Dict]:
         """
         Run the ``aflow --pointgroup_crystal`` command to get the point group operations of the provided coordinate file
@@ -932,7 +977,7 @@ class AFLOW:
         return write_tmp_poscar_from_atoms_and_run_function(atoms,self.get_pointgroup_crystal_from_file,verbose=verbose)
     
     def _compare_poscars(self, poscar1: PathLike, poscar2: PathLike) -> Dict:
-        return json.loads(self.aflow_command([' --print=JSON --compare_materials=%s,%s --screen_only --quiet'%(poscar1,poscar2)],verbose=False))
+        return json.loads(self.aflow_command([' --print=JSON --compare_materials=%s,%s --screen_only --no_scale_volume --optimize_match --quiet'%(poscar1,poscar2)],verbose=False))
             
     def _compare_Atoms(self, atoms1: Atoms, atoms2: Atoms) -> Dict:        
         with NamedTemporaryFile() as f1, NamedTemporaryFile() as f2:
@@ -958,7 +1003,8 @@ class AFLOW:
                 np.asarray(comparison_result[0]['structures_duplicate'][0]['rotation']),
                 np.asarray(comparison_result[0]['structures_duplicate'][0]['origin_shift'])
             )
-        else:
+        else:            
+            logger.info("AFLOW failed to match the crystals")
             return None,None,None
         
     def get_basistransformation_rotation_originshift_from_poscars(self, poscar1: str, poscar2: str) -> \
@@ -1129,6 +1175,102 @@ class AFLOW:
 
         return equation_sets        
     
+    def solve_for_internal_params(self, atoms: Atoms, equation_set_list: List[EquivalentEqnSet], nominal_prototype_label: str, max_resid: float = 1e-5) -> Optional[Dict]:
+        """
+        Match all positions in ``atoms`` to an equation in ``equation_set_list`` to solve for the free internal parameters
+        
+        TODO: make nominal_prototype_label optional?
+        """
+        detected_prototype_designation = self.get_prototype_designation_from_atoms(atoms)
+        
+        prototype_label_detected = detected_prototype_designation["aflow_prototype_label"]
+        
+        atoms_rebuilt = self.build_atoms_from_prototype(
+            species = sorted(list(set(atoms.get_chemical_symbols()))),
+            prototype_label=prototype_label_detected,
+            parameter_values=detected_prototype_designation["aflow_prototype_params_values"]
+        )
+        
+        if not prototype_labels_are_equivalent(nominal_prototype_label,prototype_label_detected):
+            logger.info(f'Redetected prototype label {prototype_label_detected} does not match nominal {nominal_prototype_label}, probably due to rounding.')
+            return None
+        
+        # I believe we want the negative of the origin shift from atoms_rebuilt to atoms, because
+        # the origin shift is the last operation to happen, so it will be in the "atoms" frame
+        # This function gets the transformation from its second argument to its first
+        # The origin shift is Cartesian if the POSCARs are Cartesian, which they are when made from Atoms
+        _,_,origin_shift = self.get_basistransformation_rotation_originshift_from_atoms(atoms,atoms_rebuilt)
+        
+        if origin_shift is None:
+            raise self.failedToMatchException(f'AFLOW was unable to match, are {prototype_label_detected} and {nominal_prototype_label} the same label?')
+        
+        atoms_shifted = atoms.copy()
+        atoms_shifted.translate(-origin_shift)
+        logger.info(f'Shifting atoms by an initial shift {-origin_shift}')
+        
+        # It's possible that the mapping between the rebuilt cell and the original cell included an internal translation.
+        # So we have to search over all of these as well to ensure the original equations match
+        internal_cartesian_translations = self.get_unique_internal_cartesian_translations_from_atoms(atoms_shifted)
+        
+        for internal_translation in internal_cartesian_translations:
+
+            atoms_shifted.translate(internal_translation)
+            logger.info(f'Shifting atoms by internal translation {internal_translation}')
+                                    
+            atoms_shifted.wrap()
+            
+            position_set_list = group_positions_by_wyckoff(atoms_shifted,nominal_prototype_label)
+            real_to_virtual_species_map = get_real_to_virtual_species_map(atoms_shifted)
+            if len(position_set_list) != len(equation_set_list):
+                raise inconsistentWyckoffException('Number of equivalent positions detected in Atoms object did not match the number of equivalent equations given')
+
+            space_group_number = get_space_group_number_from_prototype(nominal_prototype_label)
+            free_params_dict = {}
+            position_set_matched_list = [False]*len(position_set_list)
+            
+            for equation_set in equation_set_list:
+                # Because both equations and positions are sorted by species and wyckoff letter, this should
+                # be pretty efficient
+                matched_this_equation_set = False
+                for i,position_set in enumerate(position_set_list):
+                    if position_set_matched_list[i]:
+                        continue
+                    if real_to_virtual_species_map[position_set.species] != equation_set.species:
+                        continue
+                    if not are_in_same_wyckoff_set(equation_set.wyckoff_letter,position_set.wyckoff_letter,space_group_number):
+                        continue
+                    for coeff_matrix, const_terms in zip(equation_set.coeff_matrix_list,equation_set.const_terms_list):
+                        for frac_position in position_set.frac_position_list:
+                            possible_shifts = (-1,0,1)
+                            # explore all possible shifts around zero to bring back in cell. 
+                            # TODO: if this is too slow (27 possibilities), write an algorithm to determine which shifts are possible
+                            for shift_list in [(x,y,z) for x in possible_shifts for y in possible_shifts for z in possible_shifts]:
+                                shift_array = np.asarray(shift_list).reshape(3,1)
+                                candidate_param_values,resid,_,_ = np.linalg.lstsq(coeff_matrix,frac_position-const_terms-shift_array)
+                                if len(resid) == 0 or np.max(resid) < max_resid:
+                                    assert len(candidate_param_values) == len(equation_set.param_names)
+                                    for param_name,param_value in zip(equation_set.param_names,candidate_param_values):
+                                        assert param_name not in free_params_dict
+                                        free_params_dict[param_name] = param_value[0] % 1 # wrap to [0,1)
+                                    # should only need one to match to check off this Wyckoff position
+                                    position_set_matched_list[i] = True
+                                    matched_this_equation_set = True
+                                    break
+                                # end loop over shifts
+                            if matched_this_equation_set: break
+                            # end loop over positions within a position set
+                        if matched_this_equation_set: break
+                        # end loop over equations within an equation set
+                    if matched_this_equation_set: break
+                    # end loop over position sets
+                # end loop over equation sets
+            
+            if all(position_set_matched_list):
+                return[free_params_dict[key] for key in sorted(free_params_dict.keys(),key=internal_parameter_sort_key)]
+    
+        logger.info(f'Failed to solve equations for prototype {nominal_prototype_label}')
+        return None                    
+    
     def confirm_unrotated_prototype_designation(      
             self,
             reference_atoms: Atoms,
@@ -1176,7 +1318,6 @@ class AFLOW:
         _,cart_rot,_ = self.get_basistransformation_rotation_originshift_from_atoms(test_atoms,reference_atoms_copy)
         
         if cart_rot is None:
-            logger.info("AFLOW failed to match the crystals")
             return False
         
         point_group_ops = self.get_pointgroup_crystal_from_atoms(reference_atoms_copy)

@@ -50,7 +50,7 @@ from abc import ABC, abstractmethod
 from kim_property import kim_property_create, kim_property_modify, kim_property_dump, get_properties, get_property_id_path
 from kim_property.modify import STANDARD_KEYS_SCLAR_OR_WITH_EXTENT
 import kim_edn
-from .. import aflow_util
+from ..aflow_util import AFLOW
 from kim_query import raw_query
 from tempfile import NamedTemporaryFile
 import os
@@ -497,7 +497,7 @@ def get_crystal_genome_designation_from_atoms(atoms: Atoms, get_library_prototyp
             short_name: Optional[List[str]]
                 List of human-readable short names (e.g. "Face-Centered Cubic"), if present
     """
-    aflow = aflow_util.AFLOW(np=aflow_np)
+    aflow = AFLOW(np=aflow_np)
     cg_des = {}
 
     proto_des = aflow.get_prototype_designation_from_atoms(atoms,prim=prim)
@@ -528,8 +528,7 @@ def verify_unchanged_symmetry(
     stoichiometric_species: List[str],
     prototype_label: str,
     loose_triclinic_and_monoclinic: bool = False,
-    **kwargs
-    ):
+    ) -> None:
     """
     Checks if stoichiometric_species and/or prototype_label have changed. Raises an error if they have
 
@@ -686,7 +685,7 @@ class CrystalGenomeTestDriver(KIMTestDriver):
             self._update_crystal_genome_designation_from_atoms()
             if rebuild_atoms:
                 # rebuild atoms for consistent orientation
-                aflow = aflow_util.AFLOW()
+                aflow = AFLOW()
                 self.atoms = aflow.build_atoms_from_prototype(self.stoichiometric_species,self.prototype_label,self.parameter_values_angstrom)
                 # Formerly there was a check here yet again to make sure symmetry hasn't changed, but I don't think it's important
         elif self.stoichiometric_species is not None: # we've already checked that if this is not None, other required parts exist as well
@@ -697,7 +696,7 @@ class CrystalGenomeTestDriver(KIMTestDriver):
                 warn("You've provided parameter values besides `a`, but no parameter names.\n"
                      "Placeholders will be inserted for debugging.")
                 self.parameter_names = ["dummy"]*(len(self.parameter_values_angstrom)-1)
-            aflow = aflow_util.AFLOW()
+            aflow = AFLOW()
             self.atoms = aflow.build_atoms_from_prototype(self.stoichiometric_species,self.prototype_label,self.parameter_values_angstrom)
             self._update_poscar()                     
         else:

@@ -3,7 +3,7 @@
 from kim_tools import AFLOW, split_parameter_array,CRYSTAL_GENOME_INITIAL_STRUCTURES, \
     get_crystal_genome_designation_from_atoms, get_wyckoff_lists_from_prototype, \
     frac_pos_match_allow_permute_wrap, frac_pos_match_allow_wrap, get_real_to_virtual_species_map, \
-    solve_for_internal_params, shuffle_atoms, get_pearson_symbol_from_prototype, get_centering_from_prototype, \
+    shuffle_atoms, get_pearson_symbol_from_prototype, get_centering_from_prototype, \
     solve_for_cell_params
 from random import random
 import json
@@ -103,10 +103,10 @@ def test_solve_for_internal_params():
             else:
                 equation_sets = equation_sets_cache[prototype_label]
             print(prototype_label)
-            print(solve_for_internal_params(atoms,equation_sets,prototype_label))
+            print(aflow.solve_for_internal_params(atoms,equation_sets,prototype_label))
             
 
-def test_get_prototype_basic(
+def test_get_prototype(
     materials=[CRYSTAL_GENOME_INITIAL_STRUCTURES[test_case] for test_case in TEST_CASES]
     #materials=CRYSTAL_GENOME_INITIAL_STRUCTURES
 ):
@@ -132,7 +132,6 @@ def test_get_prototype_basic(
         prototype_label_split = prototype_label.split('_')
         pearson = prototype_label_split[1][:2]
         spacegroup = int(prototype_label_split[2])
-        parameter_names = material["parameter_names"]
         
         for parameter_set in material["parameter_sets"]:
             parameter_values = parameter_set["parameter_values"]
@@ -158,13 +157,16 @@ def test_get_prototype_basic(
             
             atoms.rotate((random(),random(),random()),(random(),random(),random()),rotate_cell=True)
             
-            #atoms.translate((random(),random(),random()))
-            #atoms.wrap()
+            atoms.translate((random(),random(),random()))
+            atoms.wrap()
             
-            internal_params = solve_for_internal_params(atoms,equation_sets,prototype_label)
+            internal_params = aflow.solve_for_internal_params(atoms,equation_sets,prototype_label)
             
             if internal_params is None:                
                 print(f'Was not able to solve for internal parameters of {prototype_label}')
+                filename = 'output/' + prototype_label + '.POSCAR'
+                print(f'Dumping atoms to {filename}')
+                atoms.write(filename,format='vasp',sort=True)
                 continue
             
             redetected_parameter_values = solve_for_cell_params(atoms.cell.cellpar(),prototype_label) + \
@@ -198,4 +200,4 @@ def test_get_prototype_basic(
             json.dump(match_counts_by_spacegroup,f)
 
 if __name__ == '__main__':
-    test_get_prototype_basic()
+    test_get_prototype()
