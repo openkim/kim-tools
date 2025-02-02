@@ -470,13 +470,14 @@ class KIMTestDriver(ABC):
         return kim_edn.loads(self._property_instances)
 
 ################################################################################
-def get_crystal_genome_designation_from_atoms(atoms: Atoms, get_library_prototype: bool = True, aflow_np: int = 4) -> Dict:
+def get_crystal_genome_designation_from_atoms(atoms: Atoms, get_library_prototype: bool = True, prim: bool = True, aflow_np: int = 4) -> Dict:
     """
     Get crystal genome designation from an ASE atoms object.
     
     Args:
         atoms: Atoms object to analyze
         get_library_prototype: whether to compare against prototype library
+        prim: whether to primitivize the atoms object first
         aflow_np: Number of processors to use with AFLOW executable
 
     Returns:
@@ -498,16 +499,11 @@ def get_crystal_genome_designation_from_atoms(atoms: Atoms, get_library_prototyp
     """
     aflow = aflow_util.AFLOW(np=aflow_np)
     cg_des = {}
-    
-    with NamedTemporaryFile('w',delete=False) as fp: #KDP has python3.8 which is missing the convenient `delete_on_close` option
-        atoms.write(fp,sort=True,format='vasp')
-        fp.close()
-        with open(fp.name) as f:
-            proto_des = aflow.get_prototype(f.name)
-            (libproto,short_name) = \
-                aflow.get_library_prototype_label_and_shortname(f.name,aflow_util.read_shortnames()) \
-                if get_library_prototype else (None,None)
-        os.remove(fp.name)
+
+    proto_des = aflow.get_prototype_designation_from_atoms(atoms,prim=prim)
+    (libproto,short_name) = \
+        aflow.get_library_prototype_label_and_shortname_from_atoms(atoms,prim=prim) \
+            if get_library_prototype else (None,None)
 
     cg_des["prototype_label"] = proto_des["aflow_prototype_label"]
     cg_des["stoichiometric_species"] = sorted(list(set(atoms.get_chemical_symbols())))

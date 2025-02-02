@@ -5,13 +5,14 @@ import json
 import subprocess
 import sys
 import os
+from os import PathLike
 import ase
 from ase.cell import Cell
 from ase import Atoms
 import ase.spacegroup
 from ase.spacegroup.symmetrize import check_symmetry
 from curses.ascii import isalpha, isdigit
-from typing import Dict, List, Tuple, Union, Optional
+from typing import Dict, List, Tuple, Union, Optional, Any
 from tempfile import NamedTemporaryFile
 from sympy import parse_expr,matrix2numpy,linear_eq_to_matrix,Symbol
 from dataclasses import dataclass
@@ -28,6 +29,7 @@ __all__ = [
     "incorrectNumAtomsException",
     "EquivalentEqnSet",
     "EquivalentAtomSet",
+    "write_tmp_poscar_from_atoms_and_run_function",
     "group_positions_by_wyckoff",
     "spglibFailureException",
     "incorrectSpaceGroupException",
@@ -94,6 +96,22 @@ class EquivalentAtomSet:
     species: str
     wyckoff_letter: str
     frac_position_list: List[ArrayLike] # m x 3 x 1 columns
+
+def write_tmp_poscar_from_atoms_and_run_function(atoms: Atoms, function: callable, *args, **kwargs) -> Any:
+    """
+    Write the Atoms file to a NamedTemporaryFile and run 'function' on it.
+    
+    Args:
+        atoms: The atoms object that will be written to a POSCAR file and fed as the first argument to function
+        function: A function that takes a POSCAR file as the first argument
+    
+    Returns:
+        Whatever `function` returns
+    """
+    with NamedTemporaryFile('w+') as fp:
+        atoms.write(fp,sort=True,format='vasp')
+        fp.seek(0)
+        return(function(fp.name,*args,**kwargs))
     
 def check_number_of_atoms(atoms: Atoms, prototype_label: str, primitive_cell: bool = True) -> None:
     """
@@ -589,8 +607,6 @@ def solve_for_cell_params(cellpar_prim: ArrayLike, prototype_label: str) -> List
         return [aprim*sqrt(2)]
     elif pearson.startswith('cI'):
         return [aprim*2/sqrt(3)]
-    
-    
 
 class AFLOW:
     """
@@ -707,45 +723,65 @@ class AFLOW:
         command = " --version"        
         output = self.aflow_command([command])
         return output.strip().split()[2]
-
-    def compare_to_prototypes(self, input_file: str) -> List[Dict]:
+                
+    def compare_to_prototypes(self, input_file: str, prim: bool = True) -> List[Dict]:
         """
         Run the ``aflow --compare2prototypes`` command to compare the input structure to the AFLOW library of curated prototypes
 
         Args:
             input_file: path to the POSCAR file containing the structure to compare
+            prim: whether to primitivize the structure first
 
         Returns:
             JSON list of dictionaries containing information about matching prototypes. In practice, this list should be of length zero or 1
         """
+        if prim:
+            command = [" --prim < " + self.aflow_work_dir + input_file, " --compare2prototypes --catalog=anrl --quiet --print=json"]
+        else:
+            command = " --compare2prototypes --catalog=anrl --quiet --print=json < " + self.aflow_work_dir + input_file
 
-        output = self.aflow_command([            
-            " --prim < " + self.aflow_work_dir + input_file,
-            " --compare2prototypes --catalog=anrl --quiet --print=json"
-        ])
+        output = self.aflow_command(command)
         res_json = json.loads(output)
         return res_json
     
-    def get_prototype(self,input_file: str, verbose: bool=False) -> Dict:
+    def get_prototype_designation_from_file(self, input_file: str, prim: bool=True, verbose: bool=False) -> Dict:
         """
-        Run the ``aflow --prototype`` command to get the AFLOW prototype designation of the input structure
+        Run the ``aflow --prototype`` command to get the AFLOW prototype designation
+            of the input structure
 
         Args:
             input_file: path to the POSCAR file containing the structure to analyze
+            prim: whether to primitivize the structure first
             verbose: Whether to echo command to log file
             
         Returns:
-            JSON dictionaries describing the AFLOW prototype designation (label and parameters) of the input structure.
-       
+            Dictionary describing the AFLOW prototype designation (label and parameters) of the input structure.       
         """
-        output=self.aflow_command([
-            " --prim < " + self.aflow_work_dir + input_file,
-            " --prototype --print=json"
-            ],verbose=verbose)
+        if prim:
+            command = [" --prim < " + self.aflow_work_dir + input_file, " --prototype --print=json"]
+        else:
+            command = " --prototype --print=json < " + self.aflow_work_dir + input_file
+        
+        output=self.aflow_command(command,verbose=verbose)
         res_json = json.loads(output)
-        return res_json    
+        return res_json
+    
+    def get_prototype_designation_from_atoms(self, atoms: Atoms, prim: bool=True, verbose: bool=False) -> Dict:
+        """
+        Run the ``aflow --prototype`` command to get the AFLOW prototype designation 
 
-    def get_library_prototype_label_and_shortname(self, poscar_file: str,shortnames: Dict = read_shortnames()) -> Tuple[Union[str,None],Union[str,None]]:
+        Args:
+            atoms: atoms object to analyze
+            prim: whether to primitivize the structure first
+            verbose: Whether to echo command to log file
+            
+        Returns:
+            Dictionary describing the AFLOW prototype designation (label and parameters) of the input structure.       
+        """
+        return write_tmp_poscar_from_atoms_and_run_function(atoms,self.get_prototy)
+    
+    def get_library_prototype_label_and_shortname_from_file(
+        self, poscar_file: str, prim: bool = True, shortnames: Dict = read_shortnames()) -> Tuple[Union[str,None],Union[str,None]]:
         """
         Use the aflow command line tool to determine the library prototype label for a structure and look up its human-readable shortname.
         In the case of multiple results, the enumeration with the smallest misfit that is in the prototypes list is returned. If none
@@ -754,6 +790,7 @@ class AFLOW:
         Args:
             poscar_file:
                 Path to input coordinate file
+            prim: whether to primitivize the structure first
             shortnames:
                 Dictionary with library prototype labels as keys and human-readable "shortnames" as values.
 
@@ -762,7 +799,7 @@ class AFLOW:
             * Shortname corresponding to this prototype
         """
 
-        comparison_results = self.compare_to_prototypes(poscar_file)
+        comparison_results = self.compare_to_prototypes(poscar_file,prim=prim)
         if len(comparison_results) > 1:
             # If zero results are returned it means the prototype is not in the encyclopedia at all        
             # Not expecting a case where the number of results is greater than 1.
@@ -803,17 +840,33 @@ class AFLOW:
 
         return matching_library_prototype_label, shortname
 
-    def get_sgdata_from_prototype(self, species: List[str], prototype_label: str, parameter_values: List[float], setting_aflow: Optional[Union[int,str]] = None, debug_file: Optional[str] = None) -> Dict:
+    def get_library_prototype_label_and_shortname_from_atoms(self, atoms: Atoms, prim: bool = True, shortnames: Dict = read_shortnames()) -> Tuple[Union[str,None],Union[str,None]]:
         """
-        Without writing any files, pipe the output from aflow --prototype to aflow --sgdata to get the wyckoff info and cell
+        Use the aflow command line tool to determine the library prototype label for a structure and look up its human-readable shortname.
+        In the case of multiple results, the enumeration with the smallest misfit that is in the prototypes list is returned. If none
+        of the results are in the matching prototypes list, then the prototype with the smallest misfit is returned.
 
         Args:
-            species:
-                Stoichiometric species, e.g. ``['Mo','S']`` corresponding to A and B respectively for prototype label AB2_hP6_194_c_f indicating molybdenite
-            prototype_label: 
-                An AFLOW prototype label, without an enumeration suffix, without specified atomic species
-            parameter_values: 
-                The free parameters of the AFLOW prototype designation
+            atoms:
+                Atoms object to compare                
+            prim: whether to primitivize the structure first
+            shortnames:
+                Dictionary with library prototype labels as keys and human-readable "shortnames" as values.
+
+        Returns:
+            * The library prototype label for the provided compound.
+            * Shortname corresponding to this prototype
+        """
+        return write_tmp_poscar_from_atoms_and_run_function(
+            atoms,self.get_library_prototype_label_and_shortname_from_file,prim=prim,shortnames=shortnames)
+
+    def get_sgdata_from_file(self, coord_file: PathLike, setting_aflow: Optional[Union[int,str]] = 'aflow') -> Dict:
+        """
+        Get the json output from aflow --sgdata
+        
+        Args:
+            coord_file:
+                File to run --sgdata on
             setting_aflow:
                 setting to pass to --sgdata command
             debug_file:
@@ -826,25 +879,31 @@ class AFLOW:
             setting_argument = " --setting=" + str(setting_aflow)
         else:
             setting_argument = ""
-
-        if debug_file is None:
-            command = [
-                " --proto="+":".join([prototype_label]+species)+" --params=" + ",".join([str(param) for param in parameter_values]),
-                " --sgdata --print=json%s" % setting_argument
-                ]
-            output = self.aflow_command(command)
-        else:
-            # two separate commands, one to write file, one to get the sgdata
-            command = [
-                " --proto="+":".join([prototype_label]+species)+" --params=" + ",".join([str(param) for param in parameter_values]) + " > " + debug_file
-                ]
-            self.aflow_command(command)
-            command = [ " --sgdata --print=json%s < %s" % (setting_argument,debug_file) ]
-            output = self.aflow_command(command)
+            
+        command = f" --sgdata --print=json {setting_argument} < {coord_file}"
+            
+        output = self.aflow_command(command)
         res_json = json.loads(output)
+        
         return res_json
     
-    def get_pointgroup_crystal(self, input_file: str, verbose: bool=False) -> List[Dict]:
+    def get_sgdata_from_atoms(self, atoms: Atoms, setting_aflow: Optional[Union[int,str]] = 'aflow') -> Dict:
+        """
+        Save atoms to file and get the json output from aflow --sgdata
+        
+        Args:
+            atoms:
+            
+            setting_aflow:
+                setting to pass to --sgdata command
+            debug_file:
+                Do save an intermediate file to this path.
+        Returns:
+            JSON dict containing space group information of the structure        
+        """
+        return write_tmp_poscar_from_atoms_and_run_function(atoms,self.get_sgdata_from_file,setting_aflow)
+    
+    def get_pointgroup_crystal_from_file(self, input_file: str, verbose: bool=False) -> List[Dict]:
         """
         Run the ``aflow --pointgroup_crystal`` command to get the point group operations of the provided coordinate file
 
@@ -869,12 +928,10 @@ class AFLOW:
         Returns:
             JSON dictionaries describing the point group of the input structure.            
             verbose: Whether to echo command to log file
-        """
-        with NamedTemporaryFile() as f:
-            atoms.write(f.name,'vasp',sort=True)
-            return self.get_pointgroup_crystal(f.name,verbose=verbose)
+        """        
+        return write_tmp_poscar_from_atoms_and_run_function(atoms,self.get_pointgroup_crystal_from_file,verbose=verbose)
     
-    def _compare_poscars(self, poscar1: str, poscar2: str) -> Dict:
+    def _compare_poscars(self, poscar1: PathLike, poscar2: PathLike) -> Dict:
         return json.loads(self.aflow_command([' --print=JSON --compare_materials=%s,%s --screen_only --quiet'%(poscar1,poscar2)],verbose=False))
             
     def _compare_Atoms(self, atoms1: Atoms, atoms2: Atoms) -> Dict:        

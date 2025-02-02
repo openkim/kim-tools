@@ -106,7 +106,10 @@ def test_solve_for_internal_params():
             print(solve_for_internal_params(atoms,equation_sets,prototype_label))
             
 
-def test_get_prototype_basic(materials=[CRYSTAL_GENOME_INITIAL_STRUCTURES[test_case] for test_case in TEST_CASES]):
+def test_get_prototype_basic(
+    materials=[CRYSTAL_GENOME_INITIAL_STRUCTURES[test_case] for test_case in TEST_CASES]
+    #materials=CRYSTAL_GENOME_INITIAL_STRUCTURES
+):
     aflow = AFLOW(np=19)
     equation_sets_cache = {} # for large-scale testing, helpful to check that same prototype with different parameters gives the same results
     match_counts_by_pearson = {}
@@ -134,11 +137,17 @@ def test_get_prototype_basic(materials=[CRYSTAL_GENOME_INITIAL_STRUCTURES[test_c
         for parameter_set in material["parameter_sets"]:
             parameter_values = parameter_set["parameter_values"]
             atoms = aflow.build_atoms_from_prototype(species,prototype_label,parameter_values)
-            # cg_des = get_crystal_genome_designation_from_atoms(atoms,get_library_prototype=False,aflow_np=19)
-            # cg_des['stoichiometric_species'],
-            # cg_des['prototype_label'],
-            # cg_des['parameter_values_angstrom']                        
+            """
+            # Using AFLOW software -- failure case for comparison
             
+            cg_des = get_crystal_genome_designation_from_atoms(atoms,get_library_prototype=False,prim=False,aflow_np=19)
+            
+                    cg_des['stoichiometric_species'],
+                    cg_des['prototype_label'],
+                    cg_des['parameter_values_angstrom']
+                        
+            """    
+                    
             if prototype_label not in equation_sets_cache:
                 equation_sets = aflow.get_equation_sets_from_prototype(prototype_label,parameter_values)
                 equation_sets_cache[prototype_label] = equation_sets
@@ -147,12 +156,20 @@ def test_get_prototype_basic(materials=[CRYSTAL_GENOME_INITIAL_STRUCTURES[test_c
                 
             atoms = shuffle_atoms(atoms)
             
-            atoms.rotate((random(),random(),random()),(random(),random(),random()),rotate_cell=True)            
-                
-            # keep cell parameters, replace internal parameters
-            redetected_parameter_values = solve_for_cell_params(atoms.cell.cellpar(),prototype_label) + \
-                solve_for_internal_params(atoms,equation_sets,prototype_label)
+            atoms.rotate((random(),random(),random()),(random(),random(),random()),rotate_cell=True)
             
+            #atoms.translate((random(),random(),random()))
+            #atoms.wrap()
+            
+            internal_params = solve_for_internal_params(atoms,equation_sets,prototype_label)
+            
+            if internal_params is None:                
+                print(f'Was not able to solve for internal parameters of {prototype_label}')
+                continue
+            
+            redetected_parameter_values = solve_for_cell_params(atoms.cell.cellpar(),prototype_label) + \
+                internal_params
+                
             try:
                 crystal_did_not_rotate = aflow.confirm_unrotated_prototype_designation(
                     atoms,
