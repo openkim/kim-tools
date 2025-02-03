@@ -103,7 +103,7 @@ def test_solve_for_internal_params():
             else:
                 equation_sets = equation_sets_cache[prototype_label]
             print(prototype_label)
-            print(aflow.solve_for_internal_params(atoms,equation_sets,prototype_label))
+            print(aflow.solve_for_prototype_params(atoms,equation_sets,prototype_label))
             
 
 def test_get_prototype(
@@ -159,20 +159,17 @@ def test_get_prototype(
             
             atoms.translate((random(),random(),random()))
             atoms.wrap()
-            
-            internal_params = aflow.solve_for_internal_params(atoms,equation_sets,prototype_label)
-            
-            if internal_params is None:                
-                print(f'Was not able to solve for internal parameters of {prototype_label}')
-                filename = 'output/' + prototype_label + '.POSCAR'
-                print(f'Dumping atoms to {filename}')
-                atoms.write(filename,format='vasp',sort=True)
-                continue
-            
-            redetected_parameter_values = solve_for_cell_params(atoms.cell.cellpar(),prototype_label) + \
-                internal_params
                 
             try:
+                redetected_parameter_values = aflow.solve_for_prototype_params(atoms,equation_sets,prototype_label)
+            
+                if redetected_parameter_values is None:                
+                    print(f'Was not able to solve for parameters of {prototype_label}')
+                    filename = 'output/' + prototype_label + '.POSCAR'
+                    print(f'Dumping atoms to {filename}')
+                    atoms.write(filename,format='vasp',sort=True)
+                    continue
+            
                 crystal_did_not_rotate = aflow.confirm_unrotated_prototype_designation(
                     atoms,
                     species,

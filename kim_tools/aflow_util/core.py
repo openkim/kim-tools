@@ -932,7 +932,7 @@ class AFLOW:
         spacegroup = self.get_spacegroup_from_atoms(atoms)
         internal_fractional_translations = []
         internal_cartesian_translations = []
-        shifts = [0,-1]
+        shifts = [-1,0,1]
         for op in spacegroup:
             accounted_for = False
             for existing_translation in internal_fractional_translations:
@@ -1175,24 +1175,31 @@ class AFLOW:
 
         return equation_sets        
     
-    def solve_for_internal_params(self, atoms: Atoms, equation_set_list: List[EquivalentEqnSet], nominal_prototype_label: str, max_resid: float = 1e-5) -> Optional[Dict]:
+    def solve_for_prototype_params(self, atoms: Atoms, equation_set_list: List[EquivalentEqnSet], prototype_label: str, max_resid: float = 1e-5) -> Optional[List]:
         """
-        Match all positions in ``atoms`` to an equation in ``equation_set_list`` to solve for the free internal parameters
+        Match all positions in ``atoms`` to an equation in ``equation_set_list`` to solve for the prototype parameters
         
         TODO: make nominal_prototype_label optional?
         """
+        # solve for cell parameters
+        cell_params = solve_for_cell_params(atoms.cell.cellpar(),prototype_label)
+        species = sorted(list(set(atoms.get_chemical_symbols())))
+        
+        # First, redetect the prototype label. We can't use this as-is because it may be rotated by an operation that's within the normalizer but not
+        # in the space group itself        
         detected_prototype_designation = self.get_prototype_designation_from_atoms(atoms)
         
         prototype_label_detected = detected_prototype_designation["aflow_prototype_label"]
         
+        # rebuild the atoms
         atoms_rebuilt = self.build_atoms_from_prototype(
-            species = sorted(list(set(atoms.get_chemical_symbols()))),
+            species = species,
             prototype_label=prototype_label_detected,
             parameter_values=detected_prototype_designation["aflow_prototype_params_values"]
         )
         
-        if not prototype_labels_are_equivalent(nominal_prototype_label,prototype_label_detected):
-            logger.info(f'Redetected prototype label {prototype_label_detected} does not match nominal {nominal_prototype_label}, probably due to rounding.')
+        if not prototype_labels_are_equivalent(prototype_label,prototype_label_detected):
+            logger.info(f'Redetected prototype label {prototype_label_detected} does not match nominal {prototype_label}, probably due to rounding.')
             return None
         
         # I believe we want the negative of the origin shift from atoms_rebuilt to atoms, because
@@ -1202,8 +1209,10 @@ class AFLOW:
         _,_,origin_shift = self.get_basistransformation_rotation_originshift_from_atoms(atoms,atoms_rebuilt)
         
         if origin_shift is None:
-            raise self.failedToMatchException(f'AFLOW was unable to match, are {prototype_label_detected} and {nominal_prototype_label} the same label?')
+            raise self.failedToMatchException(f'AFLOW was unable to match, are {prototype_label_detected} and {prototype_label} the same label?')
         
+        # Even though we are going to re-initialize atoms_shifted in every loop below, we still need to shift them
+        # to a high-symmetry origin first
         atoms_shifted = atoms.copy()
         atoms_shifted.translate(-origin_shift)
         logger.info(f'Shifting atoms by an initial shift {-origin_shift}')
@@ -1214,17 +1223,19 @@ class AFLOW:
         
         for internal_translation in internal_cartesian_translations:
 
+            atoms_shifted = atoms.copy()
+            atoms_shifted.translate(-origin_shift)
             atoms_shifted.translate(internal_translation)
             logger.info(f'Shifting atoms by internal translation {internal_translation}')
                                     
             atoms_shifted.wrap()
             
-            position_set_list = group_positions_by_wyckoff(atoms_shifted,nominal_prototype_label)
+            position_set_list = group_positions_by_wyckoff(atoms_shifted,prototype_label)
             real_to_virtual_species_map = get_real_to_virtual_species_map(atoms_shifted)
             if len(position_set_list) != len(equation_set_list):
                 raise inconsistentWyckoffException('Number of equivalent positions detected in Atoms object did not match the number of equivalent equations given')
 
-            space_group_number = get_space_group_number_from_prototype(nominal_prototype_label)
+            space_group_number = get_space_group_number_from_prototype(prototype_label)
             free_params_dict = {}
             position_set_matched_list = [False]*len(position_set_list)
             
@@ -1246,10 +1257,10 @@ class AFLOW:
                             # TODO: if this is too slow (27 possibilities), write an algorithm to determine which shifts are possible
                             for shift_list in [(x,y,z) for x in possible_shifts for y in possible_shifts for z in possible_shifts]:
                                 shift_array = np.asarray(shift_list).reshape(3,1)
-                                candidate_param_values,resid,_,_ = np.linalg.lstsq(coeff_matrix,frac_position-const_terms-shift_array)
+                                candidate_internal_param_values,resid,_,_ = np.linalg.lstsq(coeff_matrix,frac_position-const_terms-shift_array)
                                 if len(resid) == 0 or np.max(resid) < max_resid:
-                                    assert len(candidate_param_values) == len(equation_set.param_names)
-                                    for param_name,param_value in zip(equation_set.param_names,candidate_param_values):
+                                    assert len(candidate_internal_param_values) == len(equation_set.param_names)
+                                    for param_name,param_value in zip(equation_set.param_names,candidate_internal_param_values):
                                         assert param_name not in free_params_dict
                                         free_params_dict[param_name] = param_value[0] % 1 # wrap to [0,1)
                                     # should only need one to match to check off this Wyckoff position
@@ -1266,9 +1277,18 @@ class AFLOW:
                 # end loop over equation sets
             
             if all(position_set_matched_list):
-                return[free_params_dict[key] for key in sorted(free_params_dict.keys(),key=internal_parameter_sort_key)]
+                candidate_prototype_param_values = cell_params + [free_params_dict[key] for key in sorted(free_params_dict.keys(),key=internal_parameter_sort_key)]
+                # The internal shift may have taken us to an internal parameter solution that represents a rotation, so we need to check
+                if self.confirm_unrotated_prototype_designation(atoms,species,prototype_label,candidate_prototype_param_values):
+                    logger.info(f'Found set of parameters for prototype {prototype_label} that is unrotated')
+                    return candidate_prototype_param_values
+                else:
+                    logger.info(f'Found set of parameters for prototype {prototype_label}, but it was rotated relative to the original cell')
+            else:
+                logger.info(f'Failed to solve equations for prototype {prototype_label} on this shift attempt')
+                
     
-        logger.info(f'Failed to solve equations for prototype {nominal_prototype_label}')
+        logger.info(f'Failed to solve equations for prototype {prototype_label} on any shift attempt')
         return None                    
     
     def confirm_unrotated_prototype_designation(      
@@ -1301,12 +1321,12 @@ class AFLOW:
         """
         test_atoms = self.build_atoms_from_prototype(species,prototype_label,parameter_values)
         
-        if not np.allclose(reference_atoms.get_cell_lengths_and_angles(),test_atoms.get_cell_lengths_and_angles(),atol=1e-4):
-            logger.info(f"Cell lengths and angles do not match.\nOriginal: {reference_atoms.get_cell_lengths_and_angles()}\n"
-                        f"Regenerated: {test_atoms.get_cell_lengths_and_angles()}")
+        if not np.allclose(reference_atoms.cell.cellpar()(),test_atoms.cell.cellpar()(),atol=1e-4):
+            logger.info(f"Cell lengths and angles do not match.\nOriginal: {reference_atoms.cell.cellpar()()}\n"
+                        f"Regenerated: {test_atoms.cell.cellpar()()}")
             return False
         else:
-            cell_lengths_and_angles = reference_atoms.get_cell_lengths_and_angles()
+            cell_lengths_and_angles = reference_atoms.cell.cellpar()()
         
         reference_atoms_copy = reference_atoms.copy()
         
