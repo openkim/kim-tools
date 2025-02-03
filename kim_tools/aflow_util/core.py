@@ -1321,12 +1321,12 @@ class AFLOW:
         """
         test_atoms = self.build_atoms_from_prototype(species,prototype_label,parameter_values)
         
-        if not np.allclose(reference_atoms.cell.cellpar()(),test_atoms.cell.cellpar()(),atol=1e-4):
-            logger.info(f"Cell lengths and angles do not match.\nOriginal: {reference_atoms.cell.cellpar()()}\n"
-                        f"Regenerated: {test_atoms.cell.cellpar()()}")
+        if not np.allclose(reference_atoms.cell.cellpar(),test_atoms.cell.cellpar(),atol=1e-4):
+            logger.info(f"Cell lengths and angles do not match.\nOriginal: {reference_atoms.cell.cellpar()}\n"
+                        f"Regenerated: {test_atoms.cell.cellpar()}")
             return False
         else:
-            cell_lengths_and_angles = reference_atoms.cell.cellpar()()
+            cell_lengths_and_angles = reference_atoms.cell.cellpar()
         
         reference_atoms_copy = reference_atoms.copy()
         
