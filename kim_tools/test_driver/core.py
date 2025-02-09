@@ -82,7 +82,7 @@ PROP_SEARCH_PATHS_INFO=(\
 '- $PWD/local_props/**/')
 
 def minimize_wrapper(supercell:Atoms, fmax:float=1e-5, steps:int=10000, \
-                         variable_cell:bool=True, logfile:Optional[Union[str,IO]]='-',
+                         variable_cell:bool=True, logfile:Optional[Union[str,IO]]='kim-tools.log',
                          algorithm: Optimizer = LBFGSLineSearch, 
                          CellFilter: UnitCellFilter = ExpCellFilter,
                          fix_symmetry: bool = False,
@@ -145,25 +145,22 @@ def minimize_wrapper(supercell:Atoms, fmax:float=1e-5, steps:int=10000, \
     except Exception as e:
         minimization_stalled = True
         iteration_limits_reached = False
-        print()
-        print("The following exception was caught during minimization:")
-        print(repr(e))
-        print()
+        logger.info("The following exception was caught during minimization:")
+        logger.info(repr(e))
 
-    print("Minimization "+
+    logger.info("Minimization "+
         ("stalled" if minimization_stalled else "stopped" if iteration_limits_reached else "converged")+
         " after "+
         (("hitting the maximum of "+str(steps)) if iteration_limits_reached else str(opt.nsteps))+
         " steps.")
     
     if minimization_stalled or iteration_limits_reached:
-        print()
-        print("Final forces:")
-        print(supercell.get_forces())
-        print()
-        print("Final stress:")
-        print(supercell.get_stress())
-        print()
+        logger.info("Final forces:")
+        logger.info(supercell.get_forces())
+        logger.info("Final stress:")
+        logger.info(supercell.get_stress())
+        
+    del supercell.constraints
 
 ################################################################################
 class KIMTestDriverError(Exception):

@@ -17,7 +17,8 @@ from tempfile import NamedTemporaryFile
 from sympy import parse_expr,matrix2numpy,linear_eq_to_matrix,Symbol
 from dataclasses import dataclass
 from ..symmetry_util import are_in_same_wyckoff_set, space_group_numbers_are_enantiomorphic, \
-    WYCK_POS_XFORM_UNDER_NORMALIZER, WYCKOFF_MULTIPLICITIES, CENTERING_DIVISORS, C_CENTERED_ORTHORHOMBIC_GROUPS, A_CENTERED_ORTHORHOMBIC_GROUPS
+    WYCK_POS_XFORM_UNDER_NORMALIZER, WYCKOFF_MULTIPLICITIES, CENTERING_DIVISORS, C_CENTERED_ORTHORHOMBIC_GROUPS, A_CENTERED_ORTHORHOMBIC_GROUPS, \
+    POSSIBLE_PRIMITIVE_SHIFTS
 from operator import attrgetter
 from math import cos, acos, sqrt, radians, degrees
 import logging
@@ -52,6 +53,14 @@ __all__ = [
     "solve_for_cell_params",
     "AFLOW"
 ]
+
+CENTROSYMMETRIC_SPACE_GROUPS_WITH_MORE_THAN_ONE_SETTING = (
+    48 , 50 , 59 , 68 , 70 ,
+    85 , 86 , 88 , 125 , 126 ,
+    129 , 130 , 133 , 134 , 137 ,
+   	138 , 141 , 142 , 201 , 203 ,
+    222 , 224 , 227 , 228)
+
 
 class incorrectNumAtomsException(Exception):
     """
@@ -1200,7 +1209,6 @@ class AFLOW:
         
         if not prototype_labels_are_equivalent(prototype_label,prototype_label_detected):
             logger.info(f'Redetected prototype label {prototype_label_detected} does not match nominal {prototype_label}, probably due to rounding.')
-            return None
         
         # I believe we want the negative of the origin shift from atoms_rebuilt to atoms, because
         # the origin shift is the last operation to happen, so it will be in the "atoms" frame
@@ -1215,18 +1223,15 @@ class AFLOW:
         # to a high-symmetry origin first
         atoms_shifted = atoms.copy()
         atoms_shifted.translate(-origin_shift)
-        logger.info(f'Shifting atoms by an initial shift {-origin_shift}')
+        logger.info(f'Shifting atoms by an initial cartesian shift {-origin_shift}')
         
-        # It's possible that the mapping between the rebuilt cell and the original cell included an internal translation.
-        # So we have to search over all of these as well to ensure the original equations match
-        internal_cartesian_translations = self.get_unique_internal_cartesian_translations_from_atoms(atoms_shifted)
+        space_group_number = get_space_group_number_from_prototype(prototype_label)
         
-        for internal_translation in internal_cartesian_translations:
-
+        for prim_shift in POSSIBLE_PRIMITIVE_SHIFTS[space_group_number]:
             atoms_shifted = atoms.copy()
             atoms_shifted.translate(-origin_shift)
-            atoms_shifted.translate(internal_translation)
-            logger.info(f'Shifting atoms by internal translation {internal_translation}')
+            atoms_shifted.translate(prim_shift@atoms_shifted.cell)
+            logger.info(f'Shifting atoms by internal fractional translation {prim_shift}')
                                     
             atoms_shifted.wrap()
             
@@ -1235,7 +1240,6 @@ class AFLOW:
             if len(position_set_list) != len(equation_set_list):
                 raise inconsistentWyckoffException('Number of equivalent positions detected in Atoms object did not match the number of equivalent equations given')
 
-            space_group_number = get_space_group_number_from_prototype(prototype_label)
             free_params_dict = {}
             position_set_matched_list = [False]*len(position_set_list)
             

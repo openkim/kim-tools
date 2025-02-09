@@ -4,7 +4,8 @@ from kim_tools import AFLOW, split_parameter_array,CRYSTAL_GENOME_INITIAL_STRUCT
     get_crystal_genome_designation_from_atoms, get_wyckoff_lists_from_prototype, \
     frac_pos_match_allow_permute_wrap, frac_pos_match_allow_wrap, get_real_to_virtual_species_map, \
     shuffle_atoms, get_pearson_symbol_from_prototype, get_centering_from_prototype, \
-    solve_for_cell_params
+    solve_for_cell_params, minimize_wrapper,incorrectSpaceGroupException
+from ase.calculators.kim.kim import KIM
 from random import random
 import json
 from copy import copy
@@ -104,7 +105,6 @@ def test_solve_for_internal_params():
                 equation_sets = equation_sets_cache[prototype_label]
             print(prototype_label)
             print(aflow.solve_for_prototype_params(atoms,equation_sets,prototype_label))
-            
 
 def test_get_prototype(
     materials=[CRYSTAL_GENOME_INITIAL_STRUCTURES[test_case] for test_case in TEST_CASES]
@@ -157,31 +157,32 @@ def test_get_prototype(
             
             atoms.rotate((random(),random(),random()),(random(),random(),random()),rotate_cell=True)
             
-            atoms.translate((random(),random(),random()))
+            atoms.translate((random()*1000,random()*1000,random()*1000))
+            
             atoms.wrap()
-                
+            
+            atoms.calc = KIM('LJ_ElliottAkerson_2015_Universal__MO_959249795837_003')
+            minimize_wrapper(atoms,fix_symmetry=True,variable_cell=True,steps=2,opt_kwargs={"maxstep":0.05})
+            
+            
+            
+            crystal_did_not_rotate = False
             try:
                 redetected_parameter_values = aflow.solve_for_prototype_params(atoms,equation_sets,prototype_label)
-            
                 if redetected_parameter_values is None:                
                     print(f'Was not able to solve for parameters of {prototype_label}')
-                    filename = 'output/' + prototype_label + '.POSCAR'
-                    print(f'Dumping atoms to {filename}')
-                    atoms.write(filename,format='vasp',sort=True)
-                    continue
-            
-                crystal_did_not_rotate = aflow.confirm_unrotated_prototype_designation(
-                    atoms,
-                    species,
-                    prototype_label,
-                    redetected_parameter_values
-                )
-            except AFLOW.tooSymmetricException as e:
+                else:
+                    crystal_did_not_rotate = aflow.confirm_unrotated_prototype_designation(
+                        atoms,
+                        species,
+                        prototype_label,
+                        redetected_parameter_values
+                    )
+            except (AFLOW.tooSymmetricException,AFLOW.failedToMatchException,incorrectSpaceGroupException) as e:
                 print(e)
-                continue
             
             if not crystal_did_not_rotate:
-                print(f'Failed to confirm unrotated prototype designation for {prototype_label}')
+                print(f'Failed to solve for parameters or confirm unrotated prototype designation for {prototype_label}')
                 match_counts_by_pearson[pearson]['nonmatch'] += 1
                 match_counts_by_spacegroup[spacegroup]['nonmatch'] += 1
                 filename = 'output/' + prototype_label + '.POSCAR'
