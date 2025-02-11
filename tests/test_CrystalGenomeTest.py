@@ -30,8 +30,8 @@ class TestTestDriver(CrystalGenomeTestDriver):
 
 
 def test_cg():        
-    test = TestTestDriver("LJ_Shifted_Bernardes_1958LowCutoff_Ar__MO_720819638419_004")
-    list_of_crystal_descriptions = query_crystal_genome_structures("LJ_Shifted_Bernardes_1958LowCutoff_Ar__MO_720819638419_004",["Ar"],"A_hP2_194_c")
+    test = TestTestDriver("LJ_ElliottAkerson_2015_Universal__MO_959249795837_003")
+    list_of_crystal_descriptions = query_crystal_genome_structures("LJ_ElliottAkerson_2015_Universal__MO_959249795837_003",["Ar"],"A_hP2_194_c")
     test(**list_of_crystal_descriptions[0])    
     assert len(test.property_instances) == 2
     test.write_property_instances_to_file()

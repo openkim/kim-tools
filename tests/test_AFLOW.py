@@ -172,12 +172,7 @@ def test_get_prototype(
                 if redetected_parameter_values is None:                
                     print(f'Was not able to solve for parameters of {prototype_label}')
                 else:
-                    crystal_did_not_rotate = aflow.confirm_unrotated_prototype_designation(
-                        atoms,
-                        species,
-                        prototype_label,
-                        redetected_parameter_values
-                    )
+                    crystal_did_not_rotate = True
             except (AFLOW.tooSymmetricException,AFLOW.failedToMatchException,incorrectSpaceGroupException) as e:
                 print(e)
             

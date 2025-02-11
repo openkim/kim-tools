@@ -29,7 +29,7 @@ jobs:
       - name: Install KIM model
         shell: bash -el {0}
         run: |
-          kim-api-collections-management install user LJ_Shifted_Bernardes_1958LowCutoff_Ar__MO_720819638419_004
+          kim-api-collections-management install user LJ_ElliottAkerson_2015_Universal__MO_959249795837_003
 
       - name: Install
         shell: bash -el {0}
