@@ -54,14 +54,6 @@ __all__ = [
     "AFLOW"
 ]
 
-CENTROSYMMETRIC_SPACE_GROUPS_WITH_MORE_THAN_ONE_SETTING = (
-    48 , 50 , 59 , 68 , 70 ,
-    85 , 86 , 88 , 125 , 126 ,
-    129 , 130 , 133 , 134 , 137 ,
-   	138 , 141 , 142 , 201 , 203 ,
-    222 , 224 , 227 , 228)
-
-
 class incorrectNumAtomsException(Exception):
     """
     Raised when the number of atoms in the atoms object or in the WYCCAR returned by aflow --sgdata does not match the number of atoms in the Pearson symbol of the prototype label
@@ -690,7 +682,7 @@ class AFLOW:
             else:
                 raise RuntimeError("ERROR: unexpected error from aflow command %s , error code = %d\nstderr: %s" % (cmd_str, exc.returncode, exc.stderr))
     
-    def write_poscar(self, prototype_label: str, output_file: Union[str,None]=None, free_params: Union[List[float],None]=None, verbose: bool=True):
+    def write_poscar_from_prototype(self, prototype_label: str, output_file: Union[str,None]=None, free_params: Union[List[float],None]=None, verbose: bool=True):
         """
         Run the ``aflow --proto`` command to write a POSCAR coordinate file corresponding to the provided AFLOW prototype designation
 
@@ -879,84 +871,6 @@ class AFLOW:
         return write_tmp_poscar_from_atoms_and_run_function(
             atoms,self.get_library_prototype_label_and_shortname_from_file,prim=prim,shortnames=shortnames)
 
-    def get_sgdata_from_file(self, coord_file: PathLike, setting_aflow: Optional[Union[int,str]] = 'aflow') -> Dict:
-        """
-        Get the json output from aflow --sgdata
-        
-        Args:
-            coord_file:
-                File to run --sgdata on
-            setting_aflow:
-                setting to pass to --sgdata command
-            debug_file:
-                Do save an intermediate file to this path.
-        Returns:
-            JSON dict containing space group information of the structure
-        """
-        
-        if setting_aflow is not None:
-            setting_argument = " --setting=" + str(setting_aflow)
-        else:
-            setting_argument = ""
-            
-        command = f" --sgdata --print=json {setting_argument} < {coord_file}"
-            
-        output = self.aflow_command(command)
-        res_json = json.loads(output)
-        
-        return res_json
-    
-    def get_sgdata_from_atoms(self, atoms: Atoms, setting_aflow: Optional[Union[int,str]] = 'aflow') -> Dict:
-        """
-        Save atoms to file and get the json output from aflow --sgdata
-        
-        Args:
-            atoms:
-            
-            setting_aflow:
-                setting to pass to --sgdata command
-            debug_file:
-                Do save an intermediate file to this path.
-        Returns:
-            JSON dict containing space group information of the structure        
-        """
-        return write_tmp_poscar_from_atoms_and_run_function(atoms,self.get_sgdata_from_file,setting_aflow)
-    
-    def get_spacegroup_from_file(self, input_file: str) -> List[Dict]:
-        """
-        run the ``aflow --spacegroup`` command to get space group operations               
-        """
-        return json.loads(self.aflow_command(f'--spacegroup --quiet --print=json --screen_only < {input_file}'))['sgroup']
-    
-    def get_spacegroup_from_atoms(self, atoms: Atoms) -> List[Dict]:
-        """
-        run the ``aflow --spacegroup`` command to get space group operations               
-        """
-        return write_tmp_poscar_from_atoms_and_run_function(atoms,self.get_spacegroup_from_file)
-    
-    def get_unique_internal_cartesian_translations_from_atoms(self, atoms: Atoms) -> List[List[float]]:
-        """
-        Get all unique internal translations in the atoms' spacegroup in Cartesian coordinates
-        """   
-        spacegroup = self.get_spacegroup_from_atoms(atoms)
-        internal_fractional_translations = []
-        internal_cartesian_translations = []
-        shifts = [-1,0,1]
-        for op in spacegroup:
-            accounted_for = False
-            for existing_translation in internal_fractional_translations:
-                for shift_list in [(x,y,z) for x in shifts for y in shifts for z in shifts]:
-                    if np.allclose(np.asarray(op['ftau'])+shift_list,existing_translation,atol=1e-4):
-                        accounted_for = True
-                        break
-                if accounted_for:
-                    break
-            if not accounted_for:
-                internal_fractional_translations.append(op['ftau'])
-                internal_cartesian_translations.append(op['ctau'])
-                
-        return internal_cartesian_translations
-    
     def get_pointgroup_crystal_from_file(self, input_file: str, verbose: bool=False) -> List[Dict]:
         """
         Run the ``aflow --pointgroup_crystal`` command to get the point group operations of the provided coordinate file
@@ -1060,7 +974,7 @@ class AFLOW:
         assert primitive_cell, 'Can only generate primitive cells for now'
         
         with NamedTemporaryFile(mode='w+') as f, (NamedTemporaryFile(mode='w+') if proto_file is None else open(proto_file,mode='w+')) as f_with_species:            
-            self.write_poscar(prototype_label,f.name,parameter_values,verbose=verbose)
+            self.write_poscar_from_prototype(prototype_label,f.name,parameter_values,verbose=verbose)
             f.seek(0)
             # Add line containing species
             for i,line in enumerate(f):
