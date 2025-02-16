@@ -1142,7 +1142,7 @@ class AFLOW:
 
         return equation_sets        
     
-    def solve_for_params_of_known_prototype(self, atoms: Atoms, equation_set_list: List[EquivalentEqnSet], prototype_label: str, max_resid: float = 1e-5) -> Optional[List]:
+    def solve_for_params_of_known_prototype(self, atoms: Atoms, prototype_label: str, max_resid: float = 1e-5) -> Optional[List]:
         """
         Given an Atoms object that is a primitive cell of its Bravais lattice as defined in doi.org/10.1016/j.commatsci.2017.01.017, and its presumed prototype label,
         solves for the free parameters of the prototype label. Returns None if the solution fails (likely indicating that the Atoms object provided does not conform
@@ -1154,6 +1154,9 @@ class AFLOW:
         # solve for cell parameters
         cell_params = solve_for_cell_params(atoms.cell.cellpar(),prototype_label)
         species = sorted(list(set(atoms.get_chemical_symbols())))
+        
+        # get equation sets
+        equation_set_list = self.get_equation_sets_from_prototype(prototype_label)
         
         # First, redetect the prototype label. We can't use this as-is because it may be rotated by an operation that's within the normalizer but not
         # in the space group itself        
@@ -1175,28 +1178,25 @@ class AFLOW:
         # the origin shift is the last operation to happen, so it will be in the "atoms" frame
         # This function gets the transformation from its second argument to its first
         # The origin shift is Cartesian if the POSCARs are Cartesian, which they are when made from Atoms
-        _,_,origin_shift,_ = self.get_basistransformation_rotation_originshift_atom_map_from_atoms(atoms,atoms_rebuilt)
+        _,_,neg_initial_origin_shift_cart,_ = self.get_basistransformation_rotation_originshift_atom_map_from_atoms(atoms,atoms_rebuilt)
         
-        if origin_shift is None:
+        if neg_initial_origin_shift_cart is None:
             raise self.failedToMatchException(f'AFLOW was unable to match, are {prototype_label_detected} and {prototype_label} the same label?')
         
-        logger.info(f'Initial cartesian shift: {-origin_shift}')
+        initial_origin_shift_frac = (-neg_initial_origin_shift_cart)@np.linalg.inv(atoms.cell)
         
+        logger.info(f'Initial shift (to SOME standard origin, not necessarily the desired one): {-neg_initial_origin_shift_cart} (Cartesian), {initial_origin_shift_frac} (fractional)')
+                    
+        position_set_list = group_positions_by_wyckoff(atoms,prototype_label)
+        real_to_virtual_species_map = get_real_to_virtual_species_map(atoms)
+        
+        if len(position_set_list) != len(equation_set_list):
+            raise inconsistentWyckoffException('Number of equivalent positions detected in Atoms object did not match the number of equivalent equations given')
+                
         space_group_number = get_space_group_number_from_prototype(prototype_label)
-        
         for prim_shift in POSSIBLE_PRIMITIVE_SHIFTS[space_group_number]:
-            atoms_shifted = atoms.copy()
-            atoms_shifted.translate(-origin_shift)
-            atoms_shifted.translate(prim_shift@atoms_shifted.cell)
-            logger.info(f'Shifting atoms by internal fractional translation {prim_shift}')
-                                    
-            atoms_shifted.wrap()
+            logger.info(f'Additionally shifting atoms by internal fractional translation {prim_shift}')
             
-            position_set_list = group_positions_by_wyckoff(atoms_shifted,prototype_label)
-            real_to_virtual_species_map = get_real_to_virtual_species_map(atoms_shifted)
-            if len(position_set_list) != len(equation_set_list):
-                raise inconsistentWyckoffException('Number of equivalent positions detected in Atoms object did not match the number of equivalent equations given')
-
             free_params_dict = {}
             position_set_matched_list = [False]*len(position_set_list)
             
@@ -1213,12 +1213,14 @@ class AFLOW:
                         continue
                     for coeff_matrix, const_terms in zip(equation_set.coeff_matrix_list,equation_set.const_terms_list):
                         for frac_position in position_set.frac_position_list:
+                            # Here we use column coordinate vectors                            
+                            frac_position_shifted = (frac_position+np.asarray(prim_shift).reshape(3,1)+initial_origin_shift_frac.reshape(3,1)) % 1
                             possible_shifts = (-1,0,1)
                             # explore all possible shifts around zero to bring back in cell. 
                             # TODO: if this is too slow (27 possibilities), write an algorithm to determine which shifts are possible
                             for shift_list in [(x,y,z) for x in possible_shifts for y in possible_shifts for z in possible_shifts]:
                                 shift_array = np.asarray(shift_list).reshape(3,1)
-                                candidate_internal_param_values,resid,_,_ = np.linalg.lstsq(coeff_matrix,frac_position-const_terms-shift_array)
+                                candidate_internal_param_values,resid,_,_ = np.linalg.lstsq(coeff_matrix,frac_position_shifted-const_terms-shift_array)
                                 if len(resid) == 0 or np.max(resid) < max_resid:
                                     assert len(candidate_internal_param_values) == len(equation_set.param_names)
                                     for param_name,param_value in zip(equation_set.param_names,candidate_internal_param_values):

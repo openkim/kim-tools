@@ -93,7 +93,6 @@ def test_get_equations_from_prototype():
 
 def test_solve_for_internal_params():
     aflow = AFLOW()
-    equation_sets_cache = {} # for large-scale testing, helpful to check that same prototype with different parameters gives the same results
     for material in [CRYSTAL_GENOME_INITIAL_STRUCTURES[test_case] for test_case in TEST_CASES]:
         species = material["species"]
         prototype_label = material["prototype_label"]
@@ -103,20 +102,14 @@ def test_solve_for_internal_params():
         for parameter_set in material["parameter_sets"]:
             parameter_values = parameter_set["parameter_values"]            
             atoms = aflow.build_atoms_from_prototype(species,prototype_label,parameter_values)
-            if prototype_label not in equation_sets_cache:
-                equation_sets = aflow.get_equation_sets_from_prototype(prototype_label)
-                equation_sets_cache[prototype_label] = equation_sets
-            else:
-                equation_sets = equation_sets_cache[prototype_label]
             print(prototype_label)
-            print(aflow.solve_for_params_of_known_prototype(atoms,equation_sets,prototype_label))
+            print(aflow.solve_for_params_of_known_prototype(atoms,prototype_label))
 
 def test_get_prototype(
     materials=[CRYSTAL_GENOME_INITIAL_STRUCTURES[test_case] for test_case in TEST_CASES]
     #materials=CRYSTAL_GENOME_INITIAL_STRUCTURES
 ):
     aflow = AFLOW(np=19)
-    equation_sets_cache = {} # for large-scale testing, helpful to check that same prototype with different parameters gives the same results
     match_counts_by_pearson = {}
     match_counts_by_spacegroup = {}
     INIT_COUNTS = {'match':0,'nonmatch':0}
@@ -150,13 +143,7 @@ def test_get_prototype(
                     cg_des['prototype_label'],
                     cg_des['parameter_values_angstrom']
                         
-            """    
-                    
-            if prototype_label not in equation_sets_cache:
-                equation_sets = aflow.get_equation_sets_from_prototype(prototype_label)
-                equation_sets_cache[prototype_label] = equation_sets
-            else:
-                equation_sets = equation_sets_cache[prototype_label]
+            """
                 
             atoms = shuffle_atoms(atoms)
             
@@ -173,7 +160,7 @@ def test_get_prototype(
             
             crystal_did_not_rotate = False
             try:
-                redetected_parameter_values = aflow.solve_for_params_of_known_prototype(atoms,equation_sets,prototype_label)
+                redetected_parameter_values = aflow.solve_for_params_of_known_prototype(atoms,prototype_label)
                 if redetected_parameter_values is None:                
                     print(f'Was not able to solve for parameters of {prototype_label}')
                 else:
@@ -188,6 +175,7 @@ def test_get_prototype(
                 filename = 'output/' + prototype_label + '.POSCAR'
                 print(f'Dumping atoms to {filename}')
                 atoms.write(filename,format='vasp',sort=True)
+                assert False
             else:
                 print(f'Successfully confirmed unrotated prototype designation for {prototype_label}')
                 match_counts_by_pearson[pearson]['match'] += 1
@@ -198,4 +186,4 @@ def test_get_prototype(
             json.dump(match_counts_by_spacegroup,f)
 
 if __name__ == '__main__':
-    test_get_param_names_from_prototype()
+    test_get_prototype()
