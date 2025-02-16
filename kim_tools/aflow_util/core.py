@@ -911,7 +911,7 @@ class AFLOW:
             compare = self._compare_poscars(f1.name,f2.name)
         return compare
 
-    def get_basistransformation_rotation_originshift_from_atoms(self, atoms1: Atoms, atoms2: Atoms) -> \
+    def get_basistransformation_rotation_originshift_atom_map_from_atoms(self, atoms1: Atoms, atoms2: Atoms) -> \
         Tuple[Optional[ArrayLike],Optional[ArrayLike],Optional[ArrayLike]]:
         """
         Get operations to transform atoms2 to atoms1
@@ -924,30 +924,13 @@ class AFLOW:
             return (
                 np.asarray(comparison_result[0]['structures_duplicate'][0]['basis_transformation']),
                 np.asarray(comparison_result[0]['structures_duplicate'][0]['rotation']),
-                np.asarray(comparison_result[0]['structures_duplicate'][0]['origin_shift'])
+                np.asarray(comparison_result[0]['structures_duplicate'][0]['origin_shift']),
+                comparison_result[0]['structures_duplicate'][0]['atom_map']
             )
         else:            
             logger.info("AFLOW failed to match the crystals")
-            return None,None,None
+            return None,None,None,None
         
-    def get_basistransformation_rotation_originshift_from_poscars(self, poscar1: str, poscar2: str) -> \
-        Tuple[Optional[ArrayLike],Optional[ArrayLike],Optional[ArrayLike]]:
-        """
-        Get operations to transform poscar2 to poscar1
-
-        Returns:
-            Tuple of arrays in the order: basis transformation, rotation, origin shift
-        """        
-        comparison_result = self._compare_poscars(poscar1,poscar2)
-        if 'structures_duplicate' in comparison_result[0] and comparison_result[0]['structures_duplicate'] != []:
-            return (
-                np.asarray(comparison_result[0]['structures_duplicate'][0]['basis_transformation']),
-                np.asarray(comparison_result[0]['structures_duplicate'][0]['rotation']),
-                np.asarray(comparison_result[0]['structures_duplicate'][0]['origin_shift'])
-            )
-        else:
-            return None,None,None
-    
     def build_atoms_from_prototype(
             self, species: List[str], prototype_label: str, parameter_values: List[float], primitive_cell: bool = True, verbose: bool=True, proto_file:Optional[str]=None
             ) -> Atoms:
@@ -1031,6 +1014,7 @@ class AFLOW:
             const_terms_list = []
             # the next n positions should be equivalent corresponding to this Wyckoff position
             multiplicity_per_primitive_cell = WYCKOFF_MULTIPLICITIES[space_group_number][wyckoff_letter]/get_centering_divisor_from_prototype(prototype_label)
+            # check that multiplicity is an integer
             assert np.isclose(multiplicity_per_primitive_cell,round(multiplicity_per_primitive_cell))
             for _ in range(round(multiplicity_per_primitive_cell)):
                 line_split = next(coord_iter).split()
@@ -1102,7 +1086,7 @@ class AFLOW:
         """
         Match all positions in ``atoms`` to an equation in ``equation_set_list`` to solve for the prototype parameters
         
-        TODO: make nominal_prototype_label optional?
+        TODO: make prototype_label optional?
         """
         # solve for cell parameters
         cell_params = solve_for_cell_params(atoms.cell.cellpar(),prototype_label)
@@ -1124,20 +1108,16 @@ class AFLOW:
         if not prototype_labels_are_equivalent(prototype_label,prototype_label_detected):
             logger.info(f'Redetected prototype label {prototype_label_detected} does not match nominal {prototype_label}, probably due to rounding.')
         
-        # I believe we want the negative of the origin shift from atoms_rebuilt to atoms, because
+        # We want the negative of the origin shift from atoms_rebuilt to atoms, because
         # the origin shift is the last operation to happen, so it will be in the "atoms" frame
         # This function gets the transformation from its second argument to its first
         # The origin shift is Cartesian if the POSCARs are Cartesian, which they are when made from Atoms
-        _,_,origin_shift = self.get_basistransformation_rotation_originshift_from_atoms(atoms,atoms_rebuilt)
+        _,_,origin_shift,_ = self.get_basistransformation_rotation_originshift_atom_map_from_atoms(atoms,atoms_rebuilt)
         
         if origin_shift is None:
             raise self.failedToMatchException(f'AFLOW was unable to match, are {prototype_label_detected} and {prototype_label} the same label?')
         
-        # Even though we are going to re-initialize atoms_shifted in every loop below, we still need to shift them
-        # to a high-symmetry origin first
-        atoms_shifted = atoms.copy()
-        atoms_shifted.translate(-origin_shift)
-        logger.info(f'Shifting atoms by an initial cartesian shift {-origin_shift}')
+        logger.info(f'Initial cartesian shift: {-origin_shift}')
         
         space_group_number = get_space_group_number_from_prototype(prototype_label)
         
@@ -1253,7 +1233,7 @@ class AFLOW:
         
         # the rotations below are Cartesian.
         
-        _,cart_rot,_ = self.get_basistransformation_rotation_originshift_from_atoms(test_atoms,reference_atoms_copy)
+        _,cart_rot,_,_ = self.get_basistransformation_rotation_originshift_atom_map_from_atoms(test_atoms,reference_atoms_copy)
         
         if cart_rot is None:
             return False
