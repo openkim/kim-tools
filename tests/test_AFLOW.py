@@ -12,6 +12,15 @@ from copy import copy
 
 TEST_CASES = [577,365,1734,1199,1478,166,1210,1362,920,212,646,22]
 
+def test_get_wyckoff_lists_from_prototype():
+    assert get_wyckoff_lists_from_prototype('A_hP68_194_ef2h2kl') == ['efhhkkl']
+    assert get_wyckoff_lists_from_prototype('AB_mC48_8_12a_12a') == ['aaaaaaaaaaaa','aaaaaaaaaaaa']
+    
+def test_get_param_names_from_prototype():
+    aflow = AFLOW()
+    assert(aflow.get_param_names_from_prototype('A_cF4_225_a') == ['a'])
+    assert(aflow.get_param_names_from_prototype('A_cF240_202_h2i') == ['a','y1','z1','x2','y2','z2','x3','y3','z3'])
+
 def test_get_equations_from_prototype():
     aflow = AFLOW()
     equation_sets_cache = {} # for large-scale testing, helpful to check that same prototype with different parameters gives the same results
@@ -28,7 +37,7 @@ def test_get_equations_from_prototype():
             parameter_values = parameter_set["parameter_values"]            
             atoms = aflow.build_atoms_from_prototype(species,prototype_label,parameter_values)
             if prototype_label not in equation_sets_cache:
-                equation_sets = aflow.get_equation_sets_from_prototype(prototype_label,parameter_values)
+                equation_sets = aflow.get_equation_sets_from_prototype(prototype_label)
                 equation_sets_cache[prototype_label] = equation_sets
             else:
                 equation_sets = equation_sets_cache[prototype_label]
@@ -82,10 +91,6 @@ def test_get_equations_from_prototype():
                         
             print(f'Successfully checked get_equations_from_prototype for label {prototype_label}')            
 
-def test_get_wyckoff_lists_from_prototype():
-    assert get_wyckoff_lists_from_prototype('A_hP68_194_ef2h2kl') == ['efhhkkl']
-    assert get_wyckoff_lists_from_prototype('AB_mC48_8_12a_12a') == ['aaaaaaaaaaaa','aaaaaaaaaaaa']
-
 def test_solve_for_internal_params():
     aflow = AFLOW()
     equation_sets_cache = {} # for large-scale testing, helpful to check that same prototype with different parameters gives the same results
@@ -99,12 +104,12 @@ def test_solve_for_internal_params():
             parameter_values = parameter_set["parameter_values"]            
             atoms = aflow.build_atoms_from_prototype(species,prototype_label,parameter_values)
             if prototype_label not in equation_sets_cache:
-                equation_sets = aflow.get_equation_sets_from_prototype(prototype_label,parameter_values)
+                equation_sets = aflow.get_equation_sets_from_prototype(prototype_label)
                 equation_sets_cache[prototype_label] = equation_sets
             else:
                 equation_sets = equation_sets_cache[prototype_label]
             print(prototype_label)
-            print(aflow.solve_for_prototype_params(atoms,equation_sets,prototype_label))
+            print(aflow.solve_for_params_of_known_prototype(atoms,equation_sets,prototype_label))
 
 def test_get_prototype(
     materials=[CRYSTAL_GENOME_INITIAL_STRUCTURES[test_case] for test_case in TEST_CASES]
@@ -148,7 +153,7 @@ def test_get_prototype(
             """    
                     
             if prototype_label not in equation_sets_cache:
-                equation_sets = aflow.get_equation_sets_from_prototype(prototype_label,parameter_values)
+                equation_sets = aflow.get_equation_sets_from_prototype(prototype_label)
                 equation_sets_cache[prototype_label] = equation_sets
             else:
                 equation_sets = equation_sets_cache[prototype_label]
@@ -168,7 +173,7 @@ def test_get_prototype(
             
             crystal_did_not_rotate = False
             try:
-                redetected_parameter_values = aflow.solve_for_prototype_params(atoms,equation_sets,prototype_label)
+                redetected_parameter_values = aflow.solve_for_params_of_known_prototype(atoms,equation_sets,prototype_label)
                 if redetected_parameter_values is None:                
                     print(f'Was not able to solve for parameters of {prototype_label}')
                 else:
@@ -193,4 +198,4 @@ def test_get_prototype(
             json.dump(match_counts_by_spacegroup,f)
 
 if __name__ == '__main__':
-    test_get_prototype()
+    test_get_param_names_from_prototype()

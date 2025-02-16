@@ -1,6 +1,8 @@
 """Tools for working with crystal prototypes using the AFLOW command line tool"""
 import numpy as np
+import re
 from numpy.typing import ArrayLike
+from random import random
 import json
 import subprocess
 import sys
@@ -20,7 +22,7 @@ from ..symmetry_util import are_in_same_wyckoff_set, space_group_numbers_are_ena
     WYCK_POS_XFORM_UNDER_NORMALIZER, WYCKOFF_MULTIPLICITIES, CENTERING_DIVISORS, C_CENTERED_ORTHORHOMBIC_GROUPS, A_CENTERED_ORTHORHOMBIC_GROUPS, \
     POSSIBLE_PRIMITIVE_SHIFTS
 from operator import attrgetter
-from math import cos, acos, sqrt, radians, degrees
+from math import cos, acos, sin, sqrt, radians, degrees
 import logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(filename='kim-tools.log',level=logging.INFO,force=True)
@@ -680,9 +682,10 @@ class AFLOW:
                 logger.warning(warn_str)
                 raise self.tooSymmetricException(warn_str)
             else:
-                raise RuntimeError("ERROR: unexpected error from aflow command %s , error code = %d\nstderr: %s" % (cmd_str, exc.returncode, exc.stderr))
+                raise exc
     
-    def write_poscar_from_prototype(self, prototype_label: str, output_file: Union[str,None]=None, free_params: Union[List[float],None]=None, verbose: bool=True):
+    def write_poscar_from_prototype(self, prototype_label: str, output_file: Union[str,None]=None, free_params: Union[List[float],None]=None, verbose: bool=True, addtl_args: str = "") \
+        -> Optional[str]:
         """
         Run the ``aflow --proto`` command to write a POSCAR coordinate file corresponding to the provided AFLOW prototype designation
 
@@ -691,10 +694,18 @@ class AFLOW:
             output_file: Name of the output file. If not provided, the output is written to stdout
             free_params: The free parameters of the AFLOW prototype designation. If an enumeration suffix is not included in `prototype_label` and the prototype has free parameters besides `a`, this must be provided
             verbose: Whether to echo command to log file
+            addtl_args: additional arguments to pass, e.g. "--equations_only" to get equations
+        
+        Returns:
+            The output of the command or None if an `output_file` was given
+        
         """
         command = " --proto=" + prototype_label
         if free_params:
             command += " --params=" + ",".join([str(param) for param in free_params])
+        
+        command += (" " + addtl_args)
+        
         if output_file is not None:
             command += " > " + self.aflow_work_dir + output_file
         return self.aflow_command([command], verbose=verbose)
@@ -912,12 +923,13 @@ class AFLOW:
         return compare
 
     def get_basistransformation_rotation_originshift_atom_map_from_atoms(self, atoms1: Atoms, atoms2: Atoms) -> \
-        Tuple[Optional[ArrayLike],Optional[ArrayLike],Optional[ArrayLike]]:
+        Tuple[Optional[ArrayLike],Optional[ArrayLike],Optional[ArrayLike],Optional[List[int]]]:
         """
         Get operations to transform atoms2 to atoms1
 
         Returns:
-            Tuple of arrays in the order: basis transformation, rotation, origin shift
+            Tuple of arrays in the order: basis transformation, rotation, origin shift, atom_map
+            atom_map[index_in_structure_1] = index_in_structure_2
         """
         comparison_result = self._compare_Atoms(atoms1,atoms2)
         if 'structures_duplicate' in comparison_result[0] and comparison_result[0]['structures_duplicate'] != []:
@@ -973,7 +985,22 @@ class AFLOW:
         
         return atoms
     
-    def get_equation_sets_from_prototype(self, prototype_label: str, parameter_values: List[float]) -> \
+    def get_param_names_from_prototype(self, prototype_label: str) -> List[str]:
+        """
+        Get the parameter names by parsing the error message from AFLOW
+        """
+        try:
+            self.write_poscar_from_prototype(prototype_label,free_params=[1.])
+            # if no exception, it's a cubic crystal with no internal free params
+            return ['a']
+        except subprocess.CalledProcessError as exc:
+            re_match = re.search('parameter_list=(.*) - \[dir', str(exc.stderr))
+            if re_match is not None:
+                return re_match.groups()[0].split(',')
+            # if we got here, the exception didn't have the format we expected, re-raise
+            raise exc
+    
+    def get_equation_sets_from_prototype(self, prototype_label: str) -> \
         List[EquivalentEqnSet]:
         """
         Get the symbolic equations for the fractional positions in the unit cell of an AFLOW prototype
@@ -981,8 +1008,6 @@ class AFLOW:
         Args:
             prototype_label: 
                 An AFLOW prototype label, without an enumeration suffix, without specified atomic species
-            parameter_values: 
-                The free parameters of the AFLOW prototype designation
                 
         Returns:
             List of EquivalentEqnSet objects
@@ -994,7 +1019,42 @@ class AFLOW:
                 - coeff_matrix_list: A list of 3 x n matrices of coefficients for the free parameters.
                 - const_terms_list: A list of 3 x 1 columns of constant terms in the coordinates.
         """
-        equation_poscar = self.aflow_command(f'--proto={prototype_label} --params={",".join([str(param) for param in parameter_values])} --equations_only')
+        param_names = self.get_param_names_from_prototype(prototype_label)        
+        MAX_ATTEMPTS = 20
+        ANGLE_NAMES = ['alpha','beta','gamma']
+        for i in range(MAX_ATTEMPTS):
+            param_values = []
+            triclinic = False
+            if all([angle_name in param_names for angle_name in ANGLE_NAMES]):
+                triclinic = True
+                beta = random()*180
+                gamma = random()*180
+                beta_rad = radians(beta)
+                gamma_rad = radians(gamma)
+                max_cosalpha = abs(sin(beta_rad)*sin(gamma_rad))+cos(beta_rad)*cos(gamma_rad)
+                min_cosalpha = -abs(sin(beta_rad)*sin(gamma_rad))+cos(beta_rad)*cos(gamma_rad)
+                cosalpha = min_cosalpha + random()*(max_cosalpha-min_cosalpha)
+                alpha = degrees(acos(cosalpha))
+                angles_dict = {'alpha':alpha,'beta':beta,'gamma':gamma}
+                
+            for pname in param_names:
+                if pname in ANGLE_NAMES:
+                    if triclinic:
+                        param_values.append(angles_dict[pname])
+                    else:
+                        param_values.append(180.*random())
+                else:
+                    param_values.append(random())
+                    
+            try:
+                equation_poscar = self.write_poscar_from_prototype(prototype_label,free_params=param_values,addtl_args='--equations_only')
+                break
+            except subprocess.CalledProcessError:
+                if i == MAX_ATTEMPTS-1:
+                    raise RuntimeError(
+                        'Random parameters failed to pass AFLOW checks 20 times in a row')
+                else:
+                    pass            
         
         # get a string with one character per Wyckoff position (with possible repeated letters for positions with free params)
         wyckoff_lists = get_wyckoff_lists_from_prototype(prototype_label)
@@ -1082,11 +1142,14 @@ class AFLOW:
 
         return equation_sets        
     
-    def solve_for_prototype_params(self, atoms: Atoms, equation_set_list: List[EquivalentEqnSet], prototype_label: str, max_resid: float = 1e-5) -> Optional[List]:
+    def solve_for_params_of_known_prototype(self, atoms: Atoms, equation_set_list: List[EquivalentEqnSet], prototype_label: str, max_resid: float = 1e-5) -> Optional[List]:
         """
-        Match all positions in ``atoms`` to an equation in ``equation_set_list`` to solve for the prototype parameters
+        Given an Atoms object that is a primitive cell of its Bravais lattice as defined in doi.org/10.1016/j.commatsci.2017.01.017, and its presumed prototype label,
+        solves for the free parameters of the prototype label. Returns None if the solution fails (likely indicating that the Atoms object provided does not conform
+        to the provided prototype label.) The Atoms object may be rotated, translated, and permuted, but the identity of the lattice vectors must be unchanged w.r.t.
+        the crystallographic prototype. In other words, there must exist a permutation and translation of the fractional coordinates that enables them to match the
+        equations defined by the prototype label.
         
-        TODO: make prototype_label optional?
         """
         # solve for cell parameters
         cell_params = solve_for_cell_params(atoms.cell.cellpar(),prototype_label)
