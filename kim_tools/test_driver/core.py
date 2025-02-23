@@ -68,7 +68,7 @@ __all__ = [
     "KIMTestDriver",
     "get_crystal_genome_designation_from_atoms",
     "verify_unchanged_symmetry",
-    "CrystalGenomeTestDriver",
+    "SingleCrystalTestDriver",
     "query_crystal_genome_structures",
     "minimize_wrapper",
 ]    
@@ -81,13 +81,18 @@ PROP_SEARCH_PATHS_INFO=(\
 '- $PWD/local-props/**/\n'
 '- $PWD/local_props/**/')
 
-def minimize_wrapper(supercell:Atoms, fmax:float=1e-5, steps:int=10000, \
-                         variable_cell:bool=True, logfile:Optional[Union[str,IO]]='kim-tools.log',
-                         algorithm: Optimizer = LBFGSLineSearch, 
-                         CellFilter: UnitCellFilter = ExpCellFilter,
-                         fix_symmetry: bool = False,
-                         opt_kwargs: Dict = {},
-                         flt_kwargs: Dict = {}) -> None:
+def minimize_wrapper(
+        atoms:Atoms,
+        fmax:float=FMAX_INITIAL,
+        steps:int=MAXSTEPS_INITIAL,
+        variable_cell:bool=True,
+        logfile:Optional[Union[str,IO]]='kim-tools.log',
+        algorithm: Optimizer = LBFGSLineSearch, 
+        CellFilter: UnitCellFilter = ExpCellFilter,
+        fix_symmetry: bool = False,
+        opt_kwargs: Dict = {},
+        flt_kwargs: Dict = {}
+    ) -> None:
     """
     Use LBFGSLineSearch (default) to Minimize cell energy with respect to cell shape and
     internal atom positions.
@@ -131,13 +136,13 @@ def minimize_wrapper(supercell:Atoms, fmax:float=1e-5, steps:int=10000, \
             Dictionary of kwargs to pass to filter (e.g. `scalar_pressure`)
     """
     if fix_symmetry:
-        symmetry = FixSymmetry(supercell)
-        supercell.set_constraint(symmetry)
+        symmetry = FixSymmetry(atoms)
+        atoms.set_constraint(symmetry)
     if variable_cell:
-        supercell_wrapped = CellFilter(supercell, **flt_kwargs)
+        supercell_wrapped = CellFilter(atoms, **flt_kwargs)
         opt = algorithm(supercell_wrapped, logfile=logfile, **opt_kwargs)
     else:
-        opt = algorithm(supercell, logfile=logfile, **opt_kwargs)
+        opt = algorithm(atoms, logfile=logfile, **opt_kwargs)
     try:
         converged = opt.run(fmax=fmax, steps=steps)
         iteration_limits_reached = not converged
@@ -156,11 +161,11 @@ def minimize_wrapper(supercell:Atoms, fmax:float=1e-5, steps:int=10000, \
     
     if minimization_stalled or iteration_limits_reached:
         logger.info("Final forces:")
-        logger.info(supercell.get_forces())
+        logger.info(atoms.get_forces())
         logger.info("Final stress:")
-        logger.info(supercell.get_stress())
+        logger.info(atoms.get_stress())
         
-    del supercell.constraints
+    del atoms.constraints
 
 ################################################################################
 class KIMTestDriverError(Exception):
@@ -179,15 +184,15 @@ class KIMTestDriver(ABC):
     to be useful to for most KIM tests
 
     Attributes:
-        kim_model_name: Optional[str]
+        __kim_model_name: Optional[str]
             KIM model name, absent if a non-KIM ASE calculator was provided
-        _calc: Calculator
+        __calc: Calculator
             ASE calculator
-        atoms: Optional[Atoms]
+        __atoms: Optional[Atoms]
             ASE atoms object
-        _property_instances: str
+        __output_property_instances: str
             A string containing the serialized KIM-EDN formatted property instances.
-        _cached_files: Dict
+        __cached_files: Dict
             keys: filenames to be assigned to files, values: serialized strings to dump into those files. To be used for 'file' type properties
     """
 
@@ -200,35 +205,30 @@ class KIMTestDriver(ABC):
                 ASE calculator or KIM model name to use
         """
         if isinstance(model,Calculator):
-            self._calc = model
-            self.kim_model_name = None
+            self.__calc = model
+            self.__kim_model_name = None
         else:
             from ase.calculators.kim.kim import KIM
-            self.kim_model_name = model
-            self._calc = KIM(self.kim_model_name)
-        self._cached_files = {}
-        self._property_instances = "[]"
+            self.__kim_model_name = model
+            self.__calc = KIM(self.__kim_model_name)
+        self.__cached_files = {}
+        self.__output_property_instances = "[]"
 
-    def _setup(self, atoms: Optional[Atoms] = None, optimize: bool = False, **kwargs):
+    def _setup(self, 
+               atoms: Optional[Atoms] = None
+               ):
         """
-        Set up attributes before running calculation
+        Assign the self.atoms object and attach the calculator to it
+        
+        Args:
+            atoms: The atoms object to assign to the current run of the Test Driver
         """
-        self.atoms = atoms
-        if optimize:
-            if self.atoms is None:
-                raise KIMTestDriverError("You have asked to optimize the initial configuration, but did not provide an Atoms object.")        
-            self.atoms.calc = self._calc        
-            print("Performing minimization of initial cell...")
-            print()            
-            minimize_wrapper(self.atoms, fmax=FMAX_INITIAL, steps=MAXSTEPS_INITIAL, variable_cell=True)
-            print()
-            print("Minimized fractional positions:")
-            print(self.atoms.get_scaled_positions())
-            print()
-            print("Minimized cell parameters:")
-            print(self.atoms.cell)
-            print()
-
+        self.__atoms = atoms
+        if self.__atoms is not None:
+            self.__atoms.calc = self.__calc
+        else:
+            warn("Making a Test Driver without an Atoms object. I won't stop you, but you better know what you're doing!")
+            
     @abstractmethod
     def _calculate(self, **kwargs):
         """
@@ -239,32 +239,26 @@ class KIMTestDriver(ABC):
     def write_property_instances_to_file(self,filename="output/results.edn"):
         # Write the property instances to a file at the requested path. Also dumps any cached files to the same directory
         with open(filename, "w") as f:
-            kim_property_dump(self._property_instances, f)
-        for cached_file in self._cached_files:        
+            kim_property_dump(self.__output_property_instances, f)
+        for cached_file in self.__cached_files:        
             with open(os.path.join(os.path.dirname(filename),cached_file),"w") as f:
-                f.write(self._cached_files[cached_file])
+                f.write(self.__cached_files[cached_file])
 
-    def __call__(self, atoms: Optional[Atoms] = None, optimize: bool = False, **kwargs):
+    def __call__(self, atoms: Optional[Atoms] = None, **kwargs):
         """
         Main operation of a Test Driver:
         
             * Run :func:`~KIMTestDriver._setup` (the base class provides a barebones version, derived classes may override)
-            * If :attr:`~KIMTestDriver.atoms` is defined, set its :atttr:`~ase.atoms.Atoms.calc` to :attr:`~KIMTestDriver._calc`
             * Call :func:`~KIMTestDriver._calculate` (implemented by each individual Test Driver)
         """
-        # _setup is likely overridden by 
-        self._setup(atoms, optimize, **kwargs)
-        if self.atoms is not None:
-            self.atoms.calc = self._calc            
+        # _setup is likely overridden by an derived class
+        self._setup(atoms, **kwargs)
         # implemented by each individual Test Driver
         self._calculate(**kwargs)
 
     def _add_property_instance(self, property_name: str, disclaimer: Optional[str]=None):
         """
-        Initialize a new property instance to self.property_instances. It will automatically get the an instance-id
-        equal to the length of self.property_instances after it is added. It assumed that if you are calling this function,
-        you have been only using the simplified property functions in this class and not doing any more advanced editing
-        to self.property_instance using kim_property or any other methods.
+        Initialize a new property instance. 
 
         Args:
             property_name:
@@ -275,7 +269,7 @@ class KIMTestDriver(ABC):
                 "This relaxation did not reach the desired tolerance."
         """
         # DEV NOTE: I like to use the package name when using kim_edn so there's no confusion with json.loads etc.
-        property_instances_deserialized = kim_edn.loads(self._property_instances)
+        property_instances_deserialized = kim_edn.loads(self.__output_property_instances)
         new_instance_index = len(property_instances_deserialized) + 1
         for property_instance in property_instances_deserialized:
             if property_instance["instance-id"] == new_instance_index:
@@ -338,7 +332,7 @@ class KIMTestDriver(ABC):
                     '\nThe property name or id\n%s\nwas not found in kim-properties.\n'%property_name + \
                     'I failed to find an .edn file containing a matching "property-id" key in the following locations:\n' + PROP_SEARCH_PATHS_INFO)
         
-        self._property_instances = kim_property_create(new_instance_index, property_name, self._property_instances, disclaimer)
+        self.__output_property_instances = kim_property_create(new_instance_index, property_name, self.__output_property_instances, disclaimer)
 
     def _add_key_to_current_property_instance(self,
                                               name: str, 
@@ -391,7 +385,7 @@ class KIMTestDriver(ABC):
         value_arr = np.array(value)
         value_shape = value_arr.shape
 
-        current_instance_index = len(kim_edn.loads(self._property_instances))
+        current_instance_index = len(kim_edn.loads(self.__output_property_instances))
         modify_args = ["key", name]
         if len(value_shape) == 0:
             modify_args += ["source-value", value]
@@ -418,7 +412,7 @@ class KIMTestDriver(ABC):
                 else:
                     prev_indices = []
                     recur_dimensions(prev_indices, uncertainty_value_arr, modify_args, uncertainty_key)
-        self._property_instances = kim_property_modify(self._property_instances, current_instance_index, *modify_args)
+        self.__output_property_instances = kim_property_modify(self.__output_property_instances, current_instance_index, *modify_args)
 
     def _add_file_to_current_property_instance(self,
                                               name: str, 
@@ -449,7 +443,7 @@ class KIMTestDriver(ABC):
         else:
             filename_final = os.path.join('output',filename)            
 
-        current_instance_index = len(kim_edn.loads(self._property_instances))
+        current_instance_index = len(kim_edn.loads(self.__output_property_instances))
         
         if add_instance_index:
             root, ext = os.path.splitext(filename_final)
@@ -459,12 +453,11 @@ class KIMTestDriver(ABC):
         if filename_final != filename:
             shutil.move(filename,filename_final)
         
-        self._property_instances = kim_property_modify(self._property_instances, current_instance_index, "key", name, "source-value", filename_final)
-
+        self.__output_property_instances = kim_property_modify(self.__output_property_instances, current_instance_index, "key", name, "source-value", filename_final)
 
     @property
     def property_instances(self) -> Dict:
-        return kim_edn.loads(self._property_instances)
+        return kim_edn.loads(self.__output_property_instances)
 
 ################################################################################
 def get_crystal_genome_designation_from_atoms(atoms: Atoms, get_library_prototype: bool = True, prim: bool = True, aflow_np: int = 4) -> Dict:
@@ -554,21 +547,25 @@ def verify_unchanged_symmetry(
         raise KIMTestDriverError("List of stoichiometric species %s does not match reference list %s" % (stoichiometric_species,reference_stoichiometric_species))
     
 ################################################################################
-class CrystalGenomeTestDriver(KIMTestDriver):
+class SingleCrystalTestDriver(KIMTestDriver):
     """
-    A Crystal Genome KIM test
+    A KIM test that computes property(s) of a single nominal crystal structure
 
     Attributes:
+        atoms: Atoms
+                ASE Atoms objects to use as the initial configuration or to build supercells. 
+                If this is provided, none of the arguments that are part of the Crystal Genome 
+                designation should be provided, and vice versa.
         stoichiometric_species: List[str]
             List of unique species in the crystal
         prototype_label: str
             AFLOW prototype label for the crystal
+        a_angstrom: float
+            a lattice constant in angstroms
         parameter_names: Optional[List[str]]
-            Names of free parameters of the crystal besides 'a'. May be None if the crystal is cubic with no internal DOF.
-            Should have length one less than `parameter_values_angstrom`
-        parameter_values_angstrom: List[float]
-            Free parameter values of the crystal. The first element in each inner list is the 'a' lattice parameter in 
-            angstrom, the rest (if present) are in degrees or unitless
+            Names of free parameters of the crystal *besides 'a'*. May be None if the crystal is cubic with no internal DOF.        
+        parameter_values: Optional[List[float]]
+            The values 
         library_prototype_label: Optional[str]
             AFLOW library prototype label, may be `None`. 
         short_name: Optional[List[str]]
@@ -590,16 +587,13 @@ class CrystalGenomeTestDriver(KIMTestDriver):
                optimize: bool = None,
                stoichiometric_species: Optional[List[str]] = None,
                prototype_label: Optional[str] = None,
-               parameter_names: Optional[List[str]] = None,
                parameter_values_angstrom: Optional[List[float]] = None,
                library_prototype_label: Optional[str] = None,
                short_name: Optional[Union[List[str],str]] = None,
                cell_cauchy_stress_eV_angstrom3: List[float] = [0,0,0,0,0,0],
                temperature_K: float = 0,
-               crystal_genome_source_structure_id: Optional[List[str]] = None,
-               rebuild_atoms: bool = True,
-               **kwargs
-               ):
+               crystal_genome_source_structure_id: Optional[List[str]] = None
+               ) -> None:
         """
         Args:
             atoms:
@@ -613,10 +607,6 @@ class CrystalGenomeTestDriver(KIMTestDriver):
                 List of unique species in the crystal. Required part of the Crystal Genome designation. 
             prototype_label:
                 AFLOW prototype label for the crystal. Required part of the Crystal Genome designation. 
-            parameter_names:
-                Names of free parameters of the crystal besides 'a'. May be None if the crystal is cubic with no internal DOF.
-                Should have length one less than `parameter_values_angstrom`. Part of the Crystal Genome designation.
-                May be omitted for debugging, required metadata for OpenKIM Pipeline operation.
             parameter_values_angstrom:
                 List of AFLOW prototype parameters for the crystal. Required part of the Crystal Genome designation. 
                 a (first element, always present) is in angstroms, while the other parameters 
@@ -635,18 +625,13 @@ class CrystalGenomeTestDriver(KIMTestDriver):
                 The chains of dependencies of this test that produced this structure ends in the test listed in the test result, 
                 and started with the structure computed in the specific test result and instance-id referenced. May be
                 None if this test has no dependencies.
-            rebuild_atoms:
-                Normally, if you provide an Atoms object, it will be analyzed for its symmetry-reduced AFLOW description,
-                and then rebuilt so that the orientation is always consistent. This can rarely cause an error due to
-                rounding resulting in a higher-symmetry crystal being created during the rebuild. If you do not care
-                about having your Atoms in the standard AFLOW orientation, you can turn the rebuild off.
         """ 
-
-        super()._setup(atoms,optimize)
+        aflow = AFLOW()
         self.poscar = None
         self.stoichiometric_species = stoichiometric_species        
         self.prototype_label = prototype_label
-        self.parameter_names = parameter_names
+        aflow_parameter_names = aflow.get_param_names_from_prototype(prototype_label)
+        self.parameter_names = None if len(aflow_parameter_names) == 1 else aflow_parameter_names[1:]
         self.parameter_values_angstrom = parameter_values_angstrom
         self.library_prototype_label = library_prototype_label
         self.crystal_genome_source_structure_id = crystal_genome_source_structure_id
@@ -676,29 +661,23 @@ class CrystalGenomeTestDriver(KIMTestDriver):
                 raise KIMTestDriverError ("\n\nYou have provided an Atoms object as well as at least one part of the Crystal Genome designation specified in the docstring above.\n"
                                           "Please provide only an Atoms object or a Crystal Genome designation, not both")  
                                   
+            raise NotImplementedError('Taking an atoms object is NYI')
+            
             # Updates the Crystal Genome designation class attributes according to self.atoms
             # It checks to make sure that stoichiometric_species and prototype_label have not changed,
             # But they are both None for now, so the check is skipped            
             self._update_crystal_genome_designation_from_atoms()
             if rebuild_atoms:
-                # rebuild atoms for consistent orientation
-                aflow = AFLOW()
                 self.atoms = aflow.build_atoms_from_prototype(self.stoichiometric_species,self.prototype_label,self.parameter_values_angstrom)
                 # Formerly there was a check here yet again to make sure symmetry hasn't changed, but I don't think it's important
         elif self.stoichiometric_species is not None: # we've already checked that if this is not None, other required parts exist as well
-            if optimize:
-                raise KIMTestDriverError("You have asked to optimize the initial configuration while providing a Crystal Genome designation. Initial optimization is only supported when you provide an Atoms object.")            
-            # some checks and cleanup
-            if (len(self.parameter_values_angstrom) > 1) and (self.parameter_names is None):
-                warn("You've provided parameter values besides `a`, but no parameter names.\n"
-                     "Placeholders will be inserted for debugging.")
-                self.parameter_names = ["dummy"]*(len(self.parameter_values_angstrom)-1)
-            aflow = AFLOW()
             self.atoms = aflow.build_atoms_from_prototype(self.stoichiometric_species,self.prototype_label,self.parameter_values_angstrom)
-            self._update_poscar()                     
+            self._update_poscar()                 
         else:
             warn("You've provided neither a Crystal Genome designation nor an Atoms object.\n"
-                     "I won't stop you, but you better know what you're doing!")  
+                     "I won't stop you, but you better know what you're doing!")
+            # nothing else to do, return
+            return
 
     def _update_poscar(self, atoms: Optional[Atoms] = None):
         """
@@ -821,9 +800,9 @@ class CrystalGenomeTestDriver(KIMTestDriver):
         if write_temp:
             self._add_key_to_current_property_instance("temperature",self.temperature_K,"K")
         if self.poscar is not None:
-            current_instance_index = len(kim_edn.loads(self._property_instances))
+            current_instance_index = len(kim_edn.loads(self.__output_property_instances))
             filename = "instance-%d.poscar"%current_instance_index
-            self._cached_files[filename] = self.poscar
+            self.__cached_files[filename] = self.poscar
             self._add_key_to_current_property_instance("coordinates-file",filename) 
         if self.crystal_genome_source_structure_id is not None:
             self._add_key_to_current_property_instance("crystal-genome-source-structure-id",self.crystal_genome_source_structure_id)

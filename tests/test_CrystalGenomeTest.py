@@ -1,9 +1,9 @@
 #!/usr/bin/python
 
-from kim_tools.test_driver import CrystalGenomeTestDriver, query_crystal_genome_structures
+from kim_tools.test_driver import SingleCrystalTestDriver, query_crystal_genome_structures
 from kim_tools.aflow_util import get_stoich_reduced_list_from_prototype
 
-class TestTestDriver(CrystalGenomeTestDriver):
+class TestTestDriver(SingleCrystalTestDriver):
     def _calculate(self,**kwargs):
         """
         example calculate method. Just writes the binding-energy and crystal-structure-npt properties assuming the provided

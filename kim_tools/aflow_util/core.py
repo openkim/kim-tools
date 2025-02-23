@@ -637,7 +637,7 @@ class AFLOW:
         Raised when ``aflow --compare...`` fails to match
         """        
 
-    def __init__(self, aflow_executable:str="aflow", aflow_work_dir:str="",np:int=1):
+    def __init__(self, aflow_executable:str="aflow", aflow_work_dir:str="",np:int=4):
         """
         Args:
             aflow_executable: Sets :attr:`aflow_executable`

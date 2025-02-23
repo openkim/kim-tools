@@ -106,8 +106,8 @@ def test_solve_for_internal_params():
             print(aflow.solve_for_params_of_known_prototype(atoms,prototype_label))
 
 def test_get_prototype(
-    materials=[CRYSTAL_GENOME_INITIAL_STRUCTURES[test_case] for test_case in TEST_CASES]
-    #materials=CRYSTAL_GENOME_INITIAL_STRUCTURES
+    #materials=[CRYSTAL_GENOME_INITIAL_STRUCTURES[test_case] for test_case in TEST_CASES]
+    materials=CRYSTAL_GENOME_INITIAL_STRUCTURES
 ):
     aflow = AFLOW(np=19)
     match_counts_by_pearson = {}
