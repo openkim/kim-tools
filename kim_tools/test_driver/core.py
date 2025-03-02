@@ -50,12 +50,11 @@ from abc import ABC, abstractmethod
 from kim_property import kim_property_create, kim_property_modify, kim_property_dump, get_properties, get_property_id_path
 from kim_property.modify import STANDARD_KEYS_SCLAR_OR_WITH_EXTENT
 import kim_edn
-from ..aflow_util import AFLOW
+from ..aflow_util import AFLOW, prototype_labels_are_equivalent
+from ..kimunits import convert_units, convert_list
 from kim_query import raw_query
-from tempfile import NamedTemporaryFile
 import os
 from warnings import warn
-from io import StringIO
 import shutil
 from pathlib import Path
 import logging
@@ -66,8 +65,8 @@ __author__ = ["ilia Nikiforov", "Eric Fuemmeler"]
 __all__ = [
     "KIMTestDriverError",
     "KIMTestDriver",
-    "get_crystal_genome_designation_from_atoms",
-    "verify_unchanged_symmetry",
+    "get_crystal_structure_from_atoms",
+    "get_atoms_from_crystal_structure",
     "SingleCrystalTestDriver",
     "query_crystal_genome_structures",
     "minimize_wrapper",
@@ -113,7 +112,7 @@ def minimize_wrapper(
     limit, or a stalled minimization due to line search failures.
 
     Args:
-        supercell:
+        atoms:
             Atomic configuration to be minimized.
         fmax:
             Force convergence tolerance (the magnitude of the force on each
@@ -167,6 +166,184 @@ def minimize_wrapper(
         
     del atoms.constraints
 
+def _add_property_instance(property_name: str, disclaimer: Optional[str] = None, property_instances: Optional[str] = None) -> str:
+    """
+    Initialize a new property instance in the serialized `property_instances`. This wraps the kim_property.kim_property_create()
+    function, with the simplification of setting `instance-id` automatically, as well as automatically searching for a definition file
+    if `property_name` is not found.
+    
+    NOTE: Is there any need to allow Test Driver authors to specify an instance-id? 
+
+    Args:
+        property_name:
+            The property name, e.g. "tag:staff@noreply.openkim.org,2023-02-21:property/binding-energy-crystal" or
+            "binding-energy-crystal"
+        disclaimer:
+            An optional disclaimer commenting on the applicability of this result, e.g. 
+            "This relaxation did not reach the desired tolerance."
+        property_instances:
+            A pre-existing EDN-serialized list of KIM Property instances to add to
+            
+    Returns:
+            Updated EDN-serialized list of property instances            
+    """
+    if property_instances is None:
+        property_instances = '[]'
+    # Get and check the instance-id to use.
+    property_instances_deserialized = kim_edn.loads(property_instances)
+    new_instance_index = len(property_instances_deserialized) + 1
+    for property_instance in property_instances_deserialized:
+        assert property_instance["instance-id"] != new_instance_index, "instance-id conflict"
+               
+    existing_properties = get_properties()
+    property_in_existing_properties = False
+    for existing_property in existing_properties:
+        if existing_property == property_name or get_property_id_path(existing_property)[3] == property_name:
+            property_in_existing_properties = True
+
+    if not property_in_existing_properties:
+        print('\nThe property name or id\n%s\nwas not found in kim-properties.\n'%property_name)
+        print('I will now look for an .edn file containing its definition in the following locations:\n%s\n'%PROP_SEARCH_PATHS_INFO)
+        
+        property_search_paths = []
+        
+        # environment varible
+        if 'KIM_PROPERTY_PATH' in os.environ:
+            property_search_paths += os.environ['KIM_PROPERTY_PATH'].split(':')
+            
+        # CWD
+        property_search_paths.append(os.path.join(Path.cwd(),'local_props','**'))
+        property_search_paths.append(os.path.join(Path.cwd(),'local-props','**'))
+                
+        # recursively search for .edn files in the paths, check if they are a property definition
+        # with the correct name
+        
+        found_custom_property = False
+        
+        for search_path in property_search_paths:
+            if found_custom_property:
+                break
+            else:
+                # hack to expand globs in both absolute and relative paths
+                if search_path[0] == '/':
+                    base_path = Path('/')
+                    search_glob = os.path.join(search_path[1:],'*.edn')
+                else:
+                    base_path = Path()
+                    search_glob = os.path.join(search_path,'*.edn')
+                
+                for path in base_path.glob(search_glob):
+                    if not os.path.isfile(path): # in case there's a directory named *.edn
+                        continue 
+                    try:
+                        path_str = str(path)
+                        dict_from_edn = kim_edn.load(path_str)
+                        if ('property-id') in dict_from_edn:
+                            property_id = dict_from_edn['property-id']
+                            if property_id == property_name or get_property_id_path(property_id)[3] == property_name:
+                                property_name = path_str
+                                found_custom_property = True
+                                break
+                    except Exception as e:
+                        pass
+    
+        if not found_custom_property:
+            raise KIMTestDriverError(
+                '\nThe property name or id\n%s\nwas not found in kim-properties.\n'%property_name + \
+                'I failed to find an .edn file containing a matching "property-id" key in the following locations:\n' + PROP_SEARCH_PATHS_INFO)
+    
+    return kim_property_create(new_instance_index, property_name, property_instances, disclaimer)
+
+def _add_key_to_current_property_instance(property_instances: str,
+                                          name: str,
+                                          value: ArrayLike,
+                                          unit: Optional[str] = None,
+                                          uncertainty_info: Optional[dict] = None) -> str:
+    """
+    Write a key to the last element of property_instances. This wraps kim_property.kim_property_modify()
+    with a simplified (and more restricted) interface.    
+    
+    Note: if the value is an array, this function will assume you want to write to the beginning of 
+    the array in every dimension.
+    
+    This function is intended to write entire keys in one go, and should not be used for modifying
+    existing keys.
+
+    WARNING! It is the developer's responsibility to make sure the array shape matches the extent
+    specified in the property definition. This method uses fills the values of array keys as slices 
+    through the last dimension. If those slices are incomplete,
+    kim_property automatically initializes the other elements in that slice to zero. For example,
+    consider writing coordinates to a key with extent [":",3]. The correct way to write a single atom
+    would be to provide [[x,y,z]]. If you accidentally provide [[x],[y],[z]], it will fill the
+    field with the coordinates [[x,0,0],[y,0,0],[z,0,0]]. This will not raise an error, only exceeding
+    the allowed dimesnsions of the key will do so.
+
+    Args:
+        property_instances:
+            An EDN-serialized list of dictionaries representing KIM Property Instances. The key
+            will be added to the last dictionary in the list
+        name:
+            Name of the key, e.g. "cell-cauchy-stress"
+        value:
+            The value of the key. The function will attempt to convert it to a NumPy array, then
+            use the dimensions of the resulting array. Scalars, lists, tuples, and arrays should work.
+            Data type of the elements should be str, float, or int
+        unit:
+            The units
+        uncertainty_info:
+            dictionary containing any uncertainty keys you wish to include. See https://openkim.org/doc/schema/properties-framework/
+            for the possible uncertainty key names. These must be the same dimension as `value`, or they may be scalars regardless
+            of the shape of `value`.
+            
+    Returns:
+        Updated EDN-serialized list of property instances
+    """
+    
+    def recur_dimensions(prev_indices: List[int], sub_value: np.ndarray, modify_args: list, key_name: str='source-value'):
+        sub_shape = sub_value.shape
+        assert len(sub_shape) != 0, "Should not have gotten to zero dimensions in the recursive function"
+        if len(sub_shape) == 1:
+            # only if we have gotten to a 1-dimensional sub-array do we write stuff
+            modify_args += [key_name, *prev_indices, "1:%d" % sub_shape[0], *sub_value]
+        else:
+            for i in range(sub_shape[0]):
+                prev_indices.append(i + 1)  # convert to 1-based indices
+                recur_dimensions(prev_indices, sub_value[i], modify_args, key_name)
+                prev_indices.pop()
+
+    value_arr = np.array(value)
+    value_shape = value_arr.shape
+
+    current_instance_index = len(kim_edn.loads(property_instances))
+    modify_args = ["key", name]
+    if len(value_shape) == 0:
+        modify_args += ["source-value", value]
+    else:
+        prev_indices = []
+        recur_dimensions(prev_indices, value_arr, modify_args)
+
+    if unit is not None:
+        modify_args += ["source-unit", unit]
+
+    if uncertainty_info is not None:
+        for uncertainty_key in uncertainty_info:
+            if not uncertainty_key in STANDARD_KEYS_SCLAR_OR_WITH_EXTENT:
+                raise KIMTestDriverError("Uncertainty key %s is not one of the allowed options %s."%(uncertainty_key,str(STANDARD_KEYS_SCLAR_OR_WITH_EXTENT)))
+            uncertainty_value = uncertainty_info[uncertainty_key]
+            uncertainty_value_arr = np.array(uncertainty_value)
+            uncertainty_value_shape = uncertainty_value_arr.shape
+
+            if not(len(uncertainty_value_shape) == 0 or uncertainty_value_shape == value_shape):
+                raise KIMTestDriverError("The value %s provided for uncertainty key %s has shape %s.\n"%(uncertainty_value_arr,uncertainty_key,str(uncertainty_value_shape))+\
+                                            "It must either be a scalar or match the shape %s of the source value you provided."%str(value_shape))
+            if len(uncertainty_value_shape) == 0:
+                modify_args += [uncertainty_key, uncertainty_value]
+            else:
+                prev_indices = []
+                recur_dimensions(prev_indices, uncertainty_value_arr, modify_args, uncertainty_key)
+                
+    return kim_property_modify(property_instances, current_instance_index, *modify_args)
+
 ################################################################################
 class KIMTestDriverError(Exception):
     def __init__(self, msg):
@@ -189,9 +366,9 @@ class KIMTestDriver(ABC):
         __calc: Calculator
             ASE calculator
         __atoms: Optional[Atoms]
-            ASE atoms object
+            ASE atoms object representing the nominal configuration. 
         __output_property_instances: str
-            A string containing the serialized KIM-EDN formatted property instances.
+            Property instances, possibly accumulated over multiple invocations of the Test Driver
         __cached_files: Dict
             keys: filenames to be assigned to files, values: serialized strings to dump into those files. To be used for 'file' type properties
     """
@@ -218,16 +395,15 @@ class KIMTestDriver(ABC):
                atoms: Optional[Atoms] = None
                ):
         """
-        Assign the self.atoms object and attach the calculator to it
+        Assign the self.__atoms object
         
         Args:
             atoms: The atoms object to assign to the current run of the Test Driver
         """
-        self.__atoms = atoms
-        if self.__atoms is not None:
-            self.__atoms.calc = self.__calc
-        else:
+        if atoms is None:
             warn("Making a Test Driver without an Atoms object. I won't stop you, but you better know what you're doing!")
+        else:
+            self.__atoms = atoms
             
     @abstractmethod
     def _calculate(self, **kwargs):
@@ -236,29 +412,36 @@ class KIMTestDriver(ABC):
         """
         raise NotImplementedError("Subclasses must implement the _calculate method.")
 
-    def write_property_instances_to_file(self,filename="output/results.edn"):
-        # Write the property instances to a file at the requested path. Also dumps any cached files to the same directory
-        with open(filename, "w") as f:
-            kim_property_dump(self.__output_property_instances, f)
-        for cached_file in self.__cached_files:        
-            with open(os.path.join(os.path.dirname(filename),cached_file),"w") as f:
-                f.write(self.__cached_files[cached_file])
-
-    def __call__(self, atoms: Optional[Atoms] = None, **kwargs):
+    def __call__(self, atoms: Optional[Atoms] = None, **kwargs) -> List[Dict]:
         """
         Main operation of a Test Driver:
         
             * Run :func:`~KIMTestDriver._setup` (the base class provides a barebones version, derived classes may override)
             * Call :func:`~KIMTestDriver._calculate` (implemented by each individual Test Driver)
-        """
+            
+        Args:
+            atoms: The atoms object to assign to the current run of the Test Driver
+        
+        Returns:
+            The property instances calculated during the current run
+        """        
+        # count how many instances we had before we started
+        previous_properties_end = len(kim_edn.loads(self.__output_property_instances))
+
         # _setup is likely overridden by an derived class
         self._setup(atoms, **kwargs)
+
         # implemented by each individual Test Driver
         self._calculate(**kwargs)
+            
+        # The current invocation returns a Python list of dictionaries containing all properties
+        # computed during this run                        
+        return kim_edn.loads(self.__output_property_instances)[previous_properties_end:]
 
-    def _add_property_instance(self, property_name: str, disclaimer: Optional[str]=None):
+    def _add_property_instance(self, property_name: str, disclaimer: Optional[str] = None) -> None:
         """
         Initialize a new property instance. 
+        NOTE: Is there any need to allow Test Driver authors to specify an instance-id? 
 
         Args:
             property_name:
@@ -268,80 +451,16 @@ class KIMTestDriver(ABC):
                 An optional disclaimer commenting on the applicability of this result, e.g. 
                 "This relaxation did not reach the desired tolerance."
         """
-        # DEV NOTE: I like to use the package name when using kim_edn so there's no confusion with json.loads etc.
-        property_instances_deserialized = kim_edn.loads(self.__output_property_instances)
-        new_instance_index = len(property_instances_deserialized) + 1
-        for property_instance in property_instances_deserialized:
-            if property_instance["instance-id"] == new_instance_index:
-                raise KIMTestDriverError("instance-id that matches the length of self.property_instances already exists.\n"
-                                  "Was self.property_instances edited directly instead of using this package?")
-        existing_properties = get_properties()
-        property_in_existing_properties = False
-        for existing_property in existing_properties:
-            if existing_property == property_name or get_property_id_path(existing_property)[3] == property_name:
-                property_in_existing_properties = True
-
-        if not property_in_existing_properties:
-            print('\nThe property name or id\n%s\nwas not found in kim-properties.\n'%property_name)
-            print('I will now look for an .edn file containing its definition in the following locations:\n%s\n'%PROP_SEARCH_PATHS_INFO)
-            
-            property_search_paths = []
-            
-            # environment varible
-            if 'KIM_PROPERTY_PATH' in os.environ:
-                property_search_paths += os.environ['KIM_PROPERTY_PATH'].split(':')
-                
-            # CWD
-            property_search_paths.append(os.path.join(Path.cwd(),'local_props','**'))
-            property_search_paths.append(os.path.join(Path.cwd(),'local-props','**'))
-                    
-            # recursively search for .edn files in the paths, check if they are a property definition
-            # with the correct name
-            
-            found_custom_property = False
-            
-            for search_path in property_search_paths:
-                if found_custom_property:
-                    break
-                else:
-                    # hack to expand globs in both absolute and relative paths
-                    if search_path[0] == '/':
-                        base_path = Path('/')
-                        search_glob = os.path.join(search_path[1:],'*.edn')
-                    else:
-                        base_path = Path()
-                        search_glob = os.path.join(search_path,'*.edn')
-                    
-                    for path in base_path.glob(search_glob):
-                        if not os.path.isfile(path): # in case there's a directory named *.edn
-                            continue 
-                        try:
-                            path_str = str(path)
-                            dict_from_edn = kim_edn.load(path_str)
-                            if ('property-id') in dict_from_edn:
-                                property_id = dict_from_edn['property-id']
-                                if property_id == property_name or get_property_id_path(property_id)[3] == property_name:
-                                    property_name = path_str
-                                    found_custom_property = True
-                                    break
-                        except Exception as e:
-                            pass
-        
-            if not found_custom_property:
-                raise KIMTestDriverError(
-                    '\nThe property name or id\n%s\nwas not found in kim-properties.\n'%property_name + \
-                    'I failed to find an .edn file containing a matching "property-id" key in the following locations:\n' + PROP_SEARCH_PATHS_INFO)
-        
-        self.__output_property_instances = kim_property_create(new_instance_index, property_name, self.__output_property_instances, disclaimer)
+        self.__output_property_instances = _add_property_instance(property_name,disclaimer,self.__output_property_instances)
 
     def _add_key_to_current_property_instance(self,
                                               name: str, 
                                               value: ArrayLike, 
-                                              units: Optional[str] = None, 
-                                              uncertainty_info: Optional[dict] = None):
+                                              unit: Optional[str] = None, 
+                                              uncertainty_info: Optional[dict] = None) -> None:
         """
-        Write a key to the last element of self.property_instances. If the value is an array,
-        this function will assume you want to write to the beginning of the array in every dimension.
+        Add a key to the most recent property instance added with self._add_property_instance.
+        If the value is an array, this function will assume you want to write to the beginning of the array in every dimension.
         This function is intended to write entire keys in one go, and should not be used for modifying
         existing keys.
 
@@ -361,63 +480,19 @@ class KIMTestDriver(ABC):
                 The value of the key. The function will attempt to convert it to a NumPy array, then
                 use the dimensions of the resulting array. Scalars, lists, tuples, and arrays should work.
                 Data type of the elements should be str, float, or int
-            units:
+            unit:
                 The units
             uncertainty_info:
                 dictionary containing any uncertainty keys you wish to include. See https://openkim.org/doc/schema/properties-framework/
                 for the possible uncertainty key names. These must be the same dimension as `value`, or they may be scalars regardless
                 of the shape of `value`.
-        """
-        
-        def recur_dimensions(prev_indices: List[int], sub_value: np.ndarray, modify_args: list, key_name: str='source-value'):
-            sub_shape = sub_value.shape
-            assert len(sub_shape) != 0, "Should not have gotten to zero dimensions in the recursive function"
-            if len(sub_shape) == 1:
-                # only if we have gotten to a 1-dimensional sub-array do we write stuff
-                modify_args += [key_name, *prev_indices, "1:%d" % sub_shape[0], *sub_value]
-            else:
-                for i in range(sub_shape[0]):
-                    prev_indices.append(i + 1)  # convert to 1-based indices
-                    recur_dimensions(prev_indices, sub_value[i], modify_args, key_name)
-                    prev_indices.pop()
-
-
-        value_arr = np.array(value)
-        value_shape = value_arr.shape
-
-        current_instance_index = len(kim_edn.loads(self.__output_property_instances))
-        modify_args = ["key", name]
-        if len(value_shape) == 0:
-            modify_args += ["source-value", value]
-        else:
-            prev_indices = []
-            recur_dimensions(prev_indices, value_arr, modify_args)
-
-        if units is not None:
-            modify_args += ["source-unit", units]
-
-        if uncertainty_info is not None:
-            for uncertainty_key in uncertainty_info:
-                if not uncertainty_key in STANDARD_KEYS_SCLAR_OR_WITH_EXTENT:
-                    raise KIMTestDriverError("Uncertainty key %s is not one of the allowed options %s."%(uncertainty_key,str(STANDARD_KEYS_SCLAR_OR_WITH_EXTENT)))
-                uncertainty_value = uncertainty_info[uncertainty_key]
-                uncertainty_value_arr = np.array(uncertainty_value)
-                uncertainty_value_shape = uncertainty_value_arr.shape
-
-                if not(len(uncertainty_value_shape) == 0 or uncertainty_value_shape == value_shape):
-                    raise KIMTestDriverError("The value %s provided for uncertainty key %s has shape %s.\n"%(uncertainty_value_arr,uncertainty_key,str(uncertainty_value_shape))+\
-                                             "It must either be a scalar or match the shape %s of the source value you provided."%str(value_shape))
-                if len(uncertainty_value_shape) == 0:
-                    modify_args += [uncertainty_key, uncertainty_value]
-                else:
-                    prev_indices = []
-                    recur_dimensions(prev_indices, uncertainty_value_arr, modify_args, uncertainty_key)
-        self.__output_property_instances = kim_property_modify(self.__output_property_instances, current_instance_index, *modify_args)
+        """                    
+        self.__output_property_instances = _add_key_to_current_property_instance(self.__output_property_instances,name,value,unit,uncertainty_info)
 
     def _add_file_to_current_property_instance(self,
                                               name: str, 
                                               filename: str,
-                                              add_instance_index: bool = True):
+                                              add_instance_id: bool = True) -> None:
         """
         add a "file" type key-value pair to the current property instance.
 
@@ -426,7 +501,7 @@ class KIMTestDriver(ABC):
                 Name of the key, e.g. "restart-file"
             filename:
                 The relative path to the filename. If it does not start with "output/", the file will be moved to the "output/" directory
-            add_instance_index:
+            add_instance_id:
                 By default, a numerical index will be added before the file extension or at the end of a file with no extension. This is to 
                 ensure files do not get overwritten when the _calculate method is called repeatedly.
         
@@ -443,108 +518,257 @@ class KIMTestDriver(ABC):
         else:
             filename_final = os.path.join('output',filename)            
 
-        current_instance_index = len(kim_edn.loads(self.__output_property_instances))
+        # Get instance-id from self.__output_property_instances
+        current_instance_id = len(kim_edn.loads(self.__output_property_instances))
         
-        if add_instance_index:
+        if add_instance_id:
             root, ext = os.path.splitext(filename_final)
-            root = root + "-" + str(current_instance_index)
+            root = root + "-" + str(current_instance_id)
             filename_final = root + ext
         
         if filename_final != filename:
             shutil.move(filename,filename_final)
-        
-        self.__output_property_instances = kim_property_modify(self.__output_property_instances, current_instance_index, "key", name, "source-value", filename_final)
+            
+        self._add_key_to_current_property_instance(name,filename_final)
+
+    def _get_atoms(self) -> Atoms:
+        """
+        Returns:
+            A copy of the internal atoms object with the calculator attached
+        """
+        atoms_copy = self.__atoms.copy()
+        atoms_copy.calc = self.__calc
+        return atoms_copy
+    
+    def _set_atoms(self,atoms):
+        """
+        Assigns the internal atoms object
+        """
+        self.__atoms = atoms
+    
+    @property
+    def kim_model_name(self) -> Optional[str]:
+        return self.__kim_model_name
 
     @property
     def property_instances(self) -> Dict:
+        """
+        Get all property instances accumulated over all calls to the Test Driver so far
+        """
         return kim_edn.loads(self.__output_property_instances)
+    
+    def _get_serialized_property_instances(self) -> str:
+        return self.__output_property_instances
+    
+    def _set_serialized_property_instances(self,property_instances) -> None:
+        self.__output_property_instances = property_instances
+
+    def write_property_instances_to_file(self,filename="output/results.edn") -> None:
+        """
+        Write internal property instances (possibly accumulated over several calls to the Test Driver)
+        to a file at the requested path. Also dumps any cached files to the same directory.
+        
+        Args:
+            filename: path to write the file        
+        """
+        
+        with open(filename, "w") as f:
+            kim_property_dump(self.__output_property_instances, f) # serialize the dictionary to string first
+        for cached_file in self.__cached_files:        
+            with open(os.path.join(os.path.dirname(filename),cached_file),"w") as f:
+                f.write(self.__cached_files[cached_file])
 
 ################################################################################
-def get_crystal_genome_designation_from_atoms(atoms: Atoms, get_library_prototype: bool = True, prim: bool = True, aflow_np: int = 4) -> Dict:
+def _add_common_crystal_genome_keys_to_current_property_instance(property_instances: str,
+                                                                 prototype_label: str,
+                                                                 stoichiometric_species: List[str],
+                                                                 a: float,
+                                                                 parameter_values: Optional[List[float]] = None,
+                                                                 short_name: Optional[Union[List[str],str]] = None,
+                                                                 cell_cauchy_stress: Optional[List[float]] = None,
+                                                                 temperature: Optional[float] = None,
+                                                                 crystal_genome_source_structure_id: Optional[Union[str,List[str]]] = None,
+                                                                 a_unit: str = 'angstrom',
+                                                                 cell_cauchy_stress_unit: str = 'eV/angstrom^3',
+                                                                 temperature_unit: str = 'K') -> str:
     """
-    Get crystal genome designation from an ASE atoms object.
+    Write common Crystal Genome keys to the last element of `property_instances`. See
+    https://openkim.org/properties/show/crystal-structure-npt for definition of the input keys.
+    Note that the "parameter-names" key is inferred from the `prototype_label` input and is not
+    an input to this function.
+
+    Args:    
+        property_instances:
+            An EDN-serialized list of dictionaries representing KIM Property Instances. The key
+            will be added to the last dictionary in the list
+            
+    Returns:
+        Updated EDN-serialized list of property instances
+    """    
+    property_instances = _add_key_to_current_property_instance(property_instances,"prototype-label",prototype_label)
+    property_instances = _add_key_to_current_property_instance(property_instances,"stoichiometric-species",stoichiometric_species)
+    property_instances = _add_key_to_current_property_instance(property_instances,"a",a,a_unit)
+    
+    # get parameter names
+    aflow = AFLOW()
+    aflow_parameter_names = aflow.get_param_names_from_prototype(prototype_label)
+    if parameter_values is None:
+        if len(aflow_parameter_names) > 1:
+            raise KIMTestDriverError('The prototype label implies that parameter_values (i.e. dimensionless parameters besides a) are required, but you provided None')
+    else:
+        if len(aflow_parameter_names)-1 != len(parameter_values):
+            raise KIMTestDriverError('Incorrect number of parameter_values (i.e. dimensionless parameters besides a) for the provided prototype')
+        property_instances = _add_key_to_current_property_instance(property_instances,"parameter-names",aflow_parameter_names[1:])
+        property_instances = _add_key_to_current_property_instance(property_instances,"parameter-values",parameter_values)
+
+    if short_name is not None:
+        if not isinstance(short_name,list):
+            short_name = [short_name]        
+        property_instances = _add_key_to_current_property_instance(property_instances,"short-name",short_name)
+        
+    if cell_cauchy_stress is not None:
+        if len(cell_cauchy_stress) != 6:
+            raise KIMTestDriverError('Please specify the Cauchy stress as a 6-dimensional vector in Voigt order [xx,yy,zz,yz,xz,xy]')        
+        property_instances =_add_key_to_current_property_instance(property_instances,"cell-cauchy-stress",cell_cauchy_stress,cell_cauchy_stress_unit)
+        
+    if temperature is not None:
+        property_instances = _add_key_to_current_property_instance(property_instances,"temperature",temperature,temperature_unit)
+        
+    if crystal_genome_source_structure_id is not None:
+        if isinstance(crystal_genome_source_structure_id,list):
+            property_instances = _add_key_to_current_property_instance(property_instances,"crystal-genome-source-structure-id",crystal_genome_source_structure_id)
+        else:
+            property_instances = _add_key_to_current_property_instance(property_instances,"crystal-genome-source-structure-id",[crystal_genome_source_structure_id])
+        
+    return property_instances
+
+def _add_property_instance_and_common_crystal_genome_keys(property_name: str,
+                                                          prototype_label: str,
+                                                          stoichiometric_species: List[str],
+                                                          a: float,
+                                                          parameter_values: Optional[List[float]] = None,
+                                                          short_name: Optional[Union[List[str],str]] = None,
+                                                          cell_cauchy_stress: Optional[List[float]] = None,
+                                                          temperature: Optional[float] = None,
+                                                          crystal_genome_source_structure_id: Optional[str] = None,                                                          
+                                                          a_unit: str = 'angstrom',
+                                                          cell_cauchy_stress_unit: str = 'eV/angstrom^3',
+                                                          temperature_unit: str = 'K',
+                                                          disclaimer: Optional[str] = None,
+                                                          property_instances: Optional[str] = None) -> str:
+    """
+    Initialize a new property instance to `property_instances` (an empty property_instances will be initialized if not provided).
+    It will automatically get the an instance-id equal to the length of self.property_instances after it is added.
+    Then, write the common Crystal Genome keys to it. See
+    https://openkim.org/properties/show/crystal-structure-npt for definition of the input keys.
+    Note that the "parameter-names" key is inferred from the `prototype_label` input and is not
+    an input to this function.
+
+    Args:
+        property_name:
+            The property name, e.g. "tag:staff@noreply.openkim.org,2023-02-21:property/binding-energy-crystal" or
+            "binding-energy-crystal"
+        disclaimer:
+            An optional disclaimer commenting on the applicability of this result, e.g. 
+            "This relaxation did not reach the desired tolerance."
+        property_instances:
+            A pre-existing EDN-serialized list of KIM Property instances to add to
+            
+    Returns:
+            Updated EDN-serialized list of property instances
+    """
+    property_instances = _add_property_instance(property_name,disclaimer,property_instances)
+    return _add_common_crystal_genome_keys_to_current_property_instance(property_instances,prototype_label,stoichiometric_species,
+                                                                 a,parameter_values,short_name,cell_cauchy_stress,temperature,
+                                                                 crystal_genome_source_structure_id,
+                                                                 a_unit,cell_cauchy_stress_unit,temperature_unit)
+
+def get_crystal_structure_from_atoms(atoms: Atoms, get_short_name: bool = True, prim: bool = True, aflow_np: int = 4) -> Dict:
+    """
+    By performing a symmetry analysis on an Atoms object, generate a dictionary that is a subset of the `crystal-structure-npt` property defined
+    here: https://openkim.org/properties/show/crystal-structure-npt
+    See https://openkim.org/doc/schema/properties-framework/ for more information about KIM properties and how values and units are defined
+    The dictionary returned by this function does not constitute a complete KIM Property Instance, but the key-value pairs are in valid
+    KIM Property format and can be inserted as-is into any single crystal Crystal Genome property.
     
     Args:
-        atoms: Atoms object to analyze
-        get_library_prototype: whether to compare against prototype library
+        atoms: Atoms object to analyze. It is assumed that the length unit is angstrom
+        get_short_name: whether to compare against AFLOW prototype library to obtain short-name
         prim: whether to primitivize the atoms object first
         aflow_np: Number of processors to use with AFLOW executable
 
     Returns:
-        A dictionary with the following keys:
-            stoichiometric_species: List[str]
-                List of unique species in the crystal
-            prototype_label: str
-                AFLOW prototype label for the crystal
-            parameter_names: Optional[List[str]]
-                Names of free parameters of the crystal besides 'a'. May be None if the crystal is cubic with no internal DOF.
-                Should have length one less than `parameter_values_angstrom`
-            parameter_values_angstrom: List[float]
-                Free parameter values of the crystal. The first element in each inner list is the 'a' lattice parameter in 
-                angstrom, the rest (if present) are in degrees or unitless
-            library_prototype_label: Optional[str]
-                AFLOW library prototype label
-            short_name: Optional[List[str]]
-                List of human-readable short names (e.g. "Face-Centered Cubic"), if present
+        A dictionary that has the following Property Keys (possibly optionally) defined. See the crystal-structure-npt Property
+        Definition for their meaning:
+        * a
+        * cell-cauchy-stress
+        * prototype-label        
+        * parameter-names (inferred from prototype-label)
+        * parameter-values
+        * short-name
+
     """
     aflow = AFLOW(np=aflow_np)
-    cg_des = {}
 
     proto_des = aflow.get_prototype_designation_from_atoms(atoms,prim=prim)
-    (libproto,short_name) = \
+    _,short_name = \
         aflow.get_library_prototype_label_and_shortname_from_atoms(atoms,prim=prim) \
-            if get_library_prototype else (None,None)
+            if get_short_name else (None,None)
+            
+    a = proto_des["aflow_prototype_params_values"][0]
+    parameter_values = proto_des["aflow_prototype_params_values"][1:] if len(proto_des["aflow_prototype_params_values"]) > 1 else None
+    
+    property_instances = \
+        _add_property_instance_and_common_crystal_genome_keys(property_name = 'crystal-structure-npt',
+                                                              prototype_label = proto_des['aflow_prototype_label'],
+                                                              stoichiometric_species = sorted(list(set(atoms.get_chemical_symbols()))),
+                                                              a = a,
+                                                              parameter_values = parameter_values,
+                                                              short_name = short_name)
+    
+    return kim_edn.loads(property_instances)[0]
 
-    cg_des["prototype_label"] = proto_des["aflow_prototype_label"]
-    cg_des["stoichiometric_species"] = sorted(list(set(atoms.get_chemical_symbols())))
-    parameter_names = proto_des["aflow_prototype_params_list"][1:]
-    if parameter_names == []:
-        cg_des["parameter_names"] = None
-    else:
-        cg_des["parameter_names"] = parameter_names
-    cg_des["parameter_values_angstrom"] = proto_des["aflow_prototype_params_values"]
-    cg_des["library_prototype_label"] = libproto
-    if short_name is None:
-        cg_des["short_name"] = None
-    else:
-        cg_des["short_name"] = [short_name]
-
-    return cg_des
-
-################################################################################
-def verify_unchanged_symmetry(
-    reference_stoichiometric_species: List[str],
-    reference_prototype_label: str,
-    stoichiometric_species: List[str],
-    prototype_label: str,
-    loose_triclinic_and_monoclinic: bool = False,
-    ) -> None:
+def get_atoms_from_crystal_structure(crystal_structure: Dict) -> Atoms:
     """
-    Checks if stoichiometric_species and/or prototype_label have changed. Raises an error if they have
-
+    Generate an Atoms object from the AFLOW Prototype Designation obtained from a KIM Property Instance. The following keys
+    from https://openkim.org/properties/show/2023-02-21/staff@noreply.openkim.org/crystal-structure-npt
+    are used:
+    
+    * stoichiometric-species
+    * prototype-label
+    * a
+    * parameter-values (if prototype-label defines a crystal with free parameters besides "a")
+    
+    Note that although the keys are required to follow the schema of a KIM Property Instance 
+    (https://openkim.org/doc/schema/properties-framework/),
+    There is no requirement or check that the input dictionary is an instance of any specific KIM Property, only that
+    the keys required to build a crystal are present.
+    
     Args:
-        loose_triclinic_and_monoclinic:
-            For triclinic and monoclinic space groups (1-15), the Wyckoff letters can be assigned in a non-unique way. Therefore,
-            it may be useful to only check the first three parts of the prototype label: stoichiomerty, Pearson symbol and space
-            group number.
-
-    Raises:
-        KIMTestDriverError:
-            If the symmetries of the reference and test structures are different.
+        crystal_structure:
+            Dictionary containing the required keys in KIM Property Instance format
+    
+    Returns:
+        Primitive unit cell of the crystal as defined in http://doi.org/10.1016/j.commatsci.2017.01.017. Lengths are always in angstrom
     """
-    checking_full_label = True
-    if (int(reference_prototype_label.split("_")[2]) < 16) and loose_triclinic_and_monoclinic: # triclinic or monoclinic space group
-        checking_full_label = False
-
-    if checking_full_label:
-        if reference_prototype_label != prototype_label:
-            raise KIMTestDriverError("AFLOW prototype label %s differs from reference prototype label %s" % (prototype_label,reference_prototype_label))
-    else:
-        if reference_prototype_label.split("_")[:3] != prototype_label.split("_")[:3]:
-            raise KIMTestDriverError("AFLOW prototype label %s differs from reference prototype label %s even when ignoring Wyckoff letters"%(prototype_label,reference_prototype_label))
-        
-    if reference_stoichiometric_species != stoichiometric_species:
-        raise KIMTestDriverError("List of stoichiometric species %s does not match reference list %s" % (stoichiometric_species,reference_stoichiometric_species))
+    prototype_label = crystal_structure['prototype-label']['source-value']
+    
+    aflow = AFLOW()
+    aflow_parameter_names = aflow.get_param_names_from_prototype(prototype_label)
+    
+    # Atoms objects are always in angstrom
+    a_angstrom = convert_units(crystal_structure['a']['source-value'],crystal_structure['a']['source-unit'],'angstrom',True)
+    
+    aflow_parameter_values = [a_angstrom]
+    
+    if 'parameter-values' in crystal_structure:
+        if len(aflow_parameter_names) == 1:
+            raise KIMTestDriverError(f'Prototype label {prototype_label} implies only "a" parameter, but you provided "parameter-values"')
+        aflow_parameter_values += crystal_structure['parameter-values']['source-value']
+    
+    stoichiometric_species = crystal_structure['stoichiometric-species']['source-value']
+    
+    return aflow.build_atoms_from_prototype(stoichiometric_species,prototype_label,aflow_parameter_values)    
     
 ################################################################################
 class SingleCrystalTestDriver(KIMTestDriver):
@@ -552,260 +776,130 @@ class SingleCrystalTestDriver(KIMTestDriver):
     A KIM test that computes property(s) of a single nominal crystal structure
 
     Attributes:
-        atoms: Atoms
-                ASE Atoms objects to use as the initial configuration or to build supercells. 
-                If this is provided, none of the arguments that are part of the Crystal Genome 
-                designation should be provided, and vice versa.
-        stoichiometric_species: List[str]
-            List of unique species in the crystal
-        prototype_label: str
-            AFLOW prototype label for the crystal
-        a_angstrom: float
-            a lattice constant in angstroms
-        parameter_names: Optional[List[str]]
-            Names of free parameters of the crystal *besides 'a'*. May be None if the crystal is cubic with no internal DOF.        
-        parameter_values: Optional[List[float]]
-            The values 
-        library_prototype_label: Optional[str]
-            AFLOW library prototype label, may be `None`. 
-        short_name: Optional[List[str]]
-            List of human-readable short names (e.g. "Face-Centered Cubic"), if present
-        cell_cauchy_stress_eV_angstrom3: List[float]
-            Cauchy stress on the cell in eV/angstrom^3 (ASE units) in [xx,yy,zz,yz,xz,xy] format
-        temperature_K: float
-            The temperature in Kelvin
-        crystal_genome_source_structure_id: Optional[List[str]]
-            Provenance identifiers of the format '[KIM test result uuid]:[instance-id]'. 
-            The chains of dependencies of this test that produced this structure ends in the test listed in the test result, 
-            and started with the structure computed in the specific test result and instance-id referenced. May be
-            None if this test has no dependencies.
-        poscar: Optional[str]
-            String to be dumped as a poscar file
+        __nominal_crystal_structure_npt [Dict]:
+            An instance of the `crystal-structure-npt` property representing the nominal
+            crystal structure and conditions of the current call to the Test Driver.
+            Always kept synchronized with self.__atoms
     """
     def _setup(self,
                atoms: Optional[Atoms] = None,
-               optimize: bool = None,
-               stoichiometric_species: Optional[List[str]] = None,
-               prototype_label: Optional[str] = None,
-               parameter_values_angstrom: Optional[List[float]] = None,
-               library_prototype_label: Optional[str] = None,
-               short_name: Optional[Union[List[str],str]] = None,
+               input_crystal_structure: Optional[Dict] = None,
                cell_cauchy_stress_eV_angstrom3: List[float] = [0,0,0,0,0,0],
                temperature_K: float = 0,
-               crystal_genome_source_structure_id: Optional[List[str]] = None
+               **kwargs,
                ) -> None:
         """
+        TODO: Consider allowing arbitrary units for temp and stress?
+        
         Args:
             atoms:
-                ASE Atoms objects to use as the initial configuration or to build supercells. 
-                If this is provided, none of the arguments that are part of the Crystal Genome 
-                designation should be provided, and vice versa.
-            optimize:
-                Relax the provided Atoms object (atom positions and cell parameters). You must provide
-                an Atoms object if this is True, it is not supported with a Crystal Genome designation.
-            stoichiometric_species:
-                List of unique species in the crystal. Required part of the Crystal Genome designation. 
-            prototype_label:
-                AFLOW prototype label for the crystal. Required part of the Crystal Genome designation. 
-            parameter_values_angstrom:
-                List of AFLOW prototype parameters for the crystal. Required part of the Crystal Genome designation. 
-                a (first element, always present) is in angstroms, while the other parameters 
-                (present for crystals with more than 1 DOF) are in degrees or unitless. 
-            library_prototype_label: 
-                AFLOW library prototype label, may be `None`. Optional part of the Crystal Genome designation.  
-            short_name: 
-                List of any human-readable short names (e.g. "Face-Centered Cubic") associated with the crystal. 
-                Optional part of the Crystal Genome designation.
+                ASE Atoms objects to use as the initial configuration. Note that a symmetry analysis will be
+                performed on it and a primitive cell will be generated according to the conventions defined
+                defined in http://doi.org/10.1016/j.commatsci.2017.01.017. This primitive cell may be rotated and
+                translated relative to the configuration you provided. If this is provided, `input_crystal_structure`
+                should not be.
+            input_crystal_structure:            
+                Dictionary containing information about the nominal input crystal structure in KIM Property Instance
+                format (e.g. from a query to the OpenKIM.org database)
+                The following keys from https://openkim.org/properties/show/2023-02-21/staff@noreply.openkim.org/crystal-structure-npt
+                are used:
+                
+                * stoichiometric-species
+                * prototype-label
+                * a
+                * parameter-values (if prototype-label defines a crystal with free parameters besides "a")
+                * short-name (if present)
+                * crystal-genome-source-structure-id (if present)
+                
+                Note that although the keys are required to follow the schema of a KIM Property Instance 
+                (https://openkim.org/doc/schema/properties-framework/),
+                There is no requirement or check that the input dictionary is an instance of any specific KIM Property, only that
+                the keys required to build a crystal are present.                    
             cell_cauchy_stress_eV_angstrom3:
-                Cauchy stress on the cell in eV/angstrom^3 (ASE units) in [xx,yy,zz,yz,xz,xy] format
+                Cauchy stress on the cell in eV/angstrom^3 (ASE units) in [xx,yy,zz,yz,xz,xy] format. This is a nominal
+                variable, and this class simply provides recordkeeping of it. It is up to derived classes to implement
+                actually imposing this stress on the system.
             temperature_K:
-                The temperature in Kelvin
-            crystal_genome_source_structure_id:
-                Provenance identifiers of the format '[KIM test result uuid]:[instance-id]'. 
-                The chains of dependencies of this test that produced this structure ends in the test listed in the test result, 
-                and started with the structure computed in the specific test result and instance-id referenced. May be
-                None if this test has no dependencies.
+                The temperature in Kelvin. This is a nominal variable, and this class simply provides recordkeeping of it.
+                It is up to derived classes to implement actually setting the temperature of the system.
         """ 
-        aflow = AFLOW()
-        self.poscar = None
-        self.stoichiometric_species = stoichiometric_species        
-        self.prototype_label = prototype_label
-        aflow_parameter_names = aflow.get_param_names_from_prototype(prototype_label)
-        self.parameter_names = None if len(aflow_parameter_names) == 1 else aflow_parameter_names[1:]
-        self.parameter_values_angstrom = parameter_values_angstrom
-        self.library_prototype_label = library_prototype_label
-        self.crystal_genome_source_structure_id = crystal_genome_source_structure_id
-        if isinstance(short_name,str):
-            self.short_name = [short_name]
+        if (atoms is None) == (input_crystal_structure is None):
+            raise KIMTestDriverError("You must provide either `atoms` or `input_crystal_structure`, but not both.")
+
+        if atoms is not None:
+            self.__nominal_crystal_structure_npt = get_crystal_structure_from_atoms(atoms)
+            msg = 'Rebuilding atoms object in a standard setting defined by doi.org/10.1016/j.commatsci.2017.01.017. ' \
+                'See log file or computed properties for the (possibly re-oriented) primitive cell that computations will be based on.'
+            logger.info(msg)
+            print()
+            print(msg)
+            print()
         else:
-            self.short_name = short_name
-        self.cell_cauchy_stress_eV_angstrom3 = cell_cauchy_stress_eV_angstrom3
-        self.temperature_K = temperature_K
-
-        if (
-            (self.stoichiometric_species is None) !=
-            (self.prototype_label is None) !=
-            (self.parameter_values_angstrom is None)
-        ):
-            print (self._setup.__doc__)
-            raise KIMTestDriverError ("\n\nYou have provided some but not all of the required parts of the Crystal Genome designation specified in the docstring above.")
-
-        if self.atoms is not None:
-            if (
-                (self.stoichiometric_species is not None) or # only need to check one required part
-                ((self.short_name is not None)) or
-                ((self.library_prototype_label is not None)) or
-                ((self.parameter_names is not None))
-            ):
-                print (self._setup.__doc__)
-                raise KIMTestDriverError ("\n\nYou have provided an Atoms object as well as at least one part of the Crystal Genome designation specified in the docstring above.\n"
-                                          "Please provide only an Atoms object or a Crystal Genome designation, not both")  
-                                  
-            raise NotImplementedError('Taking an atoms object is NYI')
+            self.__nominal_crystal_structure_npt = input_crystal_structure
             
-            # Updates the Crystal Genome designation class attributes according to self.atoms
-            # It checks to make sure that stoichiometric_species and prototype_label have not changed,
-            # But they are both None for now, so the check is skipped            
-            self._update_crystal_genome_designation_from_atoms()
-            if rebuild_atoms:
-                self.atoms = aflow.build_atoms_from_prototype(self.stoichiometric_species,self.prototype_label,self.parameter_values_angstrom)
-                # Formerly there was a check here yet again to make sure symmetry hasn't changed, but I don't think it's important
-        elif self.stoichiometric_species is not None: # we've already checked that if this is not None, other required parts exist as well
-            self.atoms = aflow.build_atoms_from_prototype(self.stoichiometric_species,self.prototype_label,self.parameter_values_angstrom)
-            self._update_poscar()                 
-        else:
-            warn("You've provided neither a Crystal Genome designation nor an Atoms object.\n"
-                     "I won't stop you, but you better know what you're doing!")
-            # nothing else to do, return
-            return
-
-    def _update_poscar(self, atoms: Optional[Atoms] = None):
+        nominal_atoms = get_atoms_from_crystal_structure(self.__nominal_crystal_structure_npt)
+        
+        # Pop the temperature and stress keys in case they came along with a query
+        if 'temperature' in self.__nominal_crystal_structure_npt:
+            self.__nominal_crystal_structure_npt.pop('temperature')
+        if 'cell-cauchy-stress' in self.__nominal_crystal_structure_npt:
+            self.__nominal_crystal_structure_npt.pop('cell-cauchy-stress')
+        
+        self.__nominal_crystal_structure_npt['temperature'] = {
+            'source-value': temperature_K,
+            'source-unit': 'K'
+        }
+        self.__nominal_crystal_structure_npt['cell-cauchy-stress'] = {
+            'source-value': cell_cauchy_stress_eV_angstrom3,
+            'source-unit': 'eV/angstrom^3'
+        }        
+        if 'meta' in self.__nominal_crystal_structure_npt:
+            if 'crystal-genome-source-structure-id' not in self.__nominal_crystal_structure_npt:
+                # Could check for existence here, but why -- if I'm being given a 'meta' key I am going to assume it's a fully formed database entry
+                self.__nominal_crystal_structure_npt['crystal-genome-source-structure-id'] = {
+                    'source-value': self.__nominal_crystal_structure_npt['meta']['uuid']+':'+str(self.__nominal_crystal_structure_npt['instance-id'])
+                    }
+            # We've modified stuff, so carrying around 'meta' is no longer appropriate
+            self.__nominal_crystal_structure_npt.pop('meta')
+            
+        super()._setup(nominal_atoms)
+        
+    def _update_nominal_parameter_values(self, atoms: Atoms) -> None:
         """
-        Update self.poscar string from self.atoms or a provided Atoms object
-
-        Args:
-            atoms:
-                The atoms object to dump, if different from ``self.atoms``
+        Update the nominal parameter values of the nominal crystal structure from the provided Atoms object.
+        It is assumed that the crystallographic symmetry (space group + occupied Wyckoff positions) have not changed from the initially provided structure.
+        
+        The provided Atoms object MUST be a primitive cell of the crystal as defined in doi.org/10.1016/j.commatsci.2017.01.017
+        The Atoms object may be rotated, translated, and permuted, but the identity of the lattice vectors must be unchanged w.r.t.
+        the crystallographic prototype. In other words, there must exist a permutation and translation of the fractional coordinates that enables them to match the
+        equations defined by the prototype label.
+        
+        In practical terms, this means that this function is designed to take as input a relaxed or time-averaged from MD (and folded back into the original primitive cell)
+        copy of the Atoms object originally obtained from :func:`~kim_tools.KIMTestDriver._get_atoms()`.
+        
+        If finding the parameter fails, this function will raise an exception. This probably indicates a phase transition to a different symmetry, which is a normal
+        occasional occurrence if the original structure is not stable under the interatomic potential and prescribed conditions. These exceptions should not be
+        handled and that run of the Test Driver should be allowed to fail.
         """
-
-        if atoms is None:
-            atoms = self.atoms
-
-        with StringIO() as output:
-            atoms.write(output,format='vasp',sort=True)
-            self.poscar=output.getvalue()
-
-    def _get_crystal_genome_designation_from_atoms_and_verify_unchanged_symmetry(
-            self, atoms: Optional[Atoms] = None, loose_triclinic_and_monoclinic: bool = False
-    ) -> Dict:
-        """
-        Get Crystal Genome designation from ``self.atoms`` or a provided :class:`ase.Atoms` object, and check if symmetry is consistent with 
-        existing symmetry in this class
-
-        Args:
-            atoms:
-                The atoms object to analyze, if different from ``self.atoms``
-            loose_triclinic_and_monoclinic:
-                For triclinic and monoclinic space groups (1-15), the Wyckoff letters can be assigned in a non-unique way. Therefore,
-                it may be useful to only check the first three parts of the prototype label: stoichiomerty, Pearson symbol and space
-                group number. Use this if you are getting unexpected errors for monoclinic and triclinic crystals
-
-        Returns:
-            Dict:
-                A dictionary with the following keys:
-                    stoichiometric_species: List[str]
-                        List of unique species in the crystal
-                    prototype_label: str
-                        AFLOW prototype label for the crystal
-                    parameter_names: Optional[List[str]]
-                        Names of free parameters of the crystal besides 'a'. May be None if the crystal is cubic with no internal DOF.
-                        Should have length one less than `parameter_values_angstrom`
-                    parameter_values_angstrom: List[float]
-                        Free parameter values of the crystal. The first element in each inner list is the 'a' lattice parameter in 
-                        angstrom, the rest (if present) are in degrees or unitless
-                    library_prototype_label: Optional[str]
-                        AFLOW library prototype label
-                    short_name: Optional[List[str]]
-                        List of human-readable short names (e.g. "Face-Centered Cubic"), if present
-
-        Raises:
-            KIMTestDriverError:
-                If the symmetry of the crystal has changed
-
-        """
-        if atoms is None:
-            atoms = self.atoms
-
-        crystal_genome_designation = get_crystal_genome_designation_from_atoms(atoms)
-        assert ((self.stoichiometric_species is None) == (self.prototype_label is None)), "self.stoichiometric_species and self.prototype_label should either both be None, or neither"
-        if self.stoichiometric_species is not None:
-            verify_unchanged_symmetry(
-                self.stoichiometric_species,self.prototype_label,**crystal_genome_designation,loose_triclinic_and_monoclinic=loose_triclinic_and_monoclinic)
-                        
-        return crystal_genome_designation
+        aflow_parameter_values = AFLOW().solve_for_params_of_known_prototype(atoms,self.__nominal_crystal_structure_npt['prototype-label']['source-value'])
+        # Atoms objects always in angstrom
+        self.__nominal_crystal_structure_npt['a'] = {
+            'source-value': aflow_parameter_values[0],
+            'source-unit': 'angstrom'
+        }
+        if len(aflow_parameter_values) > 1:
+            self.__nominal_crystal_structure_npt['parameter-values'] = {
+                'source-value': aflow_parameter_values[1:]
+            }            
+        super()._set_atoms(get_atoms_from_crystal_structure(self.__nominal_crystal_structure_npt))
     
-    def _update_crystal_genome_designation_from_atoms(self, atoms: Optional[Atoms] = None, loose_triclinic_and_monoclinic: bool = False):
+    def _verify_unchanged_symmetry(self, atoms: Atoms) -> bool:
         """
-        Update the Crystal Genome crystal description fields from ``self.atoms`` or a provided :class:`ase.Atoms` object. Additionally, cache a poscar file to write later.
-
-        Args:
-            atoms:
-                The atoms object to analyze, if different from ``self.atoms``
-            loose_triclinic_and_monoclinic:
-                For triclinic and monoclinic space groups (1-15), the Wyckoff letters can be assigned in a non-unique way. Therefore,
-                it may be useful to only check the first three parts of the prototype label: stoichiomerty, Pearson symbol and space
-                group number. Use this if you are getting unexpected errors for monoclinic and triclinic crystals
-
-        Raises:
-            KIMTestDriverError:
-                If the symmetry of the crystal has changed                
+        Without changing the nominal state of the system, check if the provided Atoms object has the same symmetry as the nominal crystal structure
+        associated with the current state of the Test Driver. This is defined as having the same prototype label, except for possible changes in Wyckoff
+        letters as permitted by the space group normalizer.
         """
-        if atoms is None:
-            atoms = self.atoms
-
-        # get designation and check that symmetry has not changed (symmetry will not be checked if own CG designation has not been set)
-        crystal_genome_designation = self._get_crystal_genome_designation_from_atoms_and_verify_unchanged_symmetry(atoms, loose_triclinic_and_monoclinic)
-
-        self._update_poscar(atoms)
-
-        self.stoichiometric_species = crystal_genome_designation["stoichiometric_species"]
-        self.prototype_label = crystal_genome_designation["prototype_label"]
-        self.parameter_names = crystal_genome_designation["parameter_names"]
-        self.parameter_values_angstrom = crystal_genome_designation["parameter_values_angstrom"]
-        self.library_prototype_label = crystal_genome_designation["library_prototype_label"]
-        self.short_name = crystal_genome_designation["short_name"]
-
-    def _add_common_crystal_genome_keys_to_current_property_instance(self, write_stress: bool = False, write_temp: bool = False):
-        """
-        Write common Crystal Genome keys -- prototype description and, optionally, stress and temperature
-
-        Args:
-            write_stress:
-                Write the `cell-cauchy-stress` key
-            write_temp:
-                Write the `temperature` key
-        """
-        self._add_key_to_current_property_instance("prototype-label",self.prototype_label)
-        self._add_key_to_current_property_instance("stoichiometric-species",self.stoichiometric_species)
-        self._add_key_to_current_property_instance("a",self.parameter_values_angstrom[0],"angstrom")
-        if self.parameter_names is not None:            
-            self._add_key_to_current_property_instance("parameter-names",self.parameter_names)
-            self._add_key_to_current_property_instance("parameter-values",self.parameter_values_angstrom[1:])
-        if self.library_prototype_label is not None:
-            self._add_key_to_current_property_instance("library-prototype-label",self.library_prototype_label)
-        if self.short_name is not None:
-            self._add_key_to_current_property_instance("short-name",self.short_name)        
-        if write_stress:
-            self._add_key_to_current_property_instance("cell-cauchy-stress",self.cell_cauchy_stress_eV_angstrom3,"eV/angstrom^3")
-        if write_temp:
-            self._add_key_to_current_property_instance("temperature",self.temperature_K,"K")
-        if self.poscar is not None:
-            current_instance_index = len(kim_edn.loads(self.__output_property_instances))
-            filename = "instance-%d.poscar"%current_instance_index
-            self.__cached_files[filename] = self.poscar
-            self._add_key_to_current_property_instance("coordinates-file",filename) 
-        if self.crystal_genome_source_structure_id is not None:
-            self._add_key_to_current_property_instance("crystal-genome-source-structure-id",self.crystal_genome_source_structure_id)
+        return prototype_labels_are_equivalent(AFLOW().get_prototype_designation_from_atoms(atoms)['aflow_prototype_label'],self.__nominal_crystal_structure_npt['prototype-label']['source-value'])
 
     def _add_property_instance_and_common_crystal_genome_keys(self, property_name: str, write_stress: bool = False, write_temp: bool = False, disclaimer: Optional[str] = None):
         """
@@ -826,17 +920,71 @@ class SingleCrystalTestDriver(KIMTestDriver):
             disclaimer:
                 An optional disclaimer commenting on the applicability of this result, e.g. 
                 "This relaxation did not reach the desired tolerance."
-        """        
-        super()._add_property_instance(property_name,disclaimer)
-        self._add_common_crystal_genome_keys_to_current_property_instance(write_stress,write_temp)
- 
+        """
+        a_unit = self.__nominal_crystal_structure_npt['a']['source-unit']
+        
+        super()._set_serialized_property_instances(_add_property_instance_and_common_crystal_genome_keys(property_name = property_name,
+                                                                prototype_label = self.__nominal_crystal_structure_npt['prototype-label']['source-value'],
+                                                                stoichiometric_species = self.__nominal_crystal_structure_npt['stoichiometric-species']['source-value'],
+                                                                a = self.__nominal_crystal_structure_npt['a']['source-value'],
+                                                                parameter_values = self.__nominal_crystal_structure_npt.get('parameter-values',{}).get('source-value'),
+                                                                short_name = self.__nominal_crystal_structure_npt.get('short-name',{}).get('source-value'),
+                                                                cell_cauchy_stress = self.__nominal_crystal_structure_npt['cell-cauchy-stress']['source-value'] if write_stress else None,
+                                                                temperature = self.__nominal_crystal_structure_npt['temperature']['source-value'] if write_temp else None,
+                                                                crystal_genome_source_structure_id = self.__nominal_crystal_structure_npt.get('crystal-genome-source-structure-id',{}).get('source-value'),
+                                                                a_unit = a_unit,
+                                                                cell_cauchy_stress_unit = self.__nominal_crystal_structure_npt['cell-cauchy-stress']['source-unit'],
+                                                                temperature_unit = self.__nominal_crystal_structure_npt['temperature']['source-unit'],
+                                                                disclaimer = disclaimer,
+                                                                property_instances = super()._get_serialized_property_instances()))
+
+        # self.__atoms should be always kept commensurate with self.__nominal_crystal_structure_npt
+        # POSCAR files are always in angstrom, so rescale
+        
+        atoms_tmp = self._get_atoms()        
+        angstrom_cell,_ = convert_list(atoms_tmp.cell.tolist(),a_unit,'angstrom')        
+        atoms_tmp.set_cell(angstrom_cell,scale_atoms=True)
+        
+        # will automatically be renamed to e.g. 'output/instance-1.poscar'
+        atoms_tmp.write('instance.poscar',sort=True,format='vasp')
+        self._add_file_to_current_property_instance('coordinates-file','instance.poscar')
+        
+    def _get_temperature(self, unit='K'):
+        """
+        Get the nominal temperature
+        """
+        source_value = self.__nominal_crystal_structure_npt['temperature']['source-value']
+        source_unit = self.__nominal_crystal_structure_npt['temperature']['source-unit']
+        return convert_units(source_value,source_unit,unit,True)
+    
+    def _get_cell_cauchy_stress(self, unit='eV/angstrom^3'):
+        """
+        Get the nominal stress
+        """
+        source_value = self.__nominal_crystal_structure_npt['cell-cauchy-stress']['source-value']
+        source_unit = self.__nominal_crystal_structure_npt['cell-cauchy-stress']['source-unit']        
+        stress,_ = convert_list(source_value,source_unit,unit)
+        return stress
+    
+    def _get_nominal_crystal_structure_npt(self):
+        """
+        Get the dictionary returning the current nominal state of the system
+        """
+        return self.__nominal_crystal_structure_npt
+    
+    def _set_serialized_property_instances(self,property_instances) -> None:
+        raise NotImplementedError(f'Setting property instances directly not supported in Crystal Genome Test Drivers')
+    
+    def _set_atoms(self,atoms):
+        raise NotImplementedError(f'Setting atoms directly not supported in Crystal Genome test drivers')    
+    
 ################################################################################
-def query_crystal_genome_structures(
-            kim_model_name: str,
+def query_crystal_genome_structures(            
             stoichiometric_species: List[str],
             prototype_label: str,
             cell_cauchy_stress_eV_angstrom3: List[float] = [0,0,0,0,0,0],
             temperature_K: float = 0,
+            kim_model_name: Optional[str] = None,
         ) -> List[Dict]:
     """
     Query for all equilibrium parameter sets for this prototype label and species in the KIM database.
@@ -844,8 +992,6 @@ def query_crystal_genome_structures(
     this information is delivered to the test driver through the `runner` script.
 
     Args:
-        kim_model_name: str
-            KIM model name
         stoichiometric_species:
             List of unique species in the crystal. Required part of the Crystal Genome designation. 
         prototype_label:
@@ -853,7 +999,9 @@ def query_crystal_genome_structures(
         cell_cauchy_stress_eV_angstrom3:
             Cauchy stress on the cell in eV/angstrom^3 (ASE units) in [xx,yy,zz,yz,xz,xy] format
         temperature_K:
-            The temperature in Kelvin
+            The temperature in Kelvin            
+        kim_model_name:
+            KIM model name. If not provided, RD will be queried instead
 
     Returns:
         List[Dict]:        
@@ -878,11 +1026,9 @@ def query_crystal_genome_structures(
     # TODO: Some kind of generalized query interface for all tests, this is very hand-made
     cell_cauchy_stress_Pa = [component*1.6021766e+11 for component in cell_cauchy_stress_eV_angstrom3]
     
-    raw_query_args={
-        "query":{
-            "meta.type":"tr",
+    query = {
+            "meta.type": "rd" if kim_model_name is None else "tr",
             "property-id":"tag:staff@noreply.openkim.org,2023-02-21:property/crystal-structure-npt",
-            "meta.subject.extended-id":kim_model_name,
             "stoichiometric-species.source-value":{
                 "$size":len(stoichiometric_species),
                 "$all":stoichiometric_species
@@ -890,17 +1036,15 @@ def query_crystal_genome_structures(
             "prototype-label.source-value":prototype_label,
             "cell-cauchy-stress.si-value":cell_cauchy_stress_Pa,
             "temperature.si-value":temperature_K
-        },
-        "fields":{
-            "a.si-value":1,
-            "parameter-names.source-value":1,
-            "parameter-values.source-value":1, # can't use project because parameter-values and -names won't always exist
-            "library-prototype-label.source-value":1,
-            "short-name.source-value":1,
-            },
+        }
+    
+    if kim_model_name is not None:
+        query["meta.subject.extended-id"]=kim_model_name
+    
+    raw_query_args={
+        "query":query,
         "database":"data",
         "limit":0,
-        "flat":"on"
     }
     
     logger.info(f"Sending below query:\n{raw_query_args}")
@@ -909,41 +1053,10 @@ def query_crystal_genome_structures(
     
     logger.info(f"Query result:\n{query_result}")
     
-    list_of_cg_des = []
-
-    for parameter_set in query_result:
-        curr_cg_des = {}        
-        curr_cg_des["stoichiometric_species"] = stoichiometric_species # This was part of the query, but we provide it as output for a complete designation
-        curr_cg_des["prototype_label"] = prototype_label # This was part of the query, but we provide it as output for a complete designation
-        if "parameter-names.source-value" in parameter_set:
-            curr_cg_des["parameter_names"] = parameter_set["parameter-names.source-value"]
-        else:
-            curr_cg_des["parameter_names"] = None
-        # first element of parameter_values_angstrom is always present and equal to `a`
-        curr_cg_des["parameter_values_angstrom"] = [parameter_set["a.si-value"]*1e10]
-
-        if "parameter-values.source-value" in parameter_set: # has params other than a
-            curr_cg_des["parameter_values_angstrom"] += parameter_set["parameter-values.source-value"]
-            
-        if "library-prototype-label.source-value" in parameter_set:
-            curr_cg_des["library_prototype_label"] = parameter_set["library-prototype-label.source-value"]
-        else:
-            curr_cg_des["library_prototype_label"] = None
-
-        if "short-name.source-value" in parameter_set:
-            short_name = parameter_set["short-name.source-value"]
-            if not isinstance(short_name,list): # Necessary because we recently changed the property definition to be a list
-                short_name = [short_name]                
-            curr_cg_des["short_name"] = short_name
-        else:
-            curr_cg_des["short_name"] = None
-        list_of_cg_des.append(curr_cg_des)
-
-    print('\n!!! Found %d unique equilibrium structures from query_crystal_genome_structures() !!!\n'%len(list_of_cg_des))
-
-    return list_of_cg_des
+    print('\n!!! Found %d unique equilibrium structures from query_crystal_genome_structures() !!!\n'%len(query_result))
+    
+    return query_result
         
 # If called directly, do nothing
 if __name__ == "__main__":
     pass
-

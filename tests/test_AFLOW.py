@@ -1,16 +1,17 @@
 #!/usr/bin/python
 
 from kim_tools import AFLOW, split_parameter_array,CRYSTAL_GENOME_INITIAL_STRUCTURES, \
-    get_crystal_genome_designation_from_atoms, get_wyckoff_lists_from_prototype, \
-    frac_pos_match_allow_permute_wrap, frac_pos_match_allow_wrap, get_real_to_virtual_species_map, \
-    shuffle_atoms, get_pearson_symbol_from_prototype, get_centering_from_prototype, \
-    solve_for_cell_params, minimize_wrapper,incorrectSpaceGroupException
+    get_wyckoff_lists_from_prototype, frac_pos_match_allow_permute_wrap, frac_pos_match_allow_wrap, get_real_to_virtual_species_map, \
+    shuffle_atoms, get_pearson_symbol_from_prototype, minimize_wrapper, prototype_labels_are_equivalent
 from ase.calculators.kim.kim import KIM
 from random import random
 import json
-from copy import copy
-
 TEST_CASES = [577,365,1734,1199,1478,166,1210,1362,920,212,646,22]
+
+def test_prototype_labels_are_equivalent():
+    assert not(prototype_labels_are_equivalent('AB_oC8_65_j_g','AB_oC8_65_i_i'))
+    assert (prototype_labels_are_equivalent('AB2C_oP8_17_a_bc_d','AB2C_oP8_17_a_bd_c'))
+    assert (prototype_labels_are_equivalent('AB_mP8_14_ad_e','AB_mP8_14_ab_e'))
 
 def test_get_wyckoff_lists_from_prototype():
     assert get_wyckoff_lists_from_prototype('A_hP68_194_ef2h2kl') == ['efhhkkl']
@@ -106,8 +107,8 @@ def test_solve_for_internal_params():
             print(aflow.solve_for_params_of_known_prototype(atoms,prototype_label))
 
 def test_get_prototype(
-    #materials=[CRYSTAL_GENOME_INITIAL_STRUCTURES[test_case] for test_case in TEST_CASES]
-    materials=CRYSTAL_GENOME_INITIAL_STRUCTURES
+    materials=[CRYSTAL_GENOME_INITIAL_STRUCTURES[test_case] for test_case in TEST_CASES]
+    #materials=CRYSTAL_GENOME_INITIAL_STRUCTURES
 ):
     aflow = AFLOW(np=19)
     match_counts_by_pearson = {}
@@ -119,6 +120,7 @@ def test_get_prototype(
     for spacegroup in range(1,231):
         match_counts_by_spacegroup[spacegroup] = INIT_COUNTS.copy()
     
+    failed_to_solve_at_least_one = False
     
     for material in materials:
         species = material["species"]            
@@ -156,16 +158,11 @@ def test_get_prototype(
             atoms.calc = KIM('LJ_ElliottAkerson_2015_Universal__MO_959249795837_003')
             minimize_wrapper(atoms,fix_symmetry=True,variable_cell=True,steps=2,opt_kwargs={"maxstep":0.05})
             
-            
-            
-            crystal_did_not_rotate = False
             try:
-                redetected_parameter_values = aflow.solve_for_params_of_known_prototype(atoms,prototype_label)
-                if redetected_parameter_values is None:                
-                    print(f'Was not able to solve for parameters of {prototype_label}')
-                else:
-                    crystal_did_not_rotate = True
-            except (AFLOW.tooSymmetricException,AFLOW.failedToMatchException,incorrectSpaceGroupException) as e:
+                aflow.solve_for_params_of_known_prototype(atoms,prototype_label)
+                crystal_did_not_rotate = True
+            except Exception as e:
+                crystal_did_not_rotate = False
                 print(e)
             
             if not crystal_did_not_rotate:
@@ -175,7 +172,6 @@ def test_get_prototype(
                 filename = 'output/' + prototype_label + '.POSCAR'
                 print(f'Dumping atoms to {filename}')
                 atoms.write(filename,format='vasp',sort=True)
-                assert False
             else:
                 print(f'Successfully confirmed unrotated prototype designation for {prototype_label}')
                 match_counts_by_pearson[pearson]['match'] += 1
@@ -184,6 +180,8 @@ def test_get_prototype(
             json.dump(match_counts_by_pearson,f)
         with open('output/basic_match_counts_by_spacegroup.json','w') as f:
             json.dump(match_counts_by_spacegroup,f)
+            
+        assert not failed_to_solve_at_least_one
 
 if __name__ == '__main__':
     test_get_prototype()

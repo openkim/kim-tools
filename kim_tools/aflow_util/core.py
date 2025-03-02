@@ -37,7 +37,7 @@ __all__ = [
     "group_positions_by_wyckoff",
     "spglibFailureException",
     "incorrectSpaceGroupException",
-    "incorrectNumSpeciesException",
+    "incorrectSpeciesException",
     "inconsistentWyckoffException",    
     "CENTERING_DIVISORS",
     "check_number_of_atoms",
@@ -71,16 +71,16 @@ class incorrectSpaceGroupException(Exception):
     Raised when spglib or aflow --sgdata detects a different space group than the one specified in the prototype label
     """
     
-class incorrectNumSpeciesException(Exception):
+class incorrectSpeciesException(Exception):
     """
-    Raised when number of species is inconsistent
+    Raised when number or identity of species is inconsistent
     """
     
 class inconsistentWyckoffException(Exception):
     """
     Raised when an insonsistency in Wyckoff positions is detected
     """
-    
+
 @dataclass
 class EquivalentEqnSet:
     """
@@ -253,7 +253,11 @@ def group_positions_by_wyckoff(atoms: Atoms, prototype_label: Optional[str] = No
     if ds is None:
         raise spglibFailureException(f'spglib returned ``None`` dataset')
     
-    inequivalent_atom_indices = sorted(list(set(ds.crystallographic_orbits)))
+    # Depending on spglib version, we'll get an instance of an SpglibDataset or a dict
+    if not isinstance(ds,dict):
+        ds = ds.asdict()
+    
+    inequivalent_atom_indices = sorted(list(set(ds['crystallographic_orbits'])))
     
     # initialize return list    
     equivalent_atom_set_list = []    
@@ -261,13 +265,13 @@ def group_positions_by_wyckoff(atoms: Atoms, prototype_label: Optional[str] = No
         equivalent_atom_set_list.append(
             EquivalentAtomSet(
                 atoms.get_chemical_symbols()[inequivalent_atom_index],
-                ds.wyckoffs[inequivalent_atom_index],
+                ds['wyckoffs'][inequivalent_atom_index],
                 []
             )
         )
     
     # fill with coordinates
-    for frac_pos,repr_atom_index in zip(atoms.get_scaled_positions(),ds.crystallographic_orbits):
+    for frac_pos,repr_atom_index in zip(atoms.get_scaled_positions(),ds['crystallographic_orbits']):
         for i,equivalent_atom_set in enumerate(equivalent_atom_set_list):
             if inequivalent_atom_indices[i] == repr_atom_index:
                 equivalent_atom_set.frac_position_list.append(frac_pos.reshape(3,1))
@@ -280,12 +284,13 @@ def group_positions_by_wyckoff(atoms: Atoms, prototype_label: Optional[str] = No
     # check consistency with prototype label
     if prototype_label is not None:
         space_group_number = get_space_group_number_from_prototype(prototype_label)
-        if ds.number != space_group_number:
+        ds_number = ds['number']
+        if ds_number != space_group_number:
             raise incorrectSpaceGroupException(
-                f'spglib detected space group {ds.number}, against label {space_group_number}')
+                f'spglib detected space group {ds_number}, against label {space_group_number}')
         wyckoff_lists = get_wyckoff_lists_from_prototype(prototype_label)
         if len(wyckoff_lists) != len(set(atoms.get_chemical_symbols())):
-            raise incorrectNumSpeciesException(
+            raise incorrectSpeciesException(
                 f'Prototype label {prototype_label} has {len(wyckoff_lists)} species-Wyckoff sections\n'
                 f'but ``atoms`` has {len(set(atoms.get_chemical_symbols()))} unique species')
         wyckoff_lists_concatenated = ''
@@ -373,21 +378,29 @@ def prototype_labels_are_equivalent(
     ) -> bool:
     """
     Checks if two prototype labels are equivalent
-    
-    TODO: Unify this with 'verify_unchanged_symmetry'
-    """
+    """        
     if allow_species_permutation:
-        # TODO: Add this (for checking library prototype labels)
+        # TODO: Possibly add this (for checking library prototype labels)
         raise NotImplementedError('Species permutations not implemented')
+
+    if prototype_label_1 == prototype_label_2:
+        return True
     
-    if not get_stoich_reduced_list_from_prototype(prototype_label_1) \
+    # Check stoichiometry
+    stoich_reduced_list_1 = get_stoich_reduced_list_from_prototype(prototype_label_1)
+    
+    if not stoich_reduced_list_1 \
         == get_stoich_reduced_list_from_prototype(prototype_label_2):
             logger.info(f'Found non-matching stoichiometry in labels {prototype_label_1} and {prototype_label_2}')
             return False
+        
+    # Check Pearson symbol
     if not get_pearson_symbol_from_prototype(prototype_label_1) \
         == get_pearson_symbol_from_prototype(prototype_label_2):
             logger.info(f'Found non-matching Pearson symbol in labels {prototype_label_1} and {prototype_label_2}')
             return False
+                
+    # Check space group number
     sg_num_1 = get_space_group_number_from_prototype(prototype_label_1)
     sg_num_2 = get_space_group_number_from_prototype(prototype_label_2)
     if allow_enantiomorph and not space_group_numbers_are_enantiomorphic(sg_num_2, sg_num_1):
@@ -397,30 +410,54 @@ def prototype_labels_are_equivalent(
             logger.info(f'Found non-matching Space group in labels {prototype_label_1} and {prototype_label_2}')
             return False
     
-    # OK, so far everything matches, now check the Wyckoff letters
+    # OK, so far everything matches, now check the Wyckoff letters    
+    # Get lists of Wyckoff letters for each species, e.g. A2B3C_mC48_15_aef_3f_2e -> ['aef','fff','ee']
     wyckoff_lists_1 = get_wyckoff_lists_from_prototype(prototype_label_1)
     wyckoff_lists_2 = get_wyckoff_lists_from_prototype(prototype_label_2)
-    assert len(wyckoff_lists_1) == len(wyckoff_lists_2), 'Somehow I got non-matching lists of Wyckoff letters, the prototype labels are probably malformed'
+    num_species = len(stoich_reduced_list_1)
+    assert len(wyckoff_lists_1) == len(wyckoff_lists_2) == num_species, 'Somehow I got non-matching lists of Wyckoff letters, the prototype labels are probably malformed'
+    
     if sg_num_1 > 16: 
-        # Unless we are allowing species permuations, orthorhombic and higher SGs should
-        # always have identical prototype labels due to minimal Wyckoff enumeration.
-        # This may not be true for labels generated with older versions of AFLOW, such
-        # as library prototype labels. TODO: Write more sophisticated code for those cases
-        if wyckoff_lists_1 != wyckoff_lists_2:
-            logger.info(f'Labels {prototype_label_1} and {prototype_label_2} have different Wyckoff lists when they should match perfectly')
-            return False
+        # Theoretically, unless we are allowing species permutations, orthorhombic and higher SGs should
+        # always have identical prototype labels due to minimal Wyckoff enumeration. However, there are
+        # bugs in AFLOW making this untrue.
+        
+        wyck_pos_xform_list = WYCK_POS_XFORM_UNDER_NORMALIZER[sg_num_1]
+        for wyck_pos_xform in wyck_pos_xform_list:
+            wyckoff_lists_match_for_each_species = True
+            for i in range(num_species):
+                wyckoff_list_ref = wyckoff_lists_1[i]
+                wyckoff_list_test = ''
+                for test_letter in wyckoff_lists_2[i]:
+                    if test_letter == 'A': 
+                        # SG47 runs out of the alphabet and uses capital A for its general position (which is unchanged under any transformation in the normalizer)
+                        # However, we need 'A' to be last, so we make it 'A' to make it sort after all lowercase letters and replace it after
+                        wyckoff_list_test += '{'
+                    else:
+                        test_letter_index = ord(test_letter) - 97
+                        wyckoff_list_test += wyck_pos_xform[test_letter_index]
+                wyckoff_list_test = ''.join(sorted(wyckoff_list_test))
+                wyckoff_list_test = wyckoff_list_test.replace('{','A')
+                if wyckoff_list_test != wyckoff_list_ref:
+                    wyckoff_lists_match_for_each_species = False
+                    break
+            if wyckoff_lists_match_for_each_species:
+                logger.warning(f'Labels {prototype_label_1} and {prototype_label_2} were found to be equivalent despite being non-identical. '
+                            'This indicates a failure to find the lowest Wyckoff enumeration.')
+                return True
+        logger.info(f'Labels {prototype_label_1} and {prototype_label_2} were not found to be equivalent under any permutations allowable by the normalizer.')
+        return False
     else:    
         for wyckoff_list_1,wyckoff_list_2 in zip(wyckoff_lists_1,wyckoff_lists_2):
-            assert len(wyckoff_list_1) == len(wyckoff_list_2), 'Somehow I got non-matching lists of Wyckoff letters, the prototype labels are probably malformed'
             for letter_1,letter_2 in zip(wyckoff_list_1,wyckoff_list_2):
+                # Wyckoff sets are alphabetically contiguous in SG1-15, there is no need to re-sort anything.
+                # This is NOT true for all SGs (e.g. #200, Wyckoff set eh )
                 if not are_in_same_wyckoff_set(letter_1,letter_2,sg_num_1):
                     logger.info(f'Labels {prototype_label_1} and {prototype_label_2} have corresponding letters {letter_1} and {letter_2} that are not in the same Wyckoff set')
                     return False
-    
-    if prototype_label_1 != prototype_label_2:
-        logger.warning(f'Labels {prototype_label_1} and {prototype_label_2} were found to be equivalent despite being non-identical')
-        
-    return True
+        logger.info(f'Labels {prototype_label_1} and {prototype_label_2} were found to be equivalent despite being non-identical. '
+                    'This is a normal occurrence for triclinic and monoclinic space groups such as this.')        
+        return True
 
 def get_space_group_number_from_prototype(prototype_label: str) -> int:
     return int(prototype_label.split('_')[2])
@@ -610,7 +647,7 @@ def solve_for_cell_params(cellpar_prim: ArrayLike, prototype_label: str) -> List
         c = 2*aprim*sqrt(-cos_alphaprim) #  I guess primitive alpha is always obtuse!? Will raise a ValueError: math domain error if not
         return [a,c/a]
     elif pearson.startswith('hR'):
-        assert False, 'Punting on rhombohedral for now since it doesn\'t work in AFLOW anyway'
+        raise NotImplementedError('Punting on rhombohedral for now since it doesn\'t work in AFLOW anyway')
     elif pearson.startswith('cF'):
         return [aprim*sqrt(2)]
     elif pearson.startswith('cI'):
@@ -627,15 +664,20 @@ class AFLOW:
 
     """
 
-    class tooSymmetricException(Exception):
+    class changedSymmetryException(Exception):
         """
-        Raised when ``aflow --proto=...`` detects that the parameters requested indicate a higher symmetry
+        Raised when an unexpected symmetry change is detected
         """
     
     class failedToMatchException(Exception):
         """
         Raised when ``aflow --compare...`` fails to match
-        """        
+        """
+        
+    class failedToSolveException(Exception):
+        """
+        Raised when solution algorithm fails
+        """
 
     def __init__(self, aflow_executable:str="aflow", aflow_work_dir:str="",np:int=4):
         """
@@ -680,7 +722,7 @@ class AFLOW:
             if "--proto=" in cmd_str and "The structure has a higher symmetry than indicated by the label. The correct label and parameters for this structure are:" in str(exc.stderr):
                 warn_str = f"WARNING: the following command refused to write a POSCAR because it detected a higher symmetry: {cmd_str}"
                 logger.warning(warn_str)
-                raise self.tooSymmetricException(warn_str)
+                raise self.changedSymmetryException(warn_str)
             else:
                 raise exc
     
@@ -940,8 +982,8 @@ class AFLOW:
                 comparison_result[0]['structures_duplicate'][0]['atom_map']
             )
         else:            
-            logger.info("AFLOW failed to match the crystals")
-            return None,None,None,None
+            logger.info("AFLOW failed to match the crystals")            
+            raise self.failedToMatchException(f'AFLOW was unable to match the provided crystals')
         
     def build_atoms_from_prototype(
             self, species: List[str], prototype_label: str, parameter_values: List[float], primitive_cell: bool = True, verbose: bool=True, proto_file:Optional[str]=None
@@ -1027,8 +1069,8 @@ class AFLOW:
             triclinic = False
             if all([angle_name in param_names for angle_name in ANGLE_NAMES]):
                 triclinic = True
-                beta = random()*180
-                gamma = random()*180
+                beta = 5+random()*165
+                gamma = 5+random()*165
                 beta_rad = radians(beta)
                 gamma_rad = radians(gamma)
                 max_cosalpha = abs(sin(beta_rad)*sin(gamma_rad))+cos(beta_rad)*cos(gamma_rad)
@@ -1142,10 +1184,10 @@ class AFLOW:
 
         return equation_sets        
     
-    def solve_for_params_of_known_prototype(self, atoms: Atoms, prototype_label: str, max_resid: float = 1e-5) -> Optional[List]:
+    def solve_for_params_of_known_prototype(self, atoms: Atoms, prototype_label: str, max_resid: float = 1e-5) -> List:
         """
         Given an Atoms object that is a primitive cell of its Bravais lattice as defined in doi.org/10.1016/j.commatsci.2017.01.017, and its presumed prototype label,
-        solves for the free parameters of the prototype label. Returns None if the solution fails (likely indicating that the Atoms object provided does not conform
+        solves for the free parameters of the prototype label. Raises an error if the solution fails (likely indicating that the Atoms object provided does not conform
         to the provided prototype label.) The Atoms object may be rotated, translated, and permuted, but the identity of the lattice vectors must be unchanged w.r.t.
         the crystallographic prototype. In other words, there must exist a permutation and translation of the fractional coordinates that enables them to match the
         equations defined by the prototype label.
@@ -1172,16 +1214,15 @@ class AFLOW:
         )
         
         if not prototype_labels_are_equivalent(prototype_label,prototype_label_detected):
-            logger.info(f'Redetected prototype label {prototype_label_detected} does not match nominal {prototype_label}, probably due to rounding.')
+            msg = f'Redetected prototype label {prototype_label_detected} does not match nominal {prototype_label}, probably due to rounding.'
+            logger.info(msg)
+            raise self.changedSymmetryException(msg)            
         
         # We want the negative of the origin shift from atoms_rebuilt to atoms, because
         # the origin shift is the last operation to happen, so it will be in the "atoms" frame
         # This function gets the transformation from its second argument to its first
         # The origin shift is Cartesian if the POSCARs are Cartesian, which they are when made from Atoms
         _,_,neg_initial_origin_shift_cart,_ = self.get_basistransformation_rotation_originshift_atom_map_from_atoms(atoms,atoms_rebuilt)
-        
-        if neg_initial_origin_shift_cart is None:
-            raise self.failedToMatchException(f'AFLOW was unable to match, are {prototype_label_detected} and {prototype_label} the same label?')
         
         initial_origin_shift_frac = (-neg_initial_origin_shift_cart)@np.linalg.inv(atoms.cell)
         
@@ -1249,10 +1290,10 @@ class AFLOW:
                     logger.info(f'Found set of parameters for prototype {prototype_label}, but it was rotated relative to the original cell')
             else:
                 logger.info(f'Failed to solve equations for prototype {prototype_label} on this shift attempt')
-                
-    
-        logger.info(f'Failed to solve equations for prototype {prototype_label} on any shift attempt')
-        return None                    
+        
+        msg = f'Failed to solve equations for prototype {prototype_label} on any shift attempt'
+        logger.info(msg)
+        raise self.failedToSolveException(msg)
     
     def confirm_unrotated_prototype_designation(      
             self,
@@ -1297,10 +1338,10 @@ class AFLOW:
         reference_atoms_copy.set_cell(Cell.fromcellpar(cell_lengths_and_angles),scale_atoms=True)
         
         # the rotations below are Cartesian.
-        
-        _,cart_rot,_,_ = self.get_basistransformation_rotation_originshift_atom_map_from_atoms(test_atoms,reference_atoms_copy)
-        
-        if cart_rot is None:
+        try:
+            _,cart_rot,_,_ = self.get_basistransformation_rotation_originshift_atom_map_from_atoms(test_atoms,reference_atoms_copy)
+        except self.failedToMatchException:
+            logger.info("AFLOW failed to match the recreated crystal to reference")
             return False
         
         point_group_ops = self.get_pointgroup_crystal_from_atoms(reference_atoms_copy)
