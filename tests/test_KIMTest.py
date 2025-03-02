@@ -14,10 +14,10 @@ class TestTestDriver(KIMTestDriver):
             property_name: for testing ability to find properties at different paths.
             !!! AN ACTUAL TEST DRIVER SHOULD NOT HAVE AN ARGUMENT SUCH AS THIS !!!
         """
-        self.species = self.__atoms.get_chemical_symbols()[0]
+        self.species = self._get_atoms().get_chemical_symbols()[0]
         self._add_property_instance(property_name,"This is an example disclaimer.")
-        self._add_key_to_current_property_instance("species", self.__atoms.get_chemical_symbols()[0])
-        self._add_key_to_current_property_instance("mass", self.__atoms.get_masses()[0], "amu", {'source-std-uncert-value':1})
+        self._add_key_to_current_property_instance("species", self._get_atoms().get_chemical_symbols()[0])
+        self._add_key_to_current_property_instance("mass", self._get_atoms().get_masses()[0], "amu", {'source-std-uncert-value':1})
 
 def test_kimtest(monkeypatch):
     atoms = Atoms(['Ar'], [[0, 0, 0]], cell=[[1, 0, 0], [0, 2, 0], [0, 0, 2]])

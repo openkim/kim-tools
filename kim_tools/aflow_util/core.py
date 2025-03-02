@@ -255,7 +255,7 @@ def group_positions_by_wyckoff(atoms: Atoms, prototype_label: Optional[str] = No
     
     # Depending on spglib version, we'll get an instance of an SpglibDataset or a dict
     if not isinstance(ds,dict):
-        ds = ds.asdict()
+        ds = ds.__dict__
     
     inequivalent_atom_indices = sorted(list(set(ds['crystallographic_orbits'])))
     
