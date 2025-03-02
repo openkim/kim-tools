@@ -392,8 +392,8 @@ class KIMTestDriver(ABC):
         self.__output_property_instances = "[]"
 
     def _setup(self, 
-               atoms: Optional[Atoms] = None
-               ):
+               atoms: Optional[Atoms] = None,
+               **kwargs):
         """
         Assign the self.__atoms object
         
