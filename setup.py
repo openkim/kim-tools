@@ -17,6 +17,18 @@ except Exception:
     print(lines)
     print()
 
+try:
+    subprocess.check_output(['units','--help'])
+except Exception:
+    message = "units executable not found. It is required."
+    lines =   "========================================================================================="
+    warn(message)
+    print()
+    print(lines)
+    print(message)
+    print(lines)
+    print()
+
 setuptools.setup(
     name="kim-tools",
     version="0.1.0",

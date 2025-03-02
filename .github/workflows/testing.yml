@@ -18,6 +18,12 @@ jobs:
           create-args: >-
             -f tests/environment.yml
 
+      - name: Install units
+        shell: bash -el {0}
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install units
+
       - name: Install AFLOW
         shell: bash -el {0}
         run: |
