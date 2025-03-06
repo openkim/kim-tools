@@ -6,6 +6,8 @@ from kim_tools import AFLOW, split_parameter_array,CRYSTAL_GENOME_INITIAL_STRUCT
 from ase.calculators.kim.kim import KIM
 from random import random
 import json
+import os
+
 TEST_CASES = [577,365,1734,1199,1478,166,1210,1362,920,212,646,22]
 
 def test_prototype_labels_are_equivalent():
@@ -169,7 +171,14 @@ def test_get_prototype(
                 print(f'Failed to solve for parameters or confirm unrotated prototype designation for {prototype_label}')
                 match_counts_by_pearson[pearson]['nonmatch'] += 1
                 match_counts_by_spacegroup[spacegroup]['nonmatch'] += 1
-                filename = 'output/' + prototype_label + '.POSCAR'
+                filename = f'output/{prototype_label}.POSCAR'
+                filename_exists = os.path.isfile(filename)
+                if filename_exists:
+                    suffix = 0
+                    while not filename_exists:
+                        filename = f'output/{prototype_label}.{suffix}.POSCAR'
+                        filename_exists = os.path.isfile(filename)
+                        suffix += 1
                 print(f'Dumping atoms to {filename}')
                 atoms.write(filename,format='vasp',sort=True)
             else:

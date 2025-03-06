@@ -25,9 +25,10 @@ __all__ = [
     "C_CENTERED_ORTHORHOMBIC_GROUPS",
     "A_CENTERED_ORTHORHOMBIC_GROUPS",
     "WYCK_POS_XFORM_UNDER_NORMALIZER",
-    "SPACE_GROUPS_FOR_EACH_PEARSON",
-    "get_pearson_from_space_group",
-    "get_formal_pearson_from_space_group",
+    "SPACE_GROUPS_FOR_EACH_BRAVAIS_LATTICE",
+    "get_bravais_lattice_from_space_group",
+    "get_formal_bravais_lattice_from_space_group",
+    "get_primitive_wyckoff_multiplicity",
     "POSSIBLE_PRIMITIVE_SHIFTS"
 ]
 
@@ -3963,11 +3964,11 @@ WYCK_POS_XFORM_UNDER_NORMALIZER = {
     ]
 }
 
-SPACE_GROUPS_FOR_EACH_PEARSON = {
+SPACE_GROUPS_FOR_EACH_BRAVAIS_LATTICE = {
     "aP":[1,2],
     "mP":[3,4,6,7,10,11,13,14],
     "mC":[5,8,9,12,15],
-    "oP":[6,17,18,19,25,26,27,28,29,30,31,32,33,34,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62],
+    "oP":[16,17,18,19,25,26,27,28,29,30,31,32,33,34,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62],
     "oC":[20,21,35,36,37,38,39,40,41,63,64,65,66,67,68],
     "oI":[23,24,44,45,46,71,72,73,74],
     "oF":[22,42,43,69,70],
@@ -3980,20 +3981,28 @@ SPACE_GROUPS_FOR_EACH_PEARSON = {
     "cI":[197,199,204,206,211,214,217,220,229,230]
 }
 
-def get_pearson_from_space_group(sgnum:Union[int,str]):
-    for pearson in SPACE_GROUPS_FOR_EACH_PEARSON:
-        if int(sgnum) in SPACE_GROUPS_FOR_EACH_PEARSON[pearson]:
+def get_bravais_lattice_from_space_group(sgnum:Union[int,str]):
+    for pearson in SPACE_GROUPS_FOR_EACH_BRAVAIS_LATTICE:
+        if int(sgnum) in SPACE_GROUPS_FOR_EACH_BRAVAIS_LATTICE[pearson]:
             return pearson
+    raise RuntimeError(f'Failed to find space group number f{sgnum} in table of lattice symbols')
         
-def get_formal_pearson_from_space_group(sgnum:Union[int,str]):
+def get_formal_bravais_lattice_from_space_group(sgnum:Union[int,str]):
     """
     same as above, except distinguish between "oA" and "oC"
     """
-    pearson = get_pearson_from_space_group(sgnum)
+    pearson = get_bravais_lattice_from_space_group(sgnum)
     if pearson == "oC":
         if sgnum in A_CENTERED_ORTHORHOMBIC_GROUPS:
             return "oA"
     return pearson
+
+def get_primitive_wyckoff_multiplicity(sgnum:Union[int,str],wyckoff:str)->int:
+    centering_divisor = CENTERING_DIVISORS[get_bravais_lattice_from_space_group(sgnum)[1]]
+    multiplicity_per_primitive_cell = WYCKOFF_MULTIPLICITIES[int(sgnum)][wyckoff]/centering_divisor
+    # check that multiplicity is an integer
+    assert np.isclose(multiplicity_per_primitive_cell,round(multiplicity_per_primitive_cell))
+    return round(multiplicity_per_primitive_cell)
 
 POSSIBLE_PRIMITIVE_SHIFTS = {
     1: [

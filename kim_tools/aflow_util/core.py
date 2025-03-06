@@ -11,17 +11,14 @@ from os import PathLike
 import ase
 from ase.cell import Cell
 from ase import Atoms
-import ase.spacegroup
-from ase.spacegroup.symmetrize import check_symmetry
 from curses.ascii import isalpha, isdigit
 from typing import Dict, List, Tuple, Union, Optional, Any
 from tempfile import NamedTemporaryFile
 from sympy import parse_expr,matrix2numpy,linear_eq_to_matrix,Symbol
 from dataclasses import dataclass
-from ..symmetry_util import are_in_same_wyckoff_set, space_group_numbers_are_enantiomorphic, \
-    WYCK_POS_XFORM_UNDER_NORMALIZER, WYCKOFF_MULTIPLICITIES, CENTERING_DIVISORS, C_CENTERED_ORTHORHOMBIC_GROUPS, A_CENTERED_ORTHORHOMBIC_GROUPS, \
+from ..symmetry_util import are_in_same_wyckoff_set, space_group_numbers_are_enantiomorphic, get_primitive_wyckoff_multiplicity, \
+    WYCK_POS_XFORM_UNDER_NORMALIZER, CENTERING_DIVISORS, C_CENTERED_ORTHORHOMBIC_GROUPS, A_CENTERED_ORTHORHOMBIC_GROUPS, \
     POSSIBLE_PRIMITIVE_SHIFTS
-from operator import attrgetter
 from math import cos, acos, sin, sqrt, radians, degrees
 import logging
 logger = logging.getLogger(__name__)
@@ -34,12 +31,10 @@ __all__ = [
     "EquivalentEqnSet",
     "EquivalentAtomSet",
     "write_tmp_poscar_from_atoms_and_run_function",
-    "group_positions_by_wyckoff",
-    "spglibFailureException",
+    "get_equivalent_atom_sets_from_prototype_and_atom_map",
     "incorrectSpaceGroupException",
     "incorrectSpeciesException",
     "inconsistentWyckoffException",    
-    "CENTERING_DIVISORS",
     "check_number_of_atoms",
     "split_parameter_array",
     "internal_parameter_sort_key",
@@ -48,8 +43,6 @@ __all__ = [
     "prototype_labels_are_equivalent",
     "get_space_group_number_from_prototype",
     "get_pearson_symbol_from_prototype",
-    "get_centering_from_prototype",
-    "get_centering_divisor_from_prototype",
     "read_shortnames",
     "get_real_to_virtual_species_map",
     "solve_for_cell_params",
@@ -59,11 +52,6 @@ __all__ = [
 class incorrectNumAtomsException(Exception):
     """
     Raised when the number of atoms in the atoms object or in the WYCCAR returned by aflow --sgdata does not match the number of atoms in the Pearson symbol of the prototype label
-    """
-
-class spglibFailureException(Exception):
-    """
-    Raised when an issue with the spglib analysis occurs
     """
 
 class incorrectSpaceGroupException(Exception):
@@ -216,104 +204,49 @@ def internal_parameter_sort_key(parameter_name: Union[Symbol,str] ) -> int:
     number = int(parameter_name_str[1:])
     return 1000*number + ord(axis)
 
-def group_positions_by_wyckoff(atoms: Atoms, prototype_label: Optional[str] = None) -> List[EquivalentAtomSet]:
+def get_equivalent_atom_sets_from_prototype_and_atom_map(atoms: Atoms, prototype_label: str, atom_map: List[int], sort_atoms: bool = False) -> List[EquivalentAtomSet]:
     """
-    Return a list of objects representing sets of equivalent atoms
-    TODO: Rewrite this using AFLOW instead of spglib, so that the symmetry-detection methods are consistent
-    TODO: More robust checking of prototype label?
+    Get a list of objects representing sets of equivalent atoms from the atom_map of an AFLOW comparison
+    
+    The AFLOW comparison should be between `atoms` and `atoms_rebuilt`, in that order,
+    where `atoms_rebuilt` is regenerated from the prototype designation detected from `atoms`,
+    and `prototype_label` is the detected prototype label
     
     Args:
-        atoms: atoms object to analyze
-        prototype_label:
-            If this is provided, a consistency check will be made.
-            It is assumed that the virtual species in the prototype label
-            are alphabetized commensurately with the real species in ``atoms``,
-            and that the Wyckoff positions within each species are alphabetized
-            as well (as it should be in a valid prototype label)
-            TODO: Make a checker for "valid prototype label"
-
-            
-    Raises:
-        spglibFailureException: if spglib fails
-        incorrectSpaceGroupException: if ``prototype_label`` is provided and disagrees with spglib space group
-        incorrectNumSpeciesException: if ``prototype_label`` is provided and disagrees with number of species in ``atoms``
-        inconsistentWyckoffException: if ``prototype_label`` is provided and disagrees with spglib Wyckoffs
-    Returns:
-        List of object each containing string attributes ``species``, ``wyckoff_letter``,
-        and list of 3x1 arrays ``frac_position_list``
+        sort_atoms: If `atom_map` was obtained by sorting `atoms` before writing it to POSCAR, set this to True
     """
-    if prototype_label is not None:
-        check_number_of_atoms(atoms,prototype_label)
-    
-    try:
-        ds = check_symmetry(atoms)
-    except Exception as e:
-        raise spglibFailureException(f'spglib encountered the following exception:\n{e}')
-    
-    if ds is None:
-        raise spglibFailureException(f'spglib returned ``None`` dataset')
-    
-    # Depending on spglib version, we'll get an instance of an SpglibDataset or a dict
-    if not isinstance(ds,dict):
-        ds = ds.__dict__
-    
-    inequivalent_atom_indices = sorted(list(set(ds['crystallographic_orbits'])))
+
+    if sort_atoms:
+        with NamedTemporaryFile('w+') as f:
+            atoms.write(f.name,format='vasp',sort=True)
+            f.seek(0)
+            atoms_in_correct_order = ase.io.read(f.name,format='vasp')
+    else:
+        atoms_in_correct_order = atoms
     
     # initialize return list    
-    equivalent_atom_set_list = []    
-    for inequivalent_atom_index in inequivalent_atom_indices:
-        equivalent_atom_set_list.append(
-            EquivalentAtomSet(
-                atoms.get_chemical_symbols()[inequivalent_atom_index],
-                ds['wyckoffs'][inequivalent_atom_index],
-                []
+    equivalent_atom_set_list = []
+    
+    redetected_wyckoff_lists = get_wyckoff_lists_from_prototype(prototype_label)
+    sg_num = get_space_group_number_from_prototype(prototype_label)
+    
+    index_in_atoms_rebuilt = 0
+    for i_species,species_wyckoff_list in enumerate(redetected_wyckoff_lists):
+        virtual_species_letter = chr(65+i_species)
+        for wyckoff_letter in species_wyckoff_list:
+            equivalent_atom_set_list.append(
+                EquivalentAtomSet(
+                    virtual_species_letter,
+                    wyckoff_letter,
+                    []
+                )
             )
-        )
+            for _ in range(get_primitive_wyckoff_multiplicity(sg_num,wyckoff_letter)):                
+                # atom_map[index_in_atoms] = index_in_atoms_rebuilt
+                index_in_atoms = atom_map.index(index_in_atoms_rebuilt)
+                equivalent_atom_set_list[-1].frac_position_list.append(atoms_in_correct_order.get_scaled_positions()[index_in_atoms].reshape(3,1))
+                index_in_atoms_rebuilt += 1
     
-    # fill with coordinates
-    for frac_pos,repr_atom_index in zip(atoms.get_scaled_positions(),ds['crystallographic_orbits']):
-        for i,equivalent_atom_set in enumerate(equivalent_atom_set_list):
-            if inequivalent_atom_indices[i] == repr_atom_index:
-                equivalent_atom_set.frac_position_list.append(frac_pos.reshape(3,1))
-                continue
-
-    # sort by letter first then species
-    equivalent_atom_set_list.sort(key=attrgetter('wyckoff_letter'))
-    equivalent_atom_set_list.sort(key=attrgetter('species'))
-    
-    # check consistency with prototype label
-    if prototype_label is not None:
-        space_group_number = get_space_group_number_from_prototype(prototype_label)
-        ds_number = ds['number']
-        if ds_number != space_group_number:
-            raise incorrectSpaceGroupException(
-                f'spglib detected space group {ds_number}, against label {space_group_number}')
-        wyckoff_lists = get_wyckoff_lists_from_prototype(prototype_label)
-        if len(wyckoff_lists) != len(set(atoms.get_chemical_symbols())):
-            raise incorrectSpeciesException(
-                f'Prototype label {prototype_label} has {len(wyckoff_lists)} species-Wyckoff sections\n'
-                f'but ``atoms`` has {len(set(atoms.get_chemical_symbols()))} unique species')
-        wyckoff_lists_concatenated = ''
-        for wyckoff_list in wyckoff_lists:
-            wyckoff_lists_concatenated += wyckoff_list    
-        if len(wyckoff_lists_concatenated) != len(equivalent_atom_set_list):
-            raise inconsistentWyckoffException(
-                f'Prototype label {prototype_label} indicates {len(wyckoff_lists_concatenated)} '
-                f'inequivalent atoms but I found {len(equivalent_atom_set_list)}')
-        # everything should be ordered consistently with each other,
-        # except within a Wyckoff set which we will have to map later
-        for label_wyckoff_letter,equivalent_atom_set in \
-            zip(wyckoff_lists_concatenated,equivalent_atom_set_list):
-                if not are_in_same_wyckoff_set(equivalent_atom_set.wyckoff_letter,label_wyckoff_letter,space_group_number):
-                    raise inconsistentWyckoffException(
-                        f'Prototype Wyckoff letter {label_wyckoff_letter} and '
-                        f'spglib Wyckoff letter {equivalent_atom_set.wyckoff_letter} '
-                        'are not in the same Wyckoff set'
-                    )
-                if label_wyckoff_letter != equivalent_atom_set.wyckoff_letter:
-                    logger.info(f'Wyckoff shuffle encountered in {prototype_label}, '
-                                f'{label_wyckoff_letter} -> {equivalent_atom_set.wyckoff_letter}')
-
     return equivalent_atom_set_list
 
 def get_stoich_reduced_list_from_prototype(prototype_label: str) -> List[int]:
@@ -417,7 +350,7 @@ def prototype_labels_are_equivalent(
     num_species = len(stoich_reduced_list_1)
     assert len(wyckoff_lists_1) == len(wyckoff_lists_2) == num_species, 'Somehow I got non-matching lists of Wyckoff letters, the prototype labels are probably malformed'
     
-    if sg_num_1 > 16: 
+    if sg_num_1 >= 16: 
         # Theoretically, unless we are allowing species permutations, orthorhombic and higher SGs should
         # always have identical prototype labels due to minimal Wyckoff enumeration. However, there are
         # bugs in AFLOW making this untrue.
@@ -431,7 +364,7 @@ def prototype_labels_are_equivalent(
                 for test_letter in wyckoff_lists_2[i]:
                     if test_letter == 'A': 
                         # SG47 runs out of the alphabet and uses capital A for its general position (which is unchanged under any transformation in the normalizer)
-                        # However, we need 'A' to be last, so we make it 'A' to make it sort after all lowercase letters and replace it after
+                        # However, we need 'A' to be last, so we make it '{' to make it sort after all lowercase letters and replace it after
                         wyckoff_list_test += '{'
                     else:
                         test_letter_index = ord(test_letter) - 97
@@ -464,15 +397,6 @@ def get_space_group_number_from_prototype(prototype_label: str) -> int:
 
 def get_pearson_symbol_from_prototype(prototype_label: str) -> str:
     return prototype_label.split('_')[1]
-
-def get_centering_from_prototype(prototype_label: str) -> str:
-    return get_pearson_symbol_from_prototype(prototype_label)[1]
-
-def get_centering_divisor_from_prototype(prototype_label: str) -> int:
-    """
-    Get number of lattice points per conventional (hexagonal for rhombohedral) unit cell
-    """
-    return CENTERING_DIVISORS[get_centering_from_prototype(prototype_label)]
 
 def read_shortnames() -> Dict:
     """
@@ -702,7 +626,7 @@ class AFLOW:
             verbose: Whether to echo command to log file
 
         Raises:
-            tooSymmetricException: if an ``aflow --proto=`` command complains that 
+            AFLOW.changedSymmetryException: if an ``aflow --proto=`` command complains that 
                 ``the structure has a higher symmetry than indicated by the label`` 
         
         Returns:
@@ -720,7 +644,7 @@ class AFLOW:
             return subprocess.check_output(cmd_str, shell=True, stderr=subprocess.PIPE,encoding="utf-8")
         except subprocess.CalledProcessError as exc:
             if "--proto=" in cmd_str and "The structure has a higher symmetry than indicated by the label. The correct label and parameters for this structure are:" in str(exc.stderr):
-                warn_str = f"WARNING: the following command refused to write a POSCAR because it detected a higher symmetry: {cmd_str}"
+                warn_str = f"WARNING: the following command refused to write a POSCAR because it detected a higher symmetry: {cmd_str}. AFLOW error follows:\n{str(exc.stderr)}"
                 logger.warning(warn_str)
                 raise self.changedSymmetryException(warn_str)
             else:
@@ -740,7 +664,10 @@ class AFLOW:
         
         Returns:
             The output of the command or None if an `output_file` was given
-        
+            
+        Raises:
+            AFLOW.changedSymmetryException: if an ``aflow --proto=`` command complains that 
+                ``the structure has a higher symmetry than indicated by the label``         
         """
         command = " --proto=" + prototype_label
         if free_params:
@@ -750,8 +677,55 @@ class AFLOW:
         
         if output_file is not None:
             command += " > " + self.aflow_work_dir + output_file
-        return self.aflow_command([command], verbose=verbose)
+        try:
+            return self.aflow_command([command], verbose=verbose)
+        except self.changedSymmetryException as e:
+            # re-raise, just indicating that this function knows about this exception
+            raise e
 
+    def build_atoms_from_prototype(
+            self, species: List[str], prototype_label: str, parameter_values: List[float], verbose: bool=True, proto_file:Optional[str]=None
+            ) -> Atoms:
+        """
+        Build an atoms object from an AFLOW prototype designation
+        
+        Args:
+            species:
+                Stoichiometric species, e.g. ``['Mo','S']`` corresponding to A and B respectively for prototype label AB2_hP6_194_c_f indicating molybdenite
+            prototype_label: 
+                An AFLOW prototype label, without an enumeration suffix, without specified atomic species
+            parameter_values: 
+                The free parameters of the AFLOW prototype designation
+            verbose:
+                Print details in the log file
+            proto_file:
+                Print the output of --proto to this file
+
+        Returns:
+            Object representing unit cell of the material
+            
+        Raises:
+            AFLOW.changedSymmetryException: if an ``aflow --proto=`` command complains that 
+                ``the structure has a higher symmetry than indicated by the label``             
+        """        
+        with NamedTemporaryFile(mode='w+') as f, (NamedTemporaryFile(mode='w+') if proto_file is None else open(proto_file,mode='w+')) as f_with_species:
+            try:
+                self.write_poscar_from_prototype(prototype_label,f.name,parameter_values,verbose=verbose)
+            except self.changedSymmetryException as e:
+                # re-raise, just indicating that this function knows about this exception
+                raise e
+            f.seek(0)
+            # Add line containing species
+            for i,line in enumerate(f):
+                f_with_species.write(line)
+                if i == 4:
+                    f_with_species.write(' '.join(species)+'\n')
+            f_with_species.seek(0)
+            atoms = ase.io.read(f_with_species.name,format='vasp')            
+        check_number_of_atoms(atoms,prototype_label)
+        atoms.wrap()
+        return atoms
+    
     def compare_materials_dir(self, materials_subdir: str, no_scale_volume: bool=True) -> List[Dict]:
         """
         Compare a directory of materials using the aflow --compare_materials -D tool
@@ -955,25 +929,32 @@ class AFLOW:
     def _compare_poscars(self, poscar1: PathLike, poscar2: PathLike) -> Dict:
         return json.loads(self.aflow_command([' --print=JSON --compare_materials=%s,%s --screen_only --no_scale_volume --optimize_match --quiet'%(poscar1,poscar2)],verbose=False))
             
-    def _compare_Atoms(self, atoms1: Atoms, atoms2: Atoms) -> Dict:        
+    def _compare_Atoms(self, atoms1: Atoms, atoms2: Atoms, sort_atoms1: bool = True, sort_atoms2: bool = True) -> Dict:        
         with NamedTemporaryFile() as f1, NamedTemporaryFile() as f2:
-            atoms1.write(f1.name,'vasp',sort=True)
-            atoms2.write(f2.name,'vasp',sort=True)
+            atoms1.write(f1.name,'vasp',sort=sort_atoms1)
+            atoms2.write(f2.name,'vasp',sort=sort_atoms2)
             f1.seek(0)
             f2.seek(0)
             compare = self._compare_poscars(f1.name,f2.name)
         return compare
 
-    def get_basistransformation_rotation_originshift_atom_map_from_atoms(self, atoms1: Atoms, atoms2: Atoms) -> \
+    def get_basistransformation_rotation_originshift_atom_map_from_atoms(self, atoms1: Atoms, atoms2: Atoms, sort_atoms1: bool = True, sort_atoms2: bool = True) -> \
         Tuple[Optional[ArrayLike],Optional[ArrayLike],Optional[ArrayLike],Optional[List[int]]]:
         """
         Get operations to transform atoms2 to atoms1
+        
+        Args:
+            sort_atoms1: Whether to sort atoms1 before comparing. If species are not alphabetized, this is REQUIRED. However, the `atom_map` returned will be w.r.t the sorted order, use with care!
+            sort_atoms2: Whether to sort atoms2 before comparing.
 
         Returns:
             Tuple of arrays in the order: basis transformation, rotation, origin shift, atom_map
             atom_map[index_in_structure_1] = index_in_structure_2
+            
+        Raises:
+            AFLOW.failedToMatchException: if AFLOW fails to match the crystals
         """
-        comparison_result = self._compare_Atoms(atoms1,atoms2)
+        comparison_result = self._compare_Atoms(atoms1,atoms2,sort_atoms1,sort_atoms2)
         if 'structures_duplicate' in comparison_result[0] and comparison_result[0]['structures_duplicate'] != []:
             return (
                 np.asarray(comparison_result[0]['structures_duplicate'][0]['basis_transformation']),
@@ -981,52 +962,11 @@ class AFLOW:
                 np.asarray(comparison_result[0]['structures_duplicate'][0]['origin_shift']),
                 comparison_result[0]['structures_duplicate'][0]['atom_map']
             )
-        else:            
-            logger.info("AFLOW failed to match the crystals")            
-            raise self.failedToMatchException(f'AFLOW was unable to match the provided crystals')
+        else:
+            msg = 'AFLOW was unable to match the provided crystals'
+            logger.info(msg)
+            raise self.failedToMatchException(msg)
         
-    def build_atoms_from_prototype(
-            self, species: List[str], prototype_label: str, parameter_values: List[float], primitive_cell: bool = True, verbose: bool=True, proto_file:Optional[str]=None
-            ) -> Atoms:
-        """
-        Build an atoms object from an AFLOW prototype designation
-        
-        Args:
-            species:
-                Stoichiometric species, e.g. ``['Mo','S']`` corresponding to A and B respectively for prototype label AB2_hP6_194_c_f indicating molybdenite
-            prototype_label: 
-                An AFLOW prototype label, without an enumeration suffix, without specified atomic species
-            parameter_values: 
-                The free parameters of the AFLOW prototype designation
-            primitive_cell:
-                Request the primitive cell
-            verbose:
-                Print details in the log file
-            proto_file:
-                Print the output of --proto to this file
-
-        Returns:
-            Object representing unit cell of the material
-        """
-        assert primitive_cell, 'Can only generate primitive cells for now'
-        
-        with NamedTemporaryFile(mode='w+') as f, (NamedTemporaryFile(mode='w+') if proto_file is None else open(proto_file,mode='w+')) as f_with_species:            
-            self.write_poscar_from_prototype(prototype_label,f.name,parameter_values,verbose=verbose)
-            f.seek(0)
-            # Add line containing species
-            for i,line in enumerate(f):
-                f_with_species.write(line)
-                if i == 4:
-                    f_with_species.write(' '.join(species)+'\n')
-            f_with_species.seek(0)
-            atoms = ase.io.read(f_with_species.name,format='vasp')
-            
-        check_number_of_atoms(atoms,prototype_label,primitive_cell)
-
-        atoms.wrap()
-        
-        return atoms
-    
     def get_param_names_from_prototype(self, prototype_label: str) -> List[str]:
         """
         Get the parameter names by parsing the error message from AFLOW
@@ -1115,10 +1055,7 @@ class AFLOW:
             coeff_matrix_list = []
             const_terms_list = []
             # the next n positions should be equivalent corresponding to this Wyckoff position
-            multiplicity_per_primitive_cell = WYCKOFF_MULTIPLICITIES[space_group_number][wyckoff_letter]/get_centering_divisor_from_prototype(prototype_label)
-            # check that multiplicity is an integer
-            assert np.isclose(multiplicity_per_primitive_cell,round(multiplicity_per_primitive_cell))
-            for _ in range(round(multiplicity_per_primitive_cell)):
+            for _ in range(get_primitive_wyckoff_multiplicity(space_group_number,wyckoff_letter)):
                 line_split = next(coord_iter).split()
                 if species is None:
                     species = line_split[3]
@@ -1184,13 +1121,28 @@ class AFLOW:
 
         return equation_sets        
     
-    def solve_for_params_of_known_prototype(self, atoms: Atoms, prototype_label: str, max_resid: float = 1e-5) -> List:
+    def solve_for_params_of_known_prototype(self, atoms: Atoms, prototype_label: str, max_resid: float = 1e-5) -> List[float]:
         """
-        Given an Atoms object that is a primitive cell of its Bravais lattice as defined in doi.org/10.1016/j.commatsci.2017.01.017, and its presumed prototype label,
-        solves for the free parameters of the prototype label. Raises an error if the solution fails (likely indicating that the Atoms object provided does not conform
-        to the provided prototype label.) The Atoms object may be rotated, translated, and permuted, but the identity of the lattice vectors must be unchanged w.r.t.
-        the crystallographic prototype. In other words, there must exist a permutation and translation of the fractional coordinates that enables them to match the
-        equations defined by the prototype label.
+        Given an Atoms object that is a primitive cell of its Bravais lattice as defined in doi.org/10.1016/j.commatsci.2017.01.017, and its presumed
+        prototype label, solves for the free parameters of the prototype label. Raises an error if the solution fails (likely indicating that the Atoms
+        object provided does not conform to the provided prototype label.) The Atoms object may be rotated, translated, and permuted, but the identity of
+        the lattice vectors must be unchanged w.r.t. the crystallographic prototype. In other words, there must exist a permutation and translation of 
+        the fractional coordinates that enables them to match the equations defined by the prototype label.
+        
+        Args:
+            atoms: The Atoms object to analyze
+            prototype_label: The assumed AFLOW prototype label. `atoms` must be a primitive cell (with lattice vectors
+                defined in doi.org/10.1016/j.commatsci.2017.01.017) conforming to the symmetry defined by this prototype label.
+                Rigid body rotations, translations, and permutations of `atoms` relative to the AFLOW setting are allowed, but
+                the identity of the lattice vectors must be unchanged.
+            max_resid: Maximum residual allowed when attempting to match the fractional positions of the atoms to the crystallographic equations
+            
+        Returns:
+            List of free parameters that will regenerate `atoms` (up to permutations, rotations, and translations) when paired with `prototype_label`
+            
+        Raises:
+            AFLOW.changedSymmetryException: if the symmetry of the atoms object is different from `prototype_label`
+            AFLOW.failedToMatchException: if AFLOW fails to match the re-generated crystal to its 
         
         """
         # solve for cell parameters
@@ -1207,14 +1159,18 @@ class AFLOW:
         prototype_label_detected = detected_prototype_designation["aflow_prototype_label"]
         
         # rebuild the atoms
-        atoms_rebuilt = self.build_atoms_from_prototype(
-            species = species,
-            prototype_label=prototype_label_detected,
-            parameter_values=detected_prototype_designation["aflow_prototype_params_values"]
-        )
+        try:
+            atoms_rebuilt = self.build_atoms_from_prototype(
+                species = species,
+                prototype_label=prototype_label_detected,
+                parameter_values=detected_prototype_designation["aflow_prototype_params_values"]
+            )
+        except self.changedSymmetryException as e:
+            # re-raise, just indicating that this function knows about this exception
+            raise e
         
         if not prototype_labels_are_equivalent(prototype_label,prototype_label_detected):
-            msg = f'Redetected prototype label {prototype_label_detected} does not match nominal {prototype_label}, probably due to rounding.'
+            msg = f'Redetected prototype label {prototype_label_detected} does not match nominal {prototype_label}.'
             logger.info(msg)
             raise self.changedSymmetryException(msg)            
         
@@ -1222,14 +1178,22 @@ class AFLOW:
         # the origin shift is the last operation to happen, so it will be in the "atoms" frame
         # This function gets the transformation from its second argument to its first
         # The origin shift is Cartesian if the POSCARs are Cartesian, which they are when made from Atoms
-        _,_,neg_initial_origin_shift_cart,_ = self.get_basistransformation_rotation_originshift_atom_map_from_atoms(atoms,atoms_rebuilt)
+        
+        # Sort atoms, but do not sort atoms_rebuilt
+        try:
+            _,_,neg_initial_origin_shift_cart,atom_map = self.get_basistransformation_rotation_originshift_atom_map_from_atoms(atoms,atoms_rebuilt,sort_atoms1=True,sort_atoms2=False)
+        except self.failedToMatchException:
+            # Re-raise with a more informative error message
+            msg = 'Execution cannot continue because AFLOW failed to match the crystal with its representation re-generated from the detected prototype designation.\n' \
+                'Rarely, this can happen if the structure is on the edge of a symmetry increase (e.g. a BCT structure with c/a very close to 1)'
+            logger.error(msg)
+            raise self.failedToMatchException(msg)
         
         initial_origin_shift_frac = (-neg_initial_origin_shift_cart)@np.linalg.inv(atoms.cell)
         
         logger.info(f'Initial shift (to SOME standard origin, not necessarily the desired one): {-neg_initial_origin_shift_cart} (Cartesian), {initial_origin_shift_frac} (fractional)')
                     
-        position_set_list = group_positions_by_wyckoff(atoms,prototype_label)
-        real_to_virtual_species_map = get_real_to_virtual_species_map(atoms)
+        position_set_list = get_equivalent_atom_sets_from_prototype_and_atom_map(atoms,prototype_label,atom_map,sort_atoms=True)
         
         if len(position_set_list) != len(equation_set_list):
             raise inconsistentWyckoffException('Number of equivalent positions detected in Atoms object did not match the number of equivalent equations given')
@@ -1248,7 +1212,7 @@ class AFLOW:
                 for i,position_set in enumerate(position_set_list):
                     if position_set_matched_list[i]:
                         continue
-                    if real_to_virtual_species_map[position_set.species] != equation_set.species:
+                    if position_set.species != equation_set.species: # These are virtual species
                         continue
                     if not are_in_same_wyckoff_set(equation_set.wyckoff_letter,position_set.wyckoff_letter,space_group_number):
                         continue
@@ -1295,7 +1259,7 @@ class AFLOW:
         logger.info(msg)
         raise self.failedToSolveException(msg)
     
-    def confirm_unrotated_prototype_designation(      
+    def confirm_unrotated_prototype_designation(
             self,
             reference_atoms: Atoms,
             species: List[str],

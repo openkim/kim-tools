@@ -881,7 +881,12 @@ class SingleCrystalTestDriver(KIMTestDriver):
         occasional occurrence if the original structure is not stable under the interatomic potential and prescribed conditions. These exceptions should not be
         handled and that run of the Test Driver should be allowed to fail.
         """
-        aflow_parameter_values = AFLOW().solve_for_params_of_known_prototype(atoms,self.__nominal_crystal_structure_npt['prototype-label']['source-value'])
+
+        try:
+            aflow_parameter_values = AFLOW().solve_for_params_of_known_prototype(atoms,self.__nominal_crystal_structure_npt['prototype-label']['source-value'])            
+        except (AFLOW.failedToMatchException, AFLOW.changedSymmetryException) as e:
+            raise type(e)('Encountered an error that MAY be the result of the nominal crystal being unstable under the given potential and conditions. Stopping execution.') from e
+
         # Atoms objects always in angstrom
         self.__nominal_crystal_structure_npt['a'] = {
             'source-value': aflow_parameter_values[0],
