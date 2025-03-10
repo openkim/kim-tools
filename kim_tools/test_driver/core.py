@@ -42,7 +42,7 @@ elif hasattr(symmetrize,'FixSymmetry'):
     from ase.spacegroup.symmetrize import FixSymmetry
 else:
     raise ImportError("Can't find `FixSymmetry` in either `ase.constraints` or `ase.spacegroup.symmetrize`")
-from typing import Any, Optional, List, Union, Dict, IO
+from typing import Any, Optional, List, Union, Dict, IO, Any
 from ase.optimize import LBFGSLineSearch
 from ase.optimize.optimize import Optimizer
 from ase.constraints import ExpCellFilter, UnitCellFilter
@@ -365,8 +365,6 @@ class KIMTestDriver(ABC):
             KIM model name, absent if a non-KIM ASE calculator was provided
         __calc: Calculator
             ASE calculator
-        __atoms: Optional[Atoms]
-            ASE atoms object representing the nominal configuration. 
         __output_property_instances: str
             Property instances, possibly accumulated over multiple invocations of the Test Driver
         __cached_files: Dict
@@ -391,20 +389,9 @@ class KIMTestDriver(ABC):
         self.__cached_files = {}
         self.__output_property_instances = "[]"
 
-    def _setup(self, 
-               atoms: Optional[Atoms] = None,
-               **kwargs):
-        """
-        Assign the self.__atoms object
-        
-        Args:
-            atoms: The atoms object to assign to the current run of the Test Driver
-        """
-        if atoms is None:
-            warn("Making a Test Driver without an Atoms object. I won't stop you, but you better know what you're doing!")
-        else:
-            self.__atoms = atoms
-            
+    def _setup(self, material, **kwargs):
+        pass
+                
     @abstractmethod
     def _calculate(self, **kwargs):
         """
@@ -412,15 +399,16 @@ class KIMTestDriver(ABC):
         """
         raise NotImplementedError("Subclasses must implement the _calculate method.")
 
-    def __call__(self, atoms: Optional[Atoms] = None, **kwargs) -> List[Dict]:
+    def __call__(self, material: Any = None, **kwargs) -> List[Dict]:
         """
+        
         Main operation of a Test Driver:
         
             * Run :func:`~KIMTestDriver._setup` (the base class provides a barebones version, derived classes may override)
             * Call :func:`~KIMTestDriver._calculate` (implemented by each individual Test Driver)
             
         Args:
-            atoms: The atoms object to assign to the current run of the Test Driver
+            material: Placeholder object for arguments describing the material to run the Test Driver on
         
         Returns:
             The property instances calculated during the current run
@@ -429,7 +417,7 @@ class KIMTestDriver(ABC):
         previous_properties_end = len(kim_edn.loads(self.__output_property_instances))
 
         # _setup is likely overridden by an derived class
-        self._setup(atoms, **kwargs)
+        self._setup(material, **kwargs)
 
         # implemented by each individual Test Driver
         self._calculate(**kwargs)
@@ -530,32 +518,21 @@ class KIMTestDriver(ABC):
             shutil.move(filename,filename_final)
             
         self._add_key_to_current_property_instance(name,filename_final)
-
-    def _get_atoms(self) -> Atoms:
-        """
-        Returns:
-            A copy of the internal atoms object with the calculator attached
-        """
-        atoms_copy = self.__atoms.copy()
-        atoms_copy.calc = self.__calc
-        return atoms_copy
-    
-    def _set_atoms(self,atoms):
-        """
-        Assigns the internal atoms object
-        """
-        self.__atoms = atoms
     
     @property
     def kim_model_name(self) -> Optional[str]:
         return self.__kim_model_name
-
+    
     @property
     def property_instances(self) -> Dict:
         """
         Get all property instances accumulated over all calls to the Test Driver so far
         """
         return kim_edn.loads(self.__output_property_instances)
+    
+    @property
+    def _calc(self) -> Optional[Calculator]:
+        return self.__calc
     
     def _get_serialized_property_instances(self) -> str:
         return self.__output_property_instances
@@ -780,10 +757,14 @@ class SingleCrystalTestDriver(KIMTestDriver):
             An instance of the `crystal-structure-npt` property representing the nominal
             crystal structure and conditions of the current call to the Test Driver.
             Always kept synchronized with self.__atoms
+        __atoms [Atoms]:
+            An atoms object representing the primitive cell of the nominal crystal structure
+            as defined in http://doi.org/10.1016/j.commatsci.2017.01.017. Always
+            kept in sync with `__nominal_crystal_structure_npt`
+
     """
     def _setup(self,
-               atoms: Optional[Atoms] = None,
-               input_crystal_structure: Optional[Dict] = None,
+               material: Union[Atoms,Dict],
                cell_cauchy_stress_eV_angstrom3: List[float] = [0,0,0,0,0,0],
                temperature_K: float = 0,
                **kwargs,
@@ -792,14 +773,17 @@ class SingleCrystalTestDriver(KIMTestDriver):
         TODO: Consider allowing arbitrary units for temp and stress?
         
         Args:
-            atoms:
-                ASE Atoms objects to use as the initial configuration. Note that a symmetry analysis will be
+            material:
+                An Atoms object or a KIM Property Instance specifying the nominal crystal structure that this run of the test
+                will use
+                
+                Atoms object: ASE Atoms object to use as the initial configuration. Note that a symmetry analysis will be
                 performed on it and a primitive cell will be generated according to the conventions defined
                 defined in http://doi.org/10.1016/j.commatsci.2017.01.017. This primitive cell may be rotated and
                 translated relative to the configuration you provided. If this is provided, `input_crystal_structure`
                 should not be.
-            input_crystal_structure:            
-                Dictionary containing information about the nominal input crystal structure in KIM Property Instance
+            
+                Property instance: dictionary containing information about the nominal input crystal structure in KIM Property Instance
                 format (e.g. from a query to the OpenKIM.org database)
                 The following keys from https://openkim.org/properties/show/2023-02-21/staff@noreply.openkim.org/crystal-structure-npt
                 are used:
@@ -823,11 +807,8 @@ class SingleCrystalTestDriver(KIMTestDriver):
                 The temperature in Kelvin. This is a nominal variable, and this class simply provides recordkeeping of it.
                 It is up to derived classes to implement actually setting the temperature of the system.
         """ 
-        if (atoms is None) == (input_crystal_structure is None):
-            raise KIMTestDriverError("You must provide either `atoms` or `input_crystal_structure`, but not both.")
-
-        if atoms is not None:
-            self.__nominal_crystal_structure_npt = get_crystal_structure_from_atoms(atoms)
+        if isinstance(material,Atoms):
+            self.__nominal_crystal_structure_npt = get_crystal_structure_from_atoms(material)
             msg = 'Rebuilding atoms object in a standard setting defined by doi.org/10.1016/j.commatsci.2017.01.017. ' \
                 'See log file or computed properties for the (possibly re-oriented) primitive cell that computations will be based on.'
             logger.info(msg)
@@ -835,9 +816,9 @@ class SingleCrystalTestDriver(KIMTestDriver):
             print(msg)
             print()
         else:
-            self.__nominal_crystal_structure_npt = input_crystal_structure
+            self.__nominal_crystal_structure_npt = material
             
-        nominal_atoms = get_atoms_from_crystal_structure(self.__nominal_crystal_structure_npt)
+        self.__atoms = get_atoms_from_crystal_structure(self.__nominal_crystal_structure_npt)
         
         # Pop the temperature and stress keys in case they came along with a query
         if 'temperature' in self.__nominal_crystal_structure_npt:
@@ -861,8 +842,6 @@ class SingleCrystalTestDriver(KIMTestDriver):
                     }
             # We've modified stuff, so carrying around 'meta' is no longer appropriate
             self.__nominal_crystal_structure_npt.pop('meta')
-            
-        super()._setup(nominal_atoms)
         
     def _update_nominal_parameter_values(self, atoms: Atoms) -> None:
         """
@@ -896,7 +875,7 @@ class SingleCrystalTestDriver(KIMTestDriver):
             self.__nominal_crystal_structure_npt['parameter-values'] = {
                 'source-value': aflow_parameter_values[1:]
             }            
-        super()._set_atoms(get_atoms_from_crystal_structure(self.__nominal_crystal_structure_npt))
+        self.__atoms = get_atoms_from_crystal_structure(self.__nominal_crystal_structure_npt)
     
     def _verify_unchanged_symmetry(self, atoms: Atoms) -> bool:
         """
@@ -979,9 +958,15 @@ class SingleCrystalTestDriver(KIMTestDriver):
     
     def _set_serialized_property_instances(self,property_instances) -> None:
         raise NotImplementedError(f'Setting property instances directly not supported in Crystal Genome Test Drivers')
-    
-    def _set_atoms(self,atoms):
-        raise NotImplementedError(f'Setting atoms directly not supported in Crystal Genome test drivers')    
+
+    def _get_atoms(self) -> Atoms:
+        """
+        Returns:
+            A copy of the internal atoms object with the calculator attached
+        """
+        atoms_copy = self.__atoms.copy()
+        atoms_copy.calc = self._calc
+        return atoms_copy
     
 ################################################################################
 def query_crystal_genome_structures(            

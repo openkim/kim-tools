@@ -5,8 +5,8 @@ from ase.atoms import Atoms
 from ase.calculators.lj import LennardJones
 import os
 
-class TestTestDriver(KIMTestDriver):
-    def _calculate(self,property_name):
+class TestTestDriver(KIMTestDriver):    
+    def _calculate(self,property_name,species):
         """
         example calculate method
         
@@ -14,13 +14,12 @@ class TestTestDriver(KIMTestDriver):
             property_name: for testing ability to find properties at different paths.
             !!! AN ACTUAL TEST DRIVER SHOULD NOT HAVE AN ARGUMENT SUCH AS THIS !!!
         """
-        self.species = self._get_atoms().get_chemical_symbols()[0]
+        atoms = Atoms([species],[[0,0,0]])
         self._add_property_instance(property_name,"This is an example disclaimer.")
-        self._add_key_to_current_property_instance("species", self._get_atoms().get_chemical_symbols()[0])
-        self._add_key_to_current_property_instance("mass", self._get_atoms().get_masses()[0], "amu", {'source-std-uncert-value':1})
+        self._add_key_to_current_property_instance("species", atoms.get_chemical_symbols()[0])
+        self._add_key_to_current_property_instance("mass", atoms.get_masses()[0], "amu", {'source-std-uncert-value':1})
 
 def test_kimtest(monkeypatch):
-    atoms = Atoms(['Ar'], [[0, 0, 0]], cell=[[1, 0, 0], [0, 2, 0], [0, 0, 2]])
     test = TestTestDriver(LennardJones())
     testing_property_names = [
         'atomic-mass', # already in kim-properties
@@ -35,7 +34,7 @@ def test_kimtest(monkeypatch):
     monkeypatch.setenv("KIM_PROPERTY_PATH", os.path.join(os.getcwd(),'mock-test-drivers-dir/*/local-props')+':'+os.path.join(os.getcwd(),'mock-test-drivers-dir/*/local_props'))
 
     for prop_name in testing_property_names:
-        test(atoms,property_name=prop_name)
+        test(property_name=prop_name,species='Ar')
         
     assert len(test.property_instances) == 6
     test.write_property_instances_to_file()

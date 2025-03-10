@@ -782,23 +782,28 @@ class AFLOW:
         res_json = json.loads(output)
         return res_json
     
-    def get_prototype_designation_from_file(self, input_file: str, prim: bool=True, verbose: bool=False) -> Dict:
+    def get_prototype_designation_from_file(self, input_file: str, prim: bool=True, force_wyckoff: bool=False, verbose: bool=False) -> Dict:
         """
         Run the ``aflow --prototype`` command to get the AFLOW prototype designation
             of the input structure
 
         Args:
             input_file: path to the POSCAR file containing the structure to analyze
-            prim: whether to primitivize the structure first
+            prim: whether to primitivize the structure first. Faster
+            force_wyckoff: If the input is cif, do this to avoid re-analysis and just take the parameters as-is
             verbose: Whether to echo command to log file
             
         Returns:
             Dictionary describing the AFLOW prototype designation (label and parameters) of the input structure.       
-        """
+        """        
         if prim:
             command = [" --prim < " + self.aflow_work_dir + input_file, " --prototype --print=json"]
+            assert not force_wyckoff, 'Must specify prim=False with force_wyckoff'
         else:
-            command = " --prototype --print=json < " + self.aflow_work_dir + input_file
+            command = [" --prototype --print=json < " + self.aflow_work_dir + input_file ]
+            
+        if force_wyckoff:
+            command[-1] += " --force_Wyckoff"
         
         output=self.aflow_command(command,verbose=verbose)
         res_json = json.loads(output)
@@ -1259,6 +1264,47 @@ class AFLOW:
         logger.info(msg)
         raise self.failedToSolveException(msg)
     
+    def confirm_atoms_unrotated_when_cells_aligned(self,test_atoms,reference_atoms):
+        """
+        Check whether `test_atoms` and `reference_atoms` are unrotated as follows:
+        When the cells are in :func:`ase.cell.Cell.standard_form()`, the cells are identical.
+        When both crystals are rotated to standard form (rotating the cell and keeping the fractional
+        coordinates unchanged), the rotation part of the mapping the two crystals to each other found by AFLOW
+        is in the point group of the reference crystal (using the generated crystal would give the same
+        result). In other words, the crystals are identically oriented (but possibly translated) in reference
+        to their lattice vectors, which in turn must be identical up to a rotation in reference to 
+        some Cartesian coordinate system.
+        """
+        if not np.allclose(reference_atoms.cell.cellpar(),test_atoms.cell.cellpar(),atol=1e-4):
+            logger.info(f"Cell lengths and angles do not match.\nOriginal: {reference_atoms.cell.cellpar()}\n"
+                        f"Regenerated: {test_atoms.cell.cellpar()}")
+            return False
+        else:
+            cell_lengths_and_angles = reference_atoms.cell.cellpar()
+        
+        test_atoms_copy = test_atoms.copy()
+        reference_atoms_copy = reference_atoms.copy()
+        
+        test_atoms_copy.set_cell(Cell.fromcellpar(cell_lengths_and_angles),scale_atoms=True)
+        reference_atoms_copy.set_cell(Cell.fromcellpar(cell_lengths_and_angles),scale_atoms=True)
+        
+        # the rotations below are Cartesian.
+        try:
+            _,cart_rot,_,_ = self.get_basistransformation_rotation_originshift_atom_map_from_atoms(test_atoms_copy,reference_atoms_copy)
+        except self.failedToMatchException:
+            logger.info("AFLOW failed to match the recreated crystal to reference")
+            return False
+        
+        point_group_ops = self.get_pointgroup_crystal_from_atoms(reference_atoms_copy)
+        
+        for op in point_group_ops:
+            if np.allclose(cart_rot,op['Uc'],atol=1e-4):
+                logger.info("Found matching rotation")
+                return True
+        
+        logger.info("No matching rotation found")
+        return False
+    
     def confirm_unrotated_prototype_designation(
             self,
             reference_atoms: Atoms,
@@ -1289,31 +1335,4 @@ class AFLOW:
         """
         test_atoms = self.build_atoms_from_prototype(species,prototype_label,parameter_values)
         
-        if not np.allclose(reference_atoms.cell.cellpar(),test_atoms.cell.cellpar(),atol=1e-4):
-            logger.info(f"Cell lengths and angles do not match.\nOriginal: {reference_atoms.cell.cellpar()}\n"
-                        f"Regenerated: {test_atoms.cell.cellpar()}")
-            return False
-        else:
-            cell_lengths_and_angles = reference_atoms.cell.cellpar()
-        
-        reference_atoms_copy = reference_atoms.copy()
-        
-        test_atoms.set_cell(Cell.fromcellpar(cell_lengths_and_angles),scale_atoms=True)
-        reference_atoms_copy.set_cell(Cell.fromcellpar(cell_lengths_and_angles),scale_atoms=True)
-        
-        # the rotations below are Cartesian.
-        try:
-            _,cart_rot,_,_ = self.get_basistransformation_rotation_originshift_atom_map_from_atoms(test_atoms,reference_atoms_copy)
-        except self.failedToMatchException:
-            logger.info("AFLOW failed to match the recreated crystal to reference")
-            return False
-        
-        point_group_ops = self.get_pointgroup_crystal_from_atoms(reference_atoms_copy)
-        
-        for op in point_group_ops:
-            if np.allclose(cart_rot,op['Uc'],atol=1e-4):
-                logger.info("Found matching rotation")
-                return True
-        
-        logger.info("No matching rotation found")
-        return False
+        return(self.confirm_atoms_unrotated_when_cells_aligned(test_atoms,reference_atoms))

@@ -92,21 +92,7 @@ def test_get_equations_from_prototype():
                 species_from_equations
             ), f'Matched fractional coordinates, but there was a permutation.\n{diagnostics}'        
                         
-            print(f'Successfully checked get_equations_from_prototype for label {prototype_label}')            
-
-def test_solve_for_internal_params():
-    aflow = AFLOW()
-    for material in [CRYSTAL_GENOME_INITIAL_STRUCTURES[test_case] for test_case in TEST_CASES]:
-        species = material["species"]
-        prototype_label = material["prototype_label"]
-        # TODO: Fix this
-        if prototype_label.split('_')[1][:2] == 'hR':
-            continue
-        for parameter_set in material["parameter_sets"]:
-            parameter_values = parameter_set["parameter_values"]            
-            atoms = aflow.build_atoms_from_prototype(species,prototype_label,parameter_values)
-            print(prototype_label)
-            print(aflow.solve_for_params_of_known_prototype(atoms,prototype_label))
+            print(f'Successfully checked get_equations_from_prototype for label {prototype_label}')
 
 def test_get_prototype(
     materials=[CRYSTAL_GENOME_INITIAL_STRUCTURES[test_case] for test_case in TEST_CASES]
@@ -168,6 +154,7 @@ def test_get_prototype(
                 print(e)
             
             if not crystal_did_not_rotate:
+                failed_to_solve_at_least_one = True
                 print(f'Failed to solve for parameters or confirm unrotated prototype designation for {prototype_label}')
                 match_counts_by_pearson[pearson]['nonmatch'] += 1
                 match_counts_by_spacegroup[spacegroup]['nonmatch'] += 1
