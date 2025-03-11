@@ -1163,6 +1163,11 @@ class AFLOW:
         
         prototype_label_detected = detected_prototype_designation["aflow_prototype_label"]
         
+        if not prototype_labels_are_equivalent(prototype_label,prototype_label_detected):
+            msg = f'Redetected prototype label {prototype_label_detected} does not match nominal {prototype_label}.'
+            logger.info(msg)
+            raise self.changedSymmetryException(msg)                    
+        
         # rebuild the atoms
         try:
             atoms_rebuilt = self.build_atoms_from_prototype(
@@ -1173,11 +1178,6 @@ class AFLOW:
         except self.changedSymmetryException as e:
             # re-raise, just indicating that this function knows about this exception
             raise e
-        
-        if not prototype_labels_are_equivalent(prototype_label,prototype_label_detected):
-            msg = f'Redetected prototype label {prototype_label_detected} does not match nominal {prototype_label}.'
-            logger.info(msg)
-            raise self.changedSymmetryException(msg)            
         
         # We want the negative of the origin shift from atoms_rebuilt to atoms, because
         # the origin shift is the last operation to happen, so it will be in the "atoms" frame
