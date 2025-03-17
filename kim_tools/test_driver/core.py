@@ -564,7 +564,7 @@ def _add_common_crystal_genome_keys_to_current_property_instance(property_instan
                                                                  short_name: Optional[Union[List[str],str]] = None,
                                                                  cell_cauchy_stress: Optional[List[float]] = None,
                                                                  temperature: Optional[float] = None,
-                                                                 crystal_genome_source_structure_id: Optional[Union[str,List[str]]] = None,
+                                                                 crystal_genome_source_structure_id: Optional[List[List[str]]] = None,
                                                                  a_unit: str = 'angstrom',
                                                                  cell_cauchy_stress_unit: str = 'eV/angstrom^3',
                                                                  temperature_unit: str = 'K') -> str:
@@ -612,10 +612,7 @@ def _add_common_crystal_genome_keys_to_current_property_instance(property_instan
         property_instances = _add_key_to_current_property_instance(property_instances,"temperature",temperature,temperature_unit)
         
     if crystal_genome_source_structure_id is not None:
-        if isinstance(crystal_genome_source_structure_id,list):
-            property_instances = _add_key_to_current_property_instance(property_instances,"crystal-genome-source-structure-id",crystal_genome_source_structure_id)
-        else:
-            property_instances = _add_key_to_current_property_instance(property_instances,"crystal-genome-source-structure-id",[crystal_genome_source_structure_id])
+        property_instances = _add_key_to_current_property_instance(property_instances,"crystal-genome-source-structure-id",crystal_genome_source_structure_id)
         
     return property_instances
 
@@ -627,7 +624,7 @@ def _add_property_instance_and_common_crystal_genome_keys(property_name: str,
                                                           short_name: Optional[Union[List[str],str]] = None,
                                                           cell_cauchy_stress: Optional[List[float]] = None,
                                                           temperature: Optional[float] = None,
-                                                          crystal_genome_source_structure_id: Optional[str] = None,                                                          
+                                                          crystal_genome_source_structure_id: Optional[List[List[str]]] = None,                                                          
                                                           a_unit: str = 'angstrom',
                                                           cell_cauchy_stress_unit: str = 'eV/angstrom^3',
                                                           temperature_unit: str = 'K',
@@ -835,12 +832,7 @@ class SingleCrystalTestDriver(KIMTestDriver):
             'source-unit': 'eV/angstrom^3'
         }        
         if 'meta' in self.__nominal_crystal_structure_npt:
-            if 'crystal-genome-source-structure-id' not in self.__nominal_crystal_structure_npt:
-                # Could check for existence here, but why -- if I'm being given a 'meta' key I am going to assume it's a fully formed database entry
-                self.__nominal_crystal_structure_npt['crystal-genome-source-structure-id'] = {
-                    'source-value': self.__nominal_crystal_structure_npt['meta']['uuid']+':'+str(self.__nominal_crystal_structure_npt['instance-id'])
-                    }
-            # We've modified stuff, so carrying around 'meta' is no longer appropriate
+            # Carrying 'meta' around doesn't really make sense since we may have already modified things and will modify in the future
             self.__nominal_crystal_structure_npt.pop('meta')
         
     def _update_nominal_parameter_values(self, atoms: Atoms) -> None:
