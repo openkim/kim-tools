@@ -1,0 +1,43 @@
+[build-system]
+requires = [ "setuptools" ]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kim-tools"
+version = "0.1.0"
+dependencies = [
+    "ase >= 3.19.0b1",
+    "kim-property >= 2.6.2",
+    "kim-edn >= 1.4.1",
+    "spglib >= 2.1.0",
+    "kim-query >= 3.0.0",
+    "sympy >= 1.13.2"
+    ]
+authors = [
+    { name = "ilia Nikiforov", email = "nikif002@umn.edu" },
+    { name = "Ellad Tadmor", email = "	tadmor@umn.edu" },
+    { name = "Claire Waters", email = "bwaters@umn.edu" },
+    { name = "Daniel S. Karls", email = "karl0100umn@gmail.com" },
+    { name = "Matt Bierbaum", email = "matt.bierbaum@gmail.com" }
+]
+maintainers = [
+    { name = "ilia Nikiforov", email = "nikif002@umn.edu" },
+]
+description = "Base classes and helper routines for writing KIM Tests"
+readme = { file = "README.md", content-type = "text/markdown" }
+requires-python = ">=3.6"
+classifiers=[
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: Common Development and Distribution License 1.0 (CDDL-1.0)",
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+keywords = [ "kim-tools" , "kim_tools", "openkim", "crystal genome" ]
+
+[project.urls]
+Homepage = "https://github.com/openkim/kim-tools"
+Issues = "https://github.com/openkim/kim-tools/issues"
+
+[tool.setuptools.packages.find]
+include = [ "kim_tools*" ]

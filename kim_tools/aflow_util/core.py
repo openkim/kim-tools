@@ -251,7 +251,7 @@ def get_equivalent_atom_sets_from_prototype_and_atom_map(atoms: Atoms, prototype
 
 def get_stoich_reduced_list_from_prototype(prototype_label: str) -> List[int]:
     """
-    Get numerical list of stoichiometry from prototype label, i.e. "AB3_...." -> [1,3]
+    Get numerical list of stoichiometry from prototype label, i.e. "AB3_hP8..." -> [1,3]
 
     Args:
         prototype_label:
@@ -1154,9 +1154,6 @@ class AFLOW:
         cell_params = solve_for_cell_params(atoms.cell.cellpar(),prototype_label)
         species = sorted(list(set(atoms.get_chemical_symbols())))
         
-        # get equation sets
-        equation_set_list = self.get_equation_sets_from_prototype(prototype_label)
-        
         # First, redetect the prototype label. We can't use this as-is because it may be rotated by an operation that's within the normalizer but not
         # in the space group itself        
         detected_prototype_designation = self.get_prototype_designation_from_atoms(atoms)
@@ -1199,6 +1196,9 @@ class AFLOW:
         logger.info(f'Initial shift (to SOME standard origin, not necessarily the desired one): {-neg_initial_origin_shift_cart} (Cartesian), {initial_origin_shift_frac} (fractional)')
                     
         position_set_list = get_equivalent_atom_sets_from_prototype_and_atom_map(atoms,prototype_label,atom_map,sort_atoms=True)
+                
+        # get equation sets
+        equation_set_list = self.get_equation_sets_from_prototype(prototype_label)
         
         if len(position_set_list) != len(equation_set_list):
             raise inconsistentWyckoffException('Number of equivalent positions detected in Atoms object did not match the number of equivalent equations given')

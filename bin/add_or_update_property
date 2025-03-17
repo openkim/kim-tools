@@ -1,9 +1,0 @@
-#!/usr/bin/python
-from kim_tools.test_driver.core import PROP_SEARCH_PATHS_INFO
-
-print('\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n'+\
-      'THIS UTILITY IS DEPRECATED\n'+\
-      'kim-tools should now be able to find your custom properties automatically.\n'+\
-      'It recursively looks in the following places:\n'+\
-      PROP_SEARCH_PATHS_INFO+\
-      '\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n')
