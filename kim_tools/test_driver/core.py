@@ -68,7 +68,7 @@ __all__ = [
     "get_crystal_structure_from_atoms",
     "get_atoms_from_crystal_structure",
     "SingleCrystalTestDriver",
-    "query_crystal_genome_structures",
+    "query_crystal_structures",
     "minimize_wrapper",
 ]    
 
@@ -961,47 +961,47 @@ class SingleCrystalTestDriver(KIMTestDriver):
         return atoms_copy
     
 ################################################################################
-def query_crystal_genome_structures(            
+def query_crystal_structures(
             stoichiometric_species: List[str],
-            prototype_label: str,
+            prototype_label: Optional[str] = None,
+            short_name: Optional[str] = None,
             cell_cauchy_stress_eV_angstrom3: List[float] = [0,0,0,0,0,0],
             temperature_K: float = 0,
             kim_model_name: Optional[str] = None,
         ) -> List[Dict]:
     """
-    Query for all equilibrium parameter sets for this prototype label and species in the KIM database.
+    Query for all equilibrium parameter sets for this species combination and, optionally, crystal structure
+    specified by `prototype_label` and/or `short_name` in the KIM database.
     This is a utility function for running the test outside of the OpenKIM pipeline. In the OpenKIM pipeline,
     this information is delivered to the test driver through the `runner` script.
 
     Args:
         stoichiometric_species:
             List of unique species in the crystal. Required part of the Crystal Genome designation. 
+        short_name:
+            short name of the crystal, e.g. 'Hexagonal Close Packed'. This will be searched as a 
+            regex, so partial matches will be returned. The list of possible shortnames
+            is taken by postprocessing README_PROTO.TXT from the AFLOW software and packaged with
+            kim-tools for reproducibility. To see the exact list of possible short names, call
+            kim_tools.shortnames() and inspect the values of the returned dictionary.
+            Note that a given short name corresponds to an exact set of parameters (with some tolerance),
+            except the overall scale of the crystal. For example, 'Hexagonal Close Packed' will return only
+            structures with a c/a close to 1.63 (actually close packed), not any structure with the same
+            symmetry as HCP as is sometimes colloquially understood.
+            TODO: consider adding the same expanded logic we have on the website that searches for any
+            crystal with the symmetry corresponding to a given shortname, i.e. invalidating the last
+            caveat given above.
         prototype_label:
-            AFLOW prototype label for the crystal. Required part of the Crystal Genome designation. 
+            AFLOW prototype label for the crystal.
         cell_cauchy_stress_eV_angstrom3:
             Cauchy stress on the cell in eV/angstrom^3 (ASE units) in [xx,yy,zz,yz,xz,xy] format
         temperature_K:
             The temperature in Kelvin            
         kim_model_name:
-            KIM model name. If not provided, RD will be queried instead
+            KIM model name. If not provided, RD will be queried instead           
 
     Returns:
-        List[Dict]:        
-            A list of dictionaries with the following keys:
-                stoichiometric_species: List[str]
-                    List of unique species in the crystal
-                prototype_label: str
-                    AFLOW prototype label for the crystal
-                parameter_names: Optional[List[str]]
-                    Names of free parameters of the crystal besides 'a'. May be None if the crystal is cubic with no internal DOF.
-                    Should have length one less than `parameter_values_angstrom`
-                parameter_values_angstrom: List[float]
-                    Free parameter values of the crystal. The first element in each inner list is the 'a' lattice parameter in 
-                    angstrom, the rest (if present) are in degrees or unitless
-                library_prototype_label: Optional[str]
-                    AFLOW library prototype label
-                short_name: Optional[List[str]]
-                    List of human-readable short names (e.g. "Face-Centered Cubic"), if present
+        List of kim property instances matching the query in the OpenKIM.org database
     """
     stoichiometric_species.sort()
 
@@ -1015,13 +1015,18 @@ def query_crystal_genome_structures(
                 "$size":len(stoichiometric_species),
                 "$all":stoichiometric_species
             },
-            "prototype-label.source-value":prototype_label,
             "cell-cauchy-stress.si-value":cell_cauchy_stress_Pa,
             "temperature.si-value":temperature_K
         }
     
     if kim_model_name is not None:
         query["meta.subject.extended-id"]=kim_model_name
+        
+    if prototype_label is not None:
+        query["prototype-label.source-value"] = prototype_label
+        
+    if short_name is not None:
+        query["short-name.source-value"] = {"$regex":short_name}
     
     raw_query_args={
         "query":query,
@@ -1033,9 +1038,9 @@ def query_crystal_genome_structures(
     
     query_result=raw_query(**raw_query_args)
     
-    logger.info(f"Query result:\n{query_result}")
+    logger.info(f"Query result (length={len(query_result)}):\n{query_result}")
     
-    print('\n!!! Found %d unique equilibrium structures from query_crystal_genome_structures() !!!\n'%len(query_result))
+    print(f'\n!!! Found {len(query_result)} unique equilibrium structures from query_crystal_genome_structures() !!!\n')
     
     return query_result
         
