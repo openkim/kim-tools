@@ -650,15 +650,22 @@ class AFLOW:
             else:
                 raise exc
     
-    def write_poscar_from_prototype(self, prototype_label: str, output_file: Union[str,None]=None, free_params: Union[List[float],None]=None, verbose: bool=True, addtl_args: str = "") \
-        -> Optional[str]:
+    def write_poscar_from_prototype(self,
+                                    prototype_label: str,
+                                    species: Optional[List[str]] = None,
+                                    parameter_values: Optional[List[float]]=None,
+                                    output_file: Optional[str]=None,
+                                    verbose: bool=True,
+                                    addtl_args: str = "") -> Optional[str]:
         """
         Run the ``aflow --proto`` command to write a POSCAR coordinate file corresponding to the provided AFLOW prototype designation
 
         Args:
-            prototype_label: An AFLOW prototype label, with or without an enumeration suffix, with or without specified atomic species
+            prototype_label: An AFLOW prototype label, with or without an enumeration suffix
+            species: List of stoichiometric species of the crystal. If this is omitted, the file will be written without species info
+            parameter_values: The free parameters of the AFLOW prototype designation. If an enumeration suffix is not included in `prototype_label`
+                and the prototype has free parameters besides `a`, this must be provided
             output_file: Name of the output file. If not provided, the output is written to stdout
-            free_params: The free parameters of the AFLOW prototype designation. If an enumeration suffix is not included in `prototype_label` and the prototype has free parameters besides `a`, this must be provided
             verbose: Whether to echo command to log file
             addtl_args: additional arguments to pass, e.g. "--equations_only" to get equations
         
@@ -670,36 +677,53 @@ class AFLOW:
                 ``the structure has a higher symmetry than indicated by the label``         
         """
         command = " --proto=" + prototype_label
-        if free_params:
-            command += " --params=" + ",".join([str(param) for param in free_params])
+        if parameter_values:
+            command += " --params=" + ",".join([str(param) for param in parameter_values])
         
         command += (" " + addtl_args)
         
-        if output_file is not None:
-            command += " > " + self.aflow_work_dir + output_file
         try:
-            return self.aflow_command([command], verbose=verbose)
+            poscar_string_no_species = self.aflow_command(command, verbose=verbose)
         except self.changedSymmetryException as e:
             # re-raise, just indicating that this function knows about this exception
             raise e
+        
+        if species is None:
+            poscar_string = poscar_string_no_species
+        else:
+            poscar_string = ""
+            for i,line in enumerate(poscar_string_no_species.splitlines(keepends=True)):
+                poscar_string += line
+                if i == 4:
+                    poscar_string += ' '.join(species)+'\n'
+        if output_file is None:
+            return poscar_string
+        else:
+            with open(self.aflow_work_dir + output_file, 'w') as f:
+                f.write(poscar_string)
 
-    def build_atoms_from_prototype(
-            self, species: List[str], prototype_label: str, parameter_values: List[float], verbose: bool=True, proto_file:Optional[str]=None
-            ) -> Atoms:
+    def build_atoms_from_prototype(self,
+                                   prototype_label: str,
+                                   species: List[str],
+                                   parameter_values: Optional[List[float]] = None,
+                                   proto_file: Optional[str] = None,
+                                   verbose: bool = True
+                                   ) -> Atoms:
         """
         Build an atoms object from an AFLOW prototype designation
         
         Args:
+            prototype_label: 
+                An AFLOW prototype label, with or without an enumeration suffix
             species:
                 Stoichiometric species, e.g. ``['Mo','S']`` corresponding to A and B respectively for prototype label AB2_hP6_194_c_f indicating molybdenite
-            prototype_label: 
-                An AFLOW prototype label, without an enumeration suffix, without specified atomic species
-            parameter_values: 
-                The free parameters of the AFLOW prototype designation
+            parameter_values:
+                The free parameters of the AFLOW prototype designation. If an enumeration suffix is not included in `prototype_label`
+                and the prototype has free parameters besides `a`, this must be provided
+            proto_file:
+                Write the POSCAR to this permanent file for debugging instead of a temporary file
             verbose:
                 Print details in the log file
-            proto_file:
-                Print the output of --proto to this file
 
         Returns:
             Object representing unit cell of the material
@@ -708,20 +732,16 @@ class AFLOW:
             AFLOW.changedSymmetryException: if an ``aflow --proto=`` command complains that 
                 ``the structure has a higher symmetry than indicated by the label``             
         """        
-        with NamedTemporaryFile(mode='w+') as f, (NamedTemporaryFile(mode='w+') if proto_file is None else open(proto_file,mode='w+')) as f_with_species:
-            try:
-                self.write_poscar_from_prototype(prototype_label,f.name,parameter_values,verbose=verbose)
-            except self.changedSymmetryException as e:
-                # re-raise, just indicating that this function knows about this exception
-                raise e
+        try:
+            poscar_string = self.write_poscar_from_prototype(prototype_label=prototype_label,species=species,parameter_values=parameter_values,verbose=verbose)
+        except self.changedSymmetryException as e:
+            # re-raise, just indicating that this function knows about this exception
+            raise e
+        
+        with NamedTemporaryFile(mode='w+') if proto_file is None else open(proto_file,mode='w+') as f:
+            f.write(poscar_string)
             f.seek(0)
-            # Add line containing species
-            for i,line in enumerate(f):
-                f_with_species.write(line)
-                if i == 4:
-                    f_with_species.write(' '.join(species)+'\n')
-            f_with_species.seek(0)
-            atoms = ase.io.read(f_with_species.name,format='vasp')            
+            atoms = ase.io.read(f.name,format='vasp')
         check_number_of_atoms(atoms,prototype_label)
         atoms.wrap()
         return atoms
@@ -977,7 +997,7 @@ class AFLOW:
         Get the parameter names by parsing the error message from AFLOW
         """
         try:
-            self.write_poscar_from_prototype(prototype_label,free_params=[1.])
+            self.write_poscar_from_prototype(prototype_label,parameter_values=[1.])
             # if no exception, it's a cubic crystal with no internal free params
             return ['a']
         except subprocess.CalledProcessError as exc:
@@ -1034,7 +1054,7 @@ class AFLOW:
                     param_values.append(random())
                     
             try:
-                equation_poscar = self.write_poscar_from_prototype(prototype_label,free_params=param_values,addtl_args='--equations_only')
+                equation_poscar = self.write_poscar_from_prototype(prototype_label,parameter_values=param_values,addtl_args='--equations_only')
                 break
             except subprocess.CalledProcessError:
                 if i == MAX_ATTEMPTS-1:
@@ -1168,8 +1188,8 @@ class AFLOW:
         # rebuild the atoms
         try:
             atoms_rebuilt = self.build_atoms_from_prototype(
-                species = species,
                 prototype_label=prototype_label_detected,
+                species = species,
                 parameter_values=detected_prototype_designation["aflow_prototype_params_values"]
             )
         except self.changedSymmetryException as e:
@@ -1333,6 +1353,6 @@ class AFLOW:
         Returns:
             Whether or not the crystals match
         """
-        test_atoms = self.build_atoms_from_prototype(species,prototype_label,parameter_values)
+        test_atoms = self.build_atoms_from_prototype(prototype_label=prototype_label,species=species,parameter_values=parameter_values)
         
         return(self.confirm_atoms_unrotated_when_cells_aligned(test_atoms,reference_atoms))

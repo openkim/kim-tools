@@ -54,9 +54,9 @@ from ..aflow_util import AFLOW, prototype_labels_are_equivalent
 from ..kimunits import convert_units, convert_list
 from kim_query import raw_query
 import os
-from warnings import warn
 import shutil
 from pathlib import Path
+from tempfile import TemporaryDirectory
 import logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(filename='kim-tools.log',level=logging.INFO,force=True)
@@ -742,7 +742,7 @@ def get_atoms_from_crystal_structure(crystal_structure: Dict) -> Atoms:
     
     stoichiometric_species = crystal_structure['stoichiometric-species']['source-value']
     
-    return aflow.build_atoms_from_prototype(stoichiometric_species,prototype_label,aflow_parameter_values)    
+    return aflow.build_atoms_from_prototype(prototype_label=prototype_label,species=stoichiometric_species,parameter_values=aflow_parameter_values)
     
 ################################################################################
 class SingleCrystalTestDriver(KIMTestDriver):
@@ -1044,6 +1044,8 @@ def query_crystal_structures(
     
     return query_result
         
+    
+
 # If called directly, do nothing
 if __name__ == "__main__":
     pass

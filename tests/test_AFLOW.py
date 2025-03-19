@@ -38,7 +38,7 @@ def test_get_equations_from_prototype():
             continue
         for parameter_set in material["parameter_sets"]:
             parameter_values = parameter_set["parameter_values"]            
-            atoms = aflow.build_atoms_from_prototype(species,prototype_label,parameter_values)
+            atoms = aflow.build_atoms_from_prototype(prototype_label=prototype_label,species=species,parameter_values=parameter_values)
             if prototype_label not in equation_sets_cache:
                 equation_sets = aflow.get_equation_sets_from_prototype(prototype_label)
                 equation_sets_cache[prototype_label] = equation_sets
@@ -123,7 +123,7 @@ def test_get_prototype(
         
         for parameter_set in material["parameter_sets"]:
             parameter_values = parameter_set["parameter_values"]
-            atoms = aflow.build_atoms_from_prototype(species,prototype_label,parameter_values)
+            atoms = aflow.build_atoms_from_prototype(prototype_label=prototype_label,species=species,parameter_values=parameter_values)
             """
             # Using AFLOW software -- failure case for comparison
             
