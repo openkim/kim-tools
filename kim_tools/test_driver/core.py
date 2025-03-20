@@ -56,7 +56,8 @@ from kim_query import raw_query
 import os
 import shutil
 from pathlib import Path
-from tempfile import TemporaryDirectory
+from tempfile import TemporaryDirectory, NamedTemporaryFile
+import ase
 import logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(filename='kim-tools.log',level=logging.INFO,force=True)
@@ -66,9 +67,11 @@ __all__ = [
     "KIMTestDriverError",
     "KIMTestDriver",
     "get_crystal_structure_from_atoms",
+    "get_poscar_from_crystal_structure",
     "get_atoms_from_crystal_structure",
     "SingleCrystalTestDriver",
     "query_crystal_structures",
+    "detect_unique_crystal_structures",
     "minimize_wrapper",
 ]    
 
@@ -702,7 +705,7 @@ def get_crystal_structure_from_atoms(atoms: Atoms, get_short_name: bool = True, 
     
     return kim_edn.loads(property_instances)[0]
 
-def get_atoms_from_crystal_structure(crystal_structure: Dict) -> Atoms:
+def get_poscar_from_crystal_structure(crystal_structure: Dict, output_file: Optional[str] = None) -> Optional[str]:
     """
     Generate an Atoms object from the AFLOW Prototype Designation obtained from a KIM Property Instance. The following keys
     from https://openkim.org/properties/show/2023-02-21/staff@noreply.openkim.org/crystal-structure-npt
@@ -721,9 +724,13 @@ def get_atoms_from_crystal_structure(crystal_structure: Dict) -> Atoms:
     Args:
         crystal_structure:
             Dictionary containing the required keys in KIM Property Instance format
-    
+        output_file: Name of the output file. If not provided, the output is returned as a string
     Returns:
-        Primitive unit cell of the crystal as defined in http://doi.org/10.1016/j.commatsci.2017.01.017. Lengths are always in angstrom
+        If `output_file` is not provided, a string in POSCAR format containg the primitive unit cell of the crystal
+        as defined in http://doi.org/10.1016/j.commatsci.2017.01.017. Lengths are always in angstrom.
+    Raises:
+        AFLOW.changedSymmetryException: if the symmetry of the atoms object is different from 
+        `prototype_label`        
     """
     prototype_label = crystal_structure['prototype-label']['source-value']
     
@@ -731,18 +738,67 @@ def get_atoms_from_crystal_structure(crystal_structure: Dict) -> Atoms:
     aflow_parameter_names = aflow.get_param_names_from_prototype(prototype_label)
     
     # Atoms objects are always in angstrom
-    a_angstrom = convert_units(crystal_structure['a']['source-value'],crystal_structure['a']['source-unit'],'angstrom',True)
+    a_angstrom = convert_units(crystal_structure['a']['source-value'],crystal_structure['a']['source-unit'],
+                               'angstrom',True)
     
     aflow_parameter_values = [a_angstrom]
     
     if 'parameter-values' in crystal_structure:
         if len(aflow_parameter_names) == 1:
-            raise KIMTestDriverError(f'Prototype label {prototype_label} implies only "a" parameter, but you provided "parameter-values"')
+            raise KIMTestDriverError(f'Prototype label {prototype_label} implies only "a" parameter, but you '
+                                     'provided "parameter-values"')
         aflow_parameter_values += crystal_structure['parameter-values']['source-value']
     
     stoichiometric_species = crystal_structure['stoichiometric-species']['source-value']
     
-    return aflow.build_atoms_from_prototype(prototype_label=prototype_label,species=stoichiometric_species,parameter_values=aflow_parameter_values)
+    try:
+        return aflow.write_poscar_from_prototype(prototype_label=prototype_label, species=stoichiometric_species,
+                                                 parameter_values=aflow_parameter_values, output_file=output_file)
+    except AFLOW.changedSymmetryException as e:
+        # re-raise, just indicating that this function knows about this exception
+        raise e        
+
+def get_atoms_from_crystal_structure(crystal_structure: Dict) -> Atoms:
+    """
+    Generate an Atoms object from the AFLOW Prototype Designation obtained from a KIM Property Instance. 
+    The following keys
+    from https://openkim.org/properties/show/2023-02-21/staff@noreply.openkim.org/crystal-structure-npt
+    are used:
+    
+    * stoichiometric-species
+    * prototype-label
+    * a
+    * parameter-values (if prototype-label defines a crystal with free parameters besides "a")
+    
+    Note that although the keys are required to follow the schema of a KIM Property Instance 
+    (https://openkim.org/doc/schema/properties-framework/),
+    There is no requirement or check that the input dictionary is an instance of any specific KIM Property, only that
+    the keys required to build a crystal are present.
+    
+    Args:
+        crystal_structure:
+            Dictionary containing the required keys in KIM Property Instance format
+    
+    Returns:
+        Primitive unit cell of the crystal as defined in http://doi.org/10.1016/j.commatsci.2017.01.017. 
+        Lengths are always in angstrom
+
+    Raises:
+        AFLOW.changedSymmetryException: if the symmetry of the atoms object is different from 
+        `prototype_label`        
+    """
+    try:
+        poscar_string = get_poscar_from_crystal_structure(crystal_structure)
+    except AFLOW.changedSymmetryException as e:
+        # re-raise, just indicating that this function knows about this exception
+        raise e
+    
+    with NamedTemporaryFile(mode='w+') as f:
+        f.write(poscar_string)
+        f.seek(0)
+        atoms = ase.io.read(f.name,format='vasp')
+    atoms.wrap()
+    return atoms
     
 ################################################################################
 class SingleCrystalTestDriver(KIMTestDriver):
@@ -1038,12 +1094,41 @@ def query_crystal_structures(
     
     query_result=raw_query(**raw_query_args)
     
-    logger.info(f"Query result (length={len(query_result)}):\n{query_result}")
+    len_msg = f'Found {len(query_result)} unique equilibrium structures from query_crystal_genome_structures()'
+    logger.info(len_msg)
+    logger.debug(f"Query result (length={len(query_result)}):\n{query_result}")
     
-    print(f'\n!!! Found {len(query_result)} unique equilibrium structures from query_crystal_genome_structures() !!!\n')
+    print(f'!!! {len_msg} !!!')
     
     return query_result
         
+def detect_unique_crystal_structures(crystal_structures: List[Dict], aflow_np: int = 4) -> List[int]:
+    """
+    Detect which of the provided crystal structures is unique
+
+    Args:
+        crystal_structures:
+            A list of dictionaries in KIM Property format, each containing the Crystal Genome keys required
+            to build a structure, namely: 'stoichiometric-species', 'prototype-label', 'a', and, if the 
+            prototype has free parameters, 'parameter-values'. These dictionaries are not required to be complete
+            KIM Property Instances, e.g. the keys 'property-id', 'instance-id' and 'meta' can be absent
+    
+    Returns:
+        Indices corresponding to unique structures. Any indices not in this list are duplicates
+    """
+    # TODO: Give the option to only deduplicate structures if they are unrotated (e.g. consider the two twin variants of alpha-Quartz as different structures)
+    aflow = AFLOW(np=aflow_np)
+    
+    with TemporaryDirectory() as tmpdirname:
+        for i,structure in enumerate(crystal_structures):
+            try:
+                get_poscar_from_crystal_structure(structure,os.path.join(tmpdirname,str(i)))
+            except AFLOW.changedSymmetryException:
+                logger.info(f'Comparison structure {i} failed to write a POSCAR due to a detected higher symmetry')
+                
+        comparison = aflow.compare_materials_dir(tmpdirname)
+        
+    return [int(materials_group['structure_representative']['name'].split('/')[-1]) for materials_group in comparison]
     
 
 # If called directly, do nothing

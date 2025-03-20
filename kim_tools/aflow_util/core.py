@@ -43,6 +43,7 @@ __all__ = [
     "prototype_labels_are_equivalent",
     "get_space_group_number_from_prototype",
     "get_pearson_symbol_from_prototype",
+    "get_bravais_lattice_from_prototype",
     "read_shortnames",
     "get_real_to_virtual_species_map",
     "solve_for_cell_params",
@@ -398,6 +399,10 @@ def get_space_group_number_from_prototype(prototype_label: str) -> int:
 def get_pearson_symbol_from_prototype(prototype_label: str) -> str:
     return prototype_label.split('_')[1]
 
+def get_bravais_lattice_from_prototype(prototype_label: str) -> str:
+    return get_pearson_symbol_from_prototype(prototype_label)[:2]
+
+
 def read_shortnames() -> Dict:
     """
     This function parses ``README_PROTO.TXT``. It finds each line that (after stripping whitespace) starts with ``ANRL Label``. These are headers of sections of prototype listings. 
@@ -665,7 +670,7 @@ class AFLOW:
             species: List of stoichiometric species of the crystal. If this is omitted, the file will be written without species info
             parameter_values: The free parameters of the AFLOW prototype designation. If an enumeration suffix is not included in `prototype_label`
                 and the prototype has free parameters besides `a`, this must be provided
-            output_file: Name of the output file. If not provided, the output is written to stdout
+            output_file: Name of the output file. If not provided, the output is returned as a string
             verbose: Whether to echo command to log file
             addtl_args: additional arguments to pass, e.g. "--equations_only" to get equations
         
