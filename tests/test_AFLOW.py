@@ -1,19 +1,153 @@
 #!/usr/bin/python
 
-from kim_tools import AFLOW, split_parameter_array, \
-    get_wyckoff_lists_from_prototype, frac_pos_match_allow_permute_wrap, frac_pos_match_allow_wrap, get_real_to_virtual_species_map, \
-    shuffle_atoms, get_bravais_lattice_from_prototype, minimize_wrapper, prototype_labels_are_equivalent, query_crystal_structures, detect_unique_crystal_structures, \
-    get_atoms_from_crystal_structure, get_space_group_number_from_prototype
+from kim_tools import AFLOW, split_parameter_array, get_wyckoff_lists_from_prototype, get_real_to_virtual_species_map, get_bravais_lattice_from_prototype, minimize_wrapper, \
+    prototype_labels_are_equivalent, query_crystal_structures, detect_unique_crystal_structures, get_atoms_from_crystal_structure, get_space_group_number_from_prototype
 from ase.calculators.kim.kim import KIM
+from ase import Atoms
 from random import random
 import json
 import os
 from os import PathLike
 from typing import Optional, List, Dict
+import numpy as np
+from numpy.typing import ArrayLike
 import pytest
+import logging
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(filename='kim-tools.log',level=logging.INFO,force=True)
 
 TEST_CASES = [577,365,1734,1199,1478,166,1210,1362,920,212,646,22]
 MATERIALS_FILE = 'test_structures.json'
+
+def shuffle_atoms(
+    atoms: Atoms
+) -> Atoms:
+    atoms_shuffled = atoms.copy()
+    permute = np.random.permutation(len(atoms_shuffled))
+    atoms_shuffled.set_scaled_positions([atoms.get_scaled_positions()[i] for i in permute])
+    atoms_shuffled.set_chemical_symbols([atoms.get_chemical_symbols()[i] for i in permute])
+    return atoms_shuffled
+
+def _frac_pos_match_sanity_checks(
+    reference_positions: ArrayLike,    
+    test_positions: ArrayLike,
+    reference_species: Optional[List] = None,
+    test_species: Optional[List] = None,
+) -> bool:
+    """
+    Sanity checks for comparing sets of fractional positions
+    """
+    if reference_species is None or test_species is None:
+        if not (reference_species is None and test_species is None):
+            logger.warning(
+                'Refusing to compare positions when one structure has species given ' \
+                'and the other does not')
+            return False
+        logger.info('Comparing fractional positions without species')
+    else:
+        if not (len(reference_positions) ==
+                len(test_positions) ==
+                len(reference_species) ==
+                len(test_species)):
+            logger.info('Atomic positions and/or species lists have different lengths between test and reference')
+            return False
+    
+    if len(reference_positions) != len(test_positions):
+        logger.info('Number of atomic positions does not match')
+        return False
+    return True
+
+def frac_pos_match_allow_permute_wrap(
+    reference_positions: ArrayLike,    
+    test_positions: ArrayLike,
+    reference_species: Optional[List] = None,
+    test_species: Optional[List] = None,
+) -> bool:
+    """
+    Check if fractional positions match allowing for permutations and PBC wrapping
+    """
+    if not _frac_pos_match_sanity_checks(
+        reference_positions,
+        test_positions,
+        reference_species,
+        test_species
+    ):
+        return False
+
+    test_position_matched = [False]*len(test_positions)
+    for i,reference_position in enumerate(reference_positions):
+        for j,test_position in enumerate(test_positions):
+            if test_position_matched[j]: # this position already matched. 
+                continue
+            position_differences = np.asarray(reference_position) - np.asarray(test_position)
+            if np.allclose(position_differences,np.rint(position_differences),atol=1e-5):
+                if reference_species is not None:
+                    if reference_species[i] != test_species[j]:
+                        logger.info(f'Reference position {i} matches test position {j} but the species do not.')
+                        return False
+                test_position_matched[j] = True
+                break
+    
+    if all(test_position_matched):
+        logger.info('Successfully matched the fractional positions')
+        return True
+    else:
+        logger.info('Not all fractional positions successfully matched')
+        return False
+
+def frac_pos_match_allow_wrap(
+    reference_positions: ArrayLike,    
+    test_positions: ArrayLike,
+    reference_species: Optional[List] = None,
+    test_species: Optional[List] = None,
+) -> bool:
+    """
+    Check if fractional positions match allowing for PBC wrapping but maintaining order
+    """
+    if not _frac_pos_match_sanity_checks(
+        reference_positions,
+        test_positions,
+        reference_species,
+        test_species
+    ):
+        return False
+    
+    if reference_species is not None:
+        if reference_species != test_species:
+            logger.info(f'Species lists do not match. Got\n{test_species}\nexpected\n{reference_species}')
+            return False        
+    
+    for ref_pos,test_pos in zip(reference_positions, test_positions):
+            position_differences = np.asarray(ref_pos) - np.asarray(test_pos)
+            if not np.allclose(position_differences,np.rint(position_differences),atol=1e-5):
+                logger.info(f'Failed to match positions, expected {ref_pos} got {test_pos}')
+                return False
+            
+    logger.info('Successfully matched the fractional positions')
+    return True
+
+def atoms_frac_pos_match_allow_permute_wrap(
+    reference_atoms: Atoms,
+    test_atoms: Atoms
+):
+    return frac_pos_match_allow_permute_wrap(
+        reference_atoms.get_scaled_positions(),
+        test_atoms.get_scaled_positions(),
+        reference_atoms.get_chemical_symbols(),
+        test_atoms.get_chemical_symbols()
+    )
+
+def atoms_frac_pos_match_allow_wrap(
+    reference_atoms: Atoms,
+    test_atoms: Atoms
+):
+    return frac_pos_match_allow_wrap(
+        reference_atoms.get_scaled_positions(),
+        test_atoms.get_scaled_positions(),
+        reference_atoms.get_chemical_symbols(),
+        test_atoms.get_chemical_symbols()
+    )
 
 def get_test_crystal_structures(materials_file: PathLike = MATERIALS_FILE, test_cases: Optional[List[int]] = TEST_CASES, deduplicate: bool = True) -> List[Dict]:
     """

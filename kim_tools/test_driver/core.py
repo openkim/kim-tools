@@ -1116,6 +1116,9 @@ def detect_unique_crystal_structures(crystal_structures: List[Dict], aflow_np: i
     Returns:
         Indices corresponding to unique structures. Any indices not in this list are duplicates
     """
+    if len(crystal_structures) == 0:
+        return []
+    
     # TODO: Give the option to only deduplicate structures if they are unrotated (e.g. consider the two twin variants of alpha-Quartz as different structures)
     aflow = AFLOW(np=aflow_np)
     
