@@ -25,7 +25,10 @@ sphinx_gallery_conf = {
      'gallery_dirs': 'auto_examples',  # path to where to save gallery generated output
 }
 
-intersphinx_mapping = {'ase': ('https://wiki.fysik.dtu.dk/ase/', None)}
+intersphinx_mapping = {
+    'ase': ('https://wiki.fysik.dtu.dk/ase/', None),
+    'python': ('https://docs.python.org/3', None)
+    }
 
 autoclass_content='both'
 todo_include_todos = True

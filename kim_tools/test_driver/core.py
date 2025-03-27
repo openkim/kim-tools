@@ -102,8 +102,8 @@ def minimize_wrapper(
     LBFGSLineSearch convergence behavior is as follows:
     
     - The solver returns True if it is able to converge within the optimizer
-      iteration limits (which can be changed by the `steps` argument passed
-      to `run`), otherwise it returns False.
+      iteration limits (which can be changed by the ``steps`` argument passed
+      to ``run``), otherwise it returns False.
     - The solver raises an exception in situations where the line search cannot
       improve the solution, typically due to an incompatibility between the
       potential's values for energy, forces, and/or stress.
@@ -125,7 +125,7 @@ def minimize_wrapper(
         variable_cell:
             True to allow relaxation with respect to cell shape
         logfile:
-            Log file. `'-'` means STDOUT
+            Log file. ``'-'`` means STDOUT
         algorithm:
             ASE optimizer algorithm
         CellFilter:
@@ -135,7 +135,7 @@ def minimize_wrapper(
         opt_kwargs:
             Dictionary of kwargs to pass to optimizer
         flt_kwargs:
-            Dictionary of kwargs to pass to filter (e.g. `scalar_pressure`)
+            Dictionary of kwargs to pass to filter (e.g. "scalar_pressure")
     """
     if fix_symmetry:
         symmetry = FixSymmetry(atoms)
@@ -171,9 +171,9 @@ def minimize_wrapper(
 
 def _add_property_instance(property_name: str, disclaimer: Optional[str] = None, property_instances: Optional[str] = None) -> str:
     """
-    Initialize a new property instance in the serialized `property_instances`. This wraps the kim_property.kim_property_create()
-    function, with the simplification of setting `instance-id` automatically, as well as automatically searching for a definition file
-    if `property_name` is not found.
+    Initialize a new property instance in the serialized ``property_instances``. This wraps the ``kim_property.kim_property_create()``
+    function, with the simplification of setting "instance-id" automatically, as well as automatically searching for a definition file
+    if ``property_name`` is not found.
     
     NOTE: Is there any need to allow Test Driver authors to specify an instance-id? 
 
@@ -295,8 +295,8 @@ def _add_key_to_current_property_instance(property_instances: str,
             The units
         uncertainty_info:
             dictionary containing any uncertainty keys you wish to include. See https://openkim.org/doc/schema/properties-framework/
-            for the possible uncertainty key names. These must be the same dimension as `value`, or they may be scalars regardless
-            of the shape of `value`.
+            for the possible uncertainty key names. These must be the same dimension as ``value``, or they may be scalars regardless
+            of the shape of ``value``.
             
     Returns:
         Updated EDN-serialized list of property instances
@@ -364,20 +364,18 @@ class KIMTestDriver(ABC):
     to be useful to for most KIM tests
 
     Attributes:
-        __kim_model_name: Optional[str]
+        __kim_model_name (str, optional):
             KIM model name, absent if a non-KIM ASE calculator was provided
-        __calc: Calculator
+        __calc (:obj:`~ase.calculators.calculator.Calculator`):
             ASE calculator
-        __output_property_instances: str
+        __output_property_instances (str):
             Property instances, possibly accumulated over multiple invocations of the Test Driver
-        __cached_files: Dict
-            keys: filenames to be assigned to files, values: serialized strings to dump into those files. To be used for 'file' type properties
+        __cached_files (dict):
+            keys: filenames to be assigned to files, values: serialized strings to dump into those files. To be used for ``file`` type property keys
     """
 
     def __init__(self, model: Union[str,Calculator]):
         """
-        The base class constructor only initializes the calculator and an empty property_instances
-
         Args:
             model:
                 ASE calculator or KIM model name to use
@@ -393,6 +391,9 @@ class KIMTestDriver(ABC):
         self.__output_property_instances = "[]"
 
     def _setup(self, material, **kwargs):
+        """
+        Empty method, for optional overrides
+        """
         pass
                 
     @abstractmethod
@@ -450,7 +451,7 @@ class KIMTestDriver(ABC):
                                               unit: Optional[str] = None, 
                                               uncertainty_info: Optional[dict] = None) -> None:
         """
-        Add a key to the most recent property instance added with self._add_property_instance.
+        Add a key to the most recent property instance added with :func:`~kim_tools.KIMTestDriver._add_property_instance`.
         If the value is an array, this function will assume you want to write to the beginning of the array in every dimension.
         This function is intended to write entire keys in one go, and should not be used for modifying
         existing keys.
@@ -475,8 +476,8 @@ class KIMTestDriver(ABC):
                 The units
             uncertainty_info:
                 dictionary containing any uncertainty keys you wish to include. See https://openkim.org/doc/schema/properties-framework/
-                for the possible uncertainty key names. These must be the same dimension as `value`, or they may be scalars regardless
-                of the shape of `value`.
+                for the possible uncertainty key names. These must be the same dimension as ``value``, or they may be scalars regardless
+                of the shape of ``value``.
         """                    
         self.__output_property_instances = _add_key_to_current_property_instance(self.__output_property_instances,name,value,unit,uncertainty_info)
 
@@ -524,6 +525,9 @@ class KIMTestDriver(ABC):
     
     @property
     def kim_model_name(self) -> Optional[str]:
+        """
+        Get the KIM model name, if present
+        """
         return self.__kim_model_name
     
     @property
@@ -535,12 +539,21 @@ class KIMTestDriver(ABC):
     
     @property
     def _calc(self) -> Optional[Calculator]:
+        """
+        Get the ASE calculator
+        """
         return self.__calc
     
     def _get_serialized_property_instances(self) -> str:
+        """
+        Get the property instances computed so far in serialized EDN format
+        """
         return self.__output_property_instances
     
-    def _set_serialized_property_instances(self,property_instances) -> None:
+    def _set_serialized_property_instances(self,property_instances: str) -> None:
+        """
+        Set the property instances from a serialized EDN string
+        """
         self.__output_property_instances = property_instances
 
     def write_property_instances_to_file(self,filename="output/results.edn") -> None:
@@ -572,9 +585,9 @@ def _add_common_crystal_genome_keys_to_current_property_instance(property_instan
                                                                  cell_cauchy_stress_unit: str = 'eV/angstrom^3',
                                                                  temperature_unit: str = 'K') -> str:
     """
-    Write common Crystal Genome keys to the last element of `property_instances`. See
+    Write common Crystal Genome keys to the last element of ``property_instances``. See
     https://openkim.org/properties/show/crystal-structure-npt for definition of the input keys.
-    Note that the "parameter-names" key is inferred from the `prototype_label` input and is not
+    Note that the "parameter-names" key is inferred from the ``prototype_label`` input and is not
     an input to this function.
 
     Args:    
@@ -634,11 +647,11 @@ def _add_property_instance_and_common_crystal_genome_keys(property_name: str,
                                                           disclaimer: Optional[str] = None,
                                                           property_instances: Optional[str] = None) -> str:
     """
-    Initialize a new property instance to `property_instances` (an empty property_instances will be initialized if not provided).
-    It will automatically get the an instance-id equal to the length of self.property_instances after it is added.
+    Initialize a new property instance to ``property_instances`` (an empty ``property_instances`` will be initialized if not provided).
+    It will automatically get the an "instance-id" equal to the length of ``property_instances`` after it is added.
     Then, write the common Crystal Genome keys to it. See
     https://openkim.org/properties/show/crystal-structure-npt for definition of the input keys.
-    Note that the "parameter-names" key is inferred from the `prototype_label` input and is not
+    Note that the "parameter-names" key is inferred from the ``prototype_label`` input and is not
     an input to this function.
 
     Args:
@@ -662,27 +675,30 @@ def _add_property_instance_and_common_crystal_genome_keys(property_name: str,
 
 def get_crystal_structure_from_atoms(atoms: Atoms, get_short_name: bool = True, prim: bool = True, aflow_np: int = 4) -> Dict:
     """
-    By performing a symmetry analysis on an Atoms object, generate a dictionary that is a subset of the `crystal-structure-npt` property defined
-    here: https://openkim.org/properties/show/crystal-structure-npt
+    By performing a symmetry analysis on an :class:`~ase.Atoms` object, generate a dictionary that is a subset of the 
+    `crystal-structure-npt <https://openkim.org/properties/show/crystal-structure-npt>`_ property.
     See https://openkim.org/doc/schema/properties-framework/ for more information about KIM properties and how values and units are defined
-    The dictionary returned by this function does not constitute a complete KIM Property Instance, but the key-value pairs are in valid
+    The dictionary returned by this function does not necessarily constitute a complete KIM Property Instance, but the key-value pairs are in valid
     KIM Property format and can be inserted as-is into any single crystal Crystal Genome property.
     
     Args:
-        atoms: Atoms object to analyze. It is assumed that the length unit is angstrom
+        atoms: Configuration to analyze. It is assumed that the length unit is angstrom
         get_short_name: whether to compare against AFLOW prototype library to obtain short-name
         prim: whether to primitivize the atoms object first
         aflow_np: Number of processors to use with AFLOW executable
 
     Returns:
-        A dictionary that has the following Property Keys (possibly optionally) defined. See the crystal-structure-npt Property
+        A dictionary that has the following Property Keys (possibly optionally) defined. See the 
+        `crystal-structure-npt <https://openkim.org/properties/show/crystal-structure-npt>`_ Property
         Definition for their meaning:
-        * a
-        * cell-cauchy-stress
-        * prototype-label        
-        * parameter-names (inferred from prototype-label)
-        * parameter-values
-        * short-name
+
+        - "stoichiometric-species"        
+        - "prototype-label"
+        - "a"
+        - "parameter-names" (inferred from "prototype-label")
+        - "parameter-values"
+        - "short-name"
+
 
     """
     aflow = AFLOW(np=aflow_np)
@@ -707,14 +723,15 @@ def get_crystal_structure_from_atoms(atoms: Atoms, get_short_name: bool = True, 
 
 def get_poscar_from_crystal_structure(crystal_structure: Dict, output_file: Optional[str] = None) -> Optional[str]:
     """
-    Generate an Atoms object from the AFLOW Prototype Designation obtained from a KIM Property Instance. The following keys
+    Write a POSCAR coordinate file (or output it as a multiline string)
+    from the AFLOW Prototype Designation obtained from a KIM Property Instance. The following keys
     from https://openkim.org/properties/show/2023-02-21/staff@noreply.openkim.org/crystal-structure-npt
     are used:
     
-    * stoichiometric-species
-    * prototype-label
-    * a
-    * parameter-values (if prototype-label defines a crystal with free parameters besides "a")
+    - "stoichiometric-species"        
+    - "prototype-label"
+    - "a"
+    - "parameter-values" (if "prototype-label" defines a crystal with free parameters besides "a")
     
     Note that although the keys are required to follow the schema of a KIM Property Instance 
     (https://openkim.org/doc/schema/properties-framework/),
@@ -726,11 +743,11 @@ def get_poscar_from_crystal_structure(crystal_structure: Dict, output_file: Opti
             Dictionary containing the required keys in KIM Property Instance format
         output_file: Name of the output file. If not provided, the output is returned as a string
     Returns:
-        If `output_file` is not provided, a string in POSCAR format containg the primitive unit cell of the crystal
+        If ``output_file`` is not provided, a string in POSCAR format containg the primitive unit cell of the crystal
         as defined in http://doi.org/10.1016/j.commatsci.2017.01.017. Lengths are always in angstrom.
     Raises:
         AFLOW.changedSymmetryException: if the symmetry of the atoms object is different from 
-        `prototype_label`        
+        ``prototype_label``        
     """
     prototype_label = crystal_structure['prototype-label']['source-value']
     
@@ -760,15 +777,14 @@ def get_poscar_from_crystal_structure(crystal_structure: Dict, output_file: Opti
 
 def get_atoms_from_crystal_structure(crystal_structure: Dict) -> Atoms:
     """
-    Generate an Atoms object from the AFLOW Prototype Designation obtained from a KIM Property Instance. 
-    The following keys
-    from https://openkim.org/properties/show/2023-02-21/staff@noreply.openkim.org/crystal-structure-npt
+    Generate an :class:`~ase.Atoms` object from the AFLOW Prototype Designation obtained from a KIM Property Instance. 
+    The following keys from https://openkim.org/properties/show/2023-02-21/staff@noreply.openkim.org/crystal-structure-npt
     are used:
     
-    * stoichiometric-species
-    * prototype-label
-    * a
-    * parameter-values (if prototype-label defines a crystal with free parameters besides "a")
+    - "stoichiometric-species"        
+    - "prototype-label"
+    - "a"
+    - "parameter-values" (if "prototype-label" defines a crystal with free parameters besides "a")
     
     Note that although the keys are required to follow the schema of a KIM Property Instance 
     (https://openkim.org/doc/schema/properties-framework/),
@@ -780,12 +796,12 @@ def get_atoms_from_crystal_structure(crystal_structure: Dict) -> Atoms:
             Dictionary containing the required keys in KIM Property Instance format
     
     Returns:
-        Primitive unit cell of the crystal as defined in http://doi.org/10.1016/j.commatsci.2017.01.017. 
-        Lengths are always in angstrom
+        Primitive unit cell of the crystal as defined in the 
+        `AFLOW prototype standard <http://doi.org/10.1016/j.commatsci.2017.01.017>`_. Lengths are always in angstrom
 
     Raises:
-        AFLOW.changedSymmetryException: if the symmetry of the atoms object is different from 
-        `prototype_label`        
+        AFLOW.changedSymmetryException: 
+            if the symmetry of the atoms object is different from ``prototype_label``        
     """
     try:
         poscar_string = get_poscar_from_crystal_structure(crystal_structure)
@@ -807,13 +823,8 @@ class SingleCrystalTestDriver(KIMTestDriver):
 
     Attributes:
         __nominal_crystal_structure_npt [Dict]:
-            An instance of the `crystal-structure-npt` property representing the nominal
-            crystal structure and conditions of the current call to the Test Driver.
-            Always kept synchronized with self.__atoms
-        __atoms [Atoms]:
-            An atoms object representing the primitive cell of the nominal crystal structure
-            as defined in http://doi.org/10.1016/j.commatsci.2017.01.017. Always
-            kept in sync with `__nominal_crystal_structure_npt`
+            An instance of the `crystal-structure-npt <https://openkim.org/properties/show/crystal-structure-npt>`_ property 
+            representing the nominal crystal structure and conditions of the current call to the Test Driver.
 
     """
     def _setup(self,
@@ -827,31 +838,35 @@ class SingleCrystalTestDriver(KIMTestDriver):
         
         Args:
             material:
-                An Atoms object or a KIM Property Instance specifying the nominal crystal structure that this run of the test
-                will use
+                An :class:`~ase.Atoms` object or a KIM Property Instance specifying the nominal crystal structure that this run of the test
+                will use. Pass one of the two following types of objects:
                 
-                Atoms object: ASE Atoms object to use as the initial configuration. Note that a symmetry analysis will be
-                performed on it and a primitive cell will be generated according to the conventions defined
-                defined in http://doi.org/10.1016/j.commatsci.2017.01.017. This primitive cell may be rotated and
-                translated relative to the configuration you provided. If this is provided, `input_crystal_structure`
-                should not be.
+                Atoms object:
+                
+                    :class:`~ase.Atoms` object to use as the initial configuration. Note that a symmetry analysis will be
+                    performed on it and a primitive cell will be generated according to the conventions defined
+                    defined in http://doi.org/10.1016/j.commatsci.2017.01.017. This primitive cell may be rotated and
+                    translated relative to the configuration you provided.
             
-                Property instance: dictionary containing information about the nominal input crystal structure in KIM Property Instance
-                format (e.g. from a query to the OpenKIM.org database)
-                The following keys from https://openkim.org/properties/show/2023-02-21/staff@noreply.openkim.org/crystal-structure-npt
-                are used:
+                Property instance:
                 
-                * stoichiometric-species
-                * prototype-label
-                * a
-                * parameter-values (if prototype-label defines a crystal with free parameters besides "a")
-                * short-name (if present)
-                * crystal-genome-source-structure-id (if present)
-                
-                Note that although the keys are required to follow the schema of a KIM Property Instance 
-                (https://openkim.org/doc/schema/properties-framework/),
-                There is no requirement or check that the input dictionary is an instance of any specific KIM Property, only that
-                the keys required to build a crystal are present.                    
+                    Dictionary containing information about the nominal input crystal structure in KIM Property Instance
+                    format (e.g. from a query to the OpenKIM.org database)
+                    The following keys from https://openkim.org/properties/show/2023-02-21/staff@noreply.openkim.org/crystal-structure-npt
+                    are used:
+                    
+                    - "stoichiometric-species"        
+                    - "prototype-label"
+                    - "a"
+                    - "parameter-values" (if "prototype-label" defines a crystal with free parameters besides "a")
+                    - "short-name" (if present)
+                    - "crystal-genome-source-structure-id" (if present)
+                    
+                    Note that although the keys are required to follow the schema of a KIM Property Instance 
+                    (https://openkim.org/doc/schema/properties-framework/),
+                    There is no requirement or check that the input dictionary is an instance of any specific KIM Property, only that
+                    the keys required to build a crystal are present.
+                    
             cell_cauchy_stress_eV_angstrom3:
                 Cauchy stress on the cell in eV/angstrom^3 (ASE units) in [xx,yy,zz,yz,xz,xy] format. This is a nominal
                 variable, and this class simply provides recordkeeping of it. It is up to derived classes to implement
@@ -893,20 +908,30 @@ class SingleCrystalTestDriver(KIMTestDriver):
         
     def _update_nominal_parameter_values(self, atoms: Atoms) -> None:
         """
-        Update the nominal parameter values of the nominal crystal structure from the provided Atoms object.
+        Update the nominal parameter values of the nominal crystal structure from the provided :class:`~ase.Atoms` object.
         It is assumed that the crystallographic symmetry (space group + occupied Wyckoff positions) have not changed from the initially provided structure.
         
-        The provided Atoms object MUST be a primitive cell of the crystal as defined in doi.org/10.1016/j.commatsci.2017.01.017
-        The Atoms object may be rotated, translated, and permuted, but the identity of the lattice vectors must be unchanged w.r.t.
+        The provided :class:`~ase.Atoms` object MUST be a primitive cell of the crystal as defined in http://doi.org/10.1016/j.commatsci.2017.01.017
+        The :class:`~ase.Atoms` object may be rotated, translated, and permuted, but the identity of the lattice vectors must be unchanged w.r.t.
         the crystallographic prototype. In other words, there must exist a permutation and translation of the fractional coordinates that enables them to match the
         equations defined by the prototype label.
         
         In practical terms, this means that this function is designed to take as input a relaxed or time-averaged from MD (and folded back into the original primitive cell)
-        copy of the Atoms object originally obtained from :func:`~kim_tools.KIMTestDriver._get_atoms()`.
+        copy of the :class:`~ase.Atoms` object originally obtained from :func:`~kim_tools.SingleCrystalTestDriver._get_atoms()`.
         
         If finding the parameter fails, this function will raise an exception. This probably indicates a phase transition to a different symmetry, which is a normal
         occasional occurrence if the original structure is not stable under the interatomic potential and prescribed conditions. These exceptions should not be
         handled and that run of the Test Driver should be allowed to fail.
+        
+        Args:
+            atoms: Structure to analyze to get the new parameter values
+            
+        Raises:
+            AFLOW.failedToMatchException:
+                If the solution failed due to a failure to match two crystals that should be identical at some point in the solution process. This *usually* indicates
+                a phase transformation
+            AFLOW.changedSymmetryException:
+                If a more definitive error indicating a phase transformation is encountered
         """
 
         try:
@@ -930,25 +955,30 @@ class SingleCrystalTestDriver(KIMTestDriver):
         Without changing the nominal state of the system, check if the provided Atoms object has the same symmetry as the nominal crystal structure
         associated with the current state of the Test Driver. This is defined as having the same prototype label, except for possible changes in Wyckoff
         letters as permitted by the space group normalizer.
+        
+        Args:
+            atoms: The structure to compare to the current nominal structure of the Test Driver
+            
+        Returns:
+            Whether or not the symmetry is unchanged
+            
         """
         return prototype_labels_are_equivalent(AFLOW().get_prototype_designation_from_atoms(atoms)['aflow_prototype_label'],self.__nominal_crystal_structure_npt['prototype-label']['source-value'])
 
-    def _add_property_instance_and_common_crystal_genome_keys(self, property_name: str, write_stress: bool = False, write_temp: bool = False, disclaimer: Optional[str] = None):
+    def _add_property_instance_and_common_crystal_genome_keys(self, property_name: str, write_stress: bool = False, write_temp: bool = False, disclaimer: Optional[str] = None) -> None:
         """
-        Initialize a new property instance to self.property_instances. It will automatically get the an instance-id
-        equal to the length of self.property_instances after it is added. Then, write the common Crystal Genome
+        Initialize a new property instance to ``self.property_instances``. It will automatically get the an "instance-id"
+        equal to the length of ``self.property_instances`` after it is added. Then, write the common Crystal Genome
         keys to it from the attributes of this class.
-        It assumed that if you are calling this function, you have been only using the simplified property functions 
-        in this class and not doing any more advanced editing to self.property_instances using kim_property or any other methods. 
 
         Args:
             property_name:
                 The property name, e.g. "tag:staff@noreply.openkim.org,2023-02-21:property/binding-energy-crystal" or
                 "binding-energy-crystal"
             write_stress:
-                Write the `cell-cauchy-stress` key
+                Write the "cell-cauchy-stress" key
             write_temp:
-                Write the `temperature` key
+                Write the "temperature" key
             disclaimer:
                 An optional disclaimer commenting on the applicability of this result, e.g. 
                 "This relaxation did not reach the desired tolerance."
@@ -981,36 +1011,52 @@ class SingleCrystalTestDriver(KIMTestDriver):
         atoms_tmp.write('instance.poscar',sort=True,format='vasp')
         self._add_file_to_current_property_instance('coordinates-file','instance.poscar')
         
-    def _get_temperature(self, unit='K'):
+    def _get_temperature(self, unit: str = 'K') -> float:
         """
         Get the nominal temperature
+        
+        Args:
+            unit: The requested unit for the output. Must be understood by the GNU ``units`` utility
         """
         source_value = self.__nominal_crystal_structure_npt['temperature']['source-value']
         source_unit = self.__nominal_crystal_structure_npt['temperature']['source-unit']
         return convert_units(source_value,source_unit,unit,True)
     
-    def _get_cell_cauchy_stress(self, unit='eV/angstrom^3'):
+    def _get_cell_cauchy_stress(self, unit: str = 'eV/angstrom^3') -> List[float]:
         """
         Get the nominal stress
+        
+        Args:
+            unit: The requested unit for the output. Must be understood by the GNU ``units`` utility
         """
         source_value = self.__nominal_crystal_structure_npt['cell-cauchy-stress']['source-value']
         source_unit = self.__nominal_crystal_structure_npt['cell-cauchy-stress']['source-unit']        
         stress,_ = convert_list(source_value,source_unit,unit)
         return stress
     
-    def _get_nominal_crystal_structure_npt(self):
+    def _get_nominal_crystal_structure_npt(self) -> Dict:
         """
-        Get the dictionary returning the current nominal state of the system
+        Get the dictionary returning the current nominal state of the system.
+        
+        Returns:
+            An instance of the `crystal-structure-npt <https://openkim.org/properties/show/crystal-structure-npt>`_ 
+            OpenKIM property containing a symmetry-reduced description of the nominal crystal structure.
         """
         return self.__nominal_crystal_structure_npt
     
     def _set_serialized_property_instances(self,property_instances) -> None:
+        """
+        An override to prevent SingleCrystalTestDriver derived classes from setting property instances directly
+        """
         raise NotImplementedError(f'Setting property instances directly not supported in Crystal Genome Test Drivers')
 
     def _get_atoms(self) -> Atoms:
         """
+        Get the atomic configuration representing the nominal crystal
+
         Returns:
-            A copy of the internal atoms object with the calculator attached
+            Primitive unit cell of the crystal as defined in the 
+            `AFLOW prototype standard <http://doi.org/10.1016/j.commatsci.2017.01.017>`_. Lengths are always in angstrom
         """
         atoms_copy = self.__atoms.copy()
         atoms_copy.calc = self._calc
@@ -1027,21 +1073,21 @@ def query_crystal_structures(
         ) -> List[Dict]:
     """
     Query for all equilibrium parameter sets for this species combination and, optionally, crystal structure
-    specified by `prototype_label` and/or `short_name` in the KIM database.
+    specified by ``prototype_label`` and/or ``short_name`` in the KIM database.
     This is a utility function for running the test outside of the OpenKIM pipeline. In the OpenKIM pipeline,
-    this information is delivered to the test driver through the `runner` script.
+    this information is delivered to the test driver through the ``runner`` script.
 
     Args:
         stoichiometric_species:
             List of unique species in the crystal. Required part of the Crystal Genome designation. 
         short_name:
-            short name of the crystal, e.g. 'Hexagonal Close Packed'. This will be searched as a 
-            regex, so partial matches will be returned. The list of possible shortnames
+            short name of the crystal, e.g. "Hexagonal Close Packed". This will be searched as a 
+            case-insensitive regex, so partial matches will be returned. The list of possible shortnames
             is taken by postprocessing README_PROTO.TXT from the AFLOW software and packaged with
             kim-tools for reproducibility. To see the exact list of possible short names, call
-            kim_tools.shortnames() and inspect the values of the returned dictionary.
+            :func:`kim_tools.read_shortnames` and inspect the values of the returned dictionary.
             Note that a given short name corresponds to an exact set of parameters (with some tolerance),
-            except the overall scale of the crystal. For example, 'Hexagonal Close Packed' will return only
+            except the overall scale of the crystal. For example, "Hexagonal Close Packed" will return only
             structures with a c/a close to 1.63 (actually close packed), not any structure with the same
             symmetry as HCP as is sometimes colloquially understood.
             TODO: consider adding the same expanded logic we have on the website that searches for any
@@ -1082,7 +1128,7 @@ def query_crystal_structures(
         query["prototype-label.source-value"] = prototype_label
         
     if short_name is not None:
-        query["short-name.source-value"] = {"$regex":short_name}
+        query["short-name.source-value"] = {"$regex":short_name,"$options":"$i"}
     
     raw_query_args={
         "query":query,
@@ -1109,9 +1155,9 @@ def detect_unique_crystal_structures(crystal_structures: List[Dict], aflow_np: i
     Args:
         crystal_structures:
             A list of dictionaries in KIM Property format, each containing the Crystal Genome keys required
-            to build a structure, namely: 'stoichiometric-species', 'prototype-label', 'a', and, if the 
-            prototype has free parameters, 'parameter-values'. These dictionaries are not required to be complete
-            KIM Property Instances, e.g. the keys 'property-id', 'instance-id' and 'meta' can be absent
+            to build a structure, namely: "stoichiometric-species", "prototype-label", "a", and, if the 
+            prototype has free parameters, "parameter-values". These dictionaries are not required to be complete
+            KIM Property Instances, e.g. the keys "property-id", "instance-id" and "meta" can be absent
     
     Returns:
         Indices corresponding to unique structures. Any indices not in this list are duplicates

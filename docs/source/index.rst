@@ -32,7 +32,7 @@ This package is designed to facilitate writing `OpenKIM Test Drivers <https://op
    The AFLOW prototype label. In short, it is a string providing the stoichiometry, Pearson symbol, space group, and Wyckoff positions of an arbitrary crystal. Image source and more info: https://arxiv.org/pdf/2401.06875. 
 
 
-This package addresses these issues by providing a base class :class:`~kim_tools.CrystalGenomeTestDriver` (itself inheriting from a yet more general class :class:`~kim_tools.KIMTestDriver`) that automates many of the common programming tasks needed to write an OpenKIM Test Driver for Crystal Genome. Additionally, due to the common interface, Test Drivers written using this base class are easier to invoke outside of the OpenKIM infrastructure, and can work with arbitrary ASE :class:`~ase.Atoms` objects. If a Test Driver uses only ASE for computations, it can even work with arbitrary ASE :class:`~ase.calculators.calculator.Calculator` objects. In the future, all ASE-only Test Drivers written using :mod:`kim_tools` will be incorporated into the `kimvv <https://github.com/openkim/kimvv>`_ package to be distributed for users to test their own models.
+This package addresses these issues by providing a base class :class:`~kim_tools.SingleCrystalTestDriver` (itself inheriting from a yet more general class :class:`~kim_tools.KIMTestDriver`) that automates many of the common programming tasks needed to write an OpenKIM Test Driver for Crystal Genome. Additionally, due to the common interface, Test Drivers written using this base class are easier to invoke outside of the OpenKIM infrastructure, and can work with arbitrary ASE :class:`~ase.Atoms` objects. If a Test Driver uses only ASE for computations, it can even work with arbitrary ASE :class:`~ase.calculators.calculator.Calculator` objects. In the future, all ASE-only Test Drivers written using :mod:`kim_tools` will be incorporated into the `kimvv <https://github.com/openkim/kimvv>`_ package to be distributed for users to test their own models.
 
 Contact us at https://openkim.org/contact/ with any comments or questions.
 
@@ -55,20 +55,32 @@ Standalone Installation
 
 Standalone usage of ``kim-tools`` is possible and makes sense if you wish to use the package on an HPC resource, as most do not support running Docker images. 
 
+.. todo::
+
+   Add EquilibriumCrystalStructure to ``kimvv``, include ``kimvv`` in KDP, and add standalone installation instructions for ``kimvv`` below
+
 -------------
 Prerequisites
 -------------
-Before installing the package using ``pip``, you will need to install the KIM API and the AFLOW software. It is likely that you will have to do some configuration for your specific machine for things like Conda instalaltion directories, ``pip`` installation directories, etc.
-
-KIM API
--------
-Installation instructions for the KIM API can be found here: https://openkim.org/doc/usage/obtaining-models/. Recommended installation methods are building from source or installing from conda-forge. If you need `LAMMPS <https://www.lammps.org>`_ as well (because you are running or developing Test Drivers that use it, or you wish to use LAMMPS `Simulator Models <https://openkim.org/doc/repository/kim-content/>`_), a good option is to install the ``lammps`` package from conda-forge which includes ``kim-api`` as a dependency.
-
-There may be issues mixing ``pip`` and Conda. I did not encounter any arising directly from ``kim-tools``, but when developing a test that uses ``numdifftools``, I found that it was only possible to install through Conda, not ``pip``, for example.
+Before installing the package using ``pip``, you will need to install AFLOW. The KIM API is required to run any Test Drivers that use LAMMPS, or to use KIM Models with ASE-only Test Drivers (recommeded). `GNU Units <https://www.gnu.org/software/units/>`_ is also required. You may have to do some configuration for your specific machine for things like Conda installation directories, ``pip`` installation directories, etc.
 
 AFLOW
 -----
 The installation script for ``kim-tools`` will check that the ``aflow`` executable is in your ``PATH`` and working correctly. Installation instructions are here: http://aflow.org/install-aflow/. If the automatic installers/downloaders do not work for you, I have found building from source manually to be straightforward and well-behaved. Simply download the source code, issue ``make``, and copy the resulting executable into your ``PATH`` manually or using ``make install``. An executable file named ``aflow_data`` must also be present in your ``PATH``. For the purposes of ``kim-tools``, this may be an empty file with execute permissions, it does not need to be the actual ``aflow_data`` file built from the AFLOW source.
+
+KIM API and kimpy
+-----------------
+Installation instructions for the KIM API can be found `here <https://openkim.org/doc/usage/obtaining-models/>`_, and for ``kimpy`` `here <https://github.com/openkim/kimpy#readme>`_. Recommended installation methods are building from source or installing from conda-forge (installing the ``kimpy`` package will automatically install ``kim-api`` as well). If you need `LAMMPS <https://www.lammps.org>`_ as well (because you are running or developing Test Drivers that use it, or you wish to use LAMMPS `Simulator Models <https://openkim.org/doc/repository/kim-content/>`_), a good option is to install the ``lammps`` package from conda-forge as well.
+
+There may be issues mixing ``pip`` and Conda. I did not encounter any arising directly from ``kim-tools``, but when developing a test that uses ``numdifftools``, I found that it was only possible to install through Conda, not ``pip``, for example.
+
+GNU Units
+---------
+``kim-tools`` uses the `GNU Units <https://www.gnu.org/software/units/>`_ utility for automatic unit conversion. You can check if you already have it by running ``units --help``. It is available from many native package managers such as ``apt``. If you are on a system where you do not have admin access, you may have to build it from source. Once you download the source code from the GNU website, you should be able to install it by running the following commands from the source directory. The ``--prefix=/desired/install/dir`` option specifies the install location, and you will have to add ``/desired/install/dir/bin`` to your ``PATH``. For more info, see the ``INSTALL`` and ``README`` files in the source.
+
+.. code-block:: bash
+
+   ./configure --prefix=/desired/install/dir && make && make install
 
 Installation
 ------------

@@ -7,13 +7,18 @@ Test Driver will be used to pass inputs and parse outputs from the calculation y
 This functionality is also available for testing in the KIM Developer Platform. More information about this is avalable
 here: :doc:`../../tutorial_pipeline`, however it is likely that you will first wish to test your Driver by invoking it directly.
 
-Examples for how to do that are found in the script ``run.py`` from |example_url|, documented below in the :ref:`example script <sphx_glr_auto_examples_CrystalGenomeASEExample__TD_000000654321_000_run.py>` below.
+Examples for how to do that are found in the script ``run.py`` from |example_url|. Use this as a starting point for running your
+own Test Driver, changing the passed arguments and the properties printed out. To see a rendered version of that file explaining its functionality,
+follow the link in the :ref:`doc.example_script` section below.
+
 A practical guide for testing your Driver on a variety of crystal structures is found at the bottom of the page in the section ':ref:`doc.curated_tests`'.
 Everything you need to run the example script is containerized in the :ref:`doc.KDP`,
 or alternatively will be installed if you follow the :ref:`doc.standalone_installation`. 
 
 ``kim-tools`` will automatically look for property definitions in the ``local-props`` and ``local_props`` subdirectories of the current working directory. If you wish to put them somewhere else,
 you can point the environment variable ``KIM_PROPERTY_PATH`` to their location. ``kim-tools`` will expand any globs, including recursive ``**``.
+
+.. _doc.example_script:
 
 Example Script for Running a Crystal Genome Test Driver
 =======================================================
@@ -37,6 +42,10 @@ will have results or a compatible interatomic potential
 
 Every time you use a new model, you will need to install the model and re-instantiate
 your ``TestDriver`` class.
+
+.. todo::
+
+   Rhombohedral crystals are currently not supported. Skip the AB_hR26_148_a2f_b2f structure below.
 
 .. csv-table:: 
    :header-rows: 1
