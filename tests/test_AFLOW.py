@@ -334,4 +334,4 @@ def test_solve_for_params_of_known_prototype(input_crystal_structures):
     assert not failed_to_solve_at_least_one
 
 if __name__ == '__main__':
-    test_solve_for_params_of_known_prototype(get_test_crystal_structures(test_cases=None,deduplicate=False))
+    test_solve_for_params_of_known_prototype(get_test_crystal_structures(test_cases=[22],deduplicate=False))

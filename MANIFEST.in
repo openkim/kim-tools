@@ -1,2 +1,2 @@
 include kim_tools/aflow_util/data/README_PROTO.TXT
-recursive-include kim_tools/symmetry_util/data
+recursive-include kim_tools/symmetry_util/data *.json
