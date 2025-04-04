@@ -17,8 +17,8 @@ from tempfile import NamedTemporaryFile
 from sympy import parse_expr,matrix2numpy,linear_eq_to_matrix,Symbol
 from dataclasses import dataclass
 from ..symmetry_util import are_in_same_wyckoff_set, space_group_numbers_are_enantiomorphic, get_primitive_wyckoff_multiplicity, \
-    WYCK_POS_XFORM_UNDER_NORMALIZER, CENTERING_DIVISORS, C_CENTERED_ORTHORHOMBIC_GROUPS, A_CENTERED_ORTHORHOMBIC_GROUPS, \
-    POSSIBLE_PRIMITIVE_SHIFTS
+    get_wyck_pos_xform_under_normalizer, get_possible_primitive_shifts, get_primitive_genpos_ops, \
+    CENTERING_DIVISORS, C_CENTERED_ORTHORHOMBIC_GROUPS, A_CENTERED_ORTHORHOMBIC_GROUPS
 from math import cos, acos, sin, sqrt, radians, degrees
 import logging
 logger = logging.getLogger(__name__)
@@ -46,7 +46,7 @@ __all__ = [
     "get_bravais_lattice_from_prototype",
     "read_shortnames",
     "get_real_to_virtual_species_map",
-    "solve_for_cell_params",
+    "solve_for_aflow_cell_params_from_primitive_ase_cell_params",
     "AFLOW"
 ]
 
@@ -356,7 +356,7 @@ def prototype_labels_are_equivalent(
         # always have identical prototype labels due to minimal Wyckoff enumeration. However, there are
         # bugs in AFLOW making this untrue.
         
-        wyck_pos_xform_list = WYCK_POS_XFORM_UNDER_NORMALIZER[sg_num_1]
+        wyck_pos_xform_list = get_wyck_pos_xform_under_normalizer(sg_num_1)
         for wyck_pos_xform in wyck_pos_xform_list:
             wyckoff_lists_match_for_each_species = True
             for i in range(num_species):
@@ -416,7 +416,7 @@ def read_shortnames() -> Dict:
     shortnames = {}
     shortname_file = "data/README_PROTO.TXT"
     notes_index = None
-    with open(os.path.dirname(os.path.realpath(__file__))+'/'+shortname_file, encoding="utf-8") as f:
+    with open(os.path.join(os.path.dirname(os.path.realpath(__file__)),shortname_file), encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if line.startswith("ANRL Label"):
@@ -489,10 +489,10 @@ def get_real_to_virtual_species_map(input: Union[List[str],Atoms]) -> Dict:
     
     return real_to_virtual_species_map
 
-def solve_for_cell_params(cellpar_prim: ArrayLike, prototype_label: str) -> List[float]:
+def solve_for_aflow_cell_params_from_primitive_ase_cell_params(cellpar_prim: ArrayLike, prototype_label: str) -> List[float]:
     """
     Get conventional cell parameters from primitive cell parameters. It is assumed that the primitive cell is related to the conventional cell
-    as specified in 10.1016/j.commatsci.2017.01.017
+    as specified in 10.1016/j.commatsci.2017.01.017. Equations obtained from Wolfram notebook in ``scripts/cell_param_solver.nb``
     
     Args:
         cellpar_prim:
@@ -505,6 +505,8 @@ def solve_for_cell_params(cellpar_prim: ArrayLike, prototype_label: str) -> List
         as ``cellpar_prim``, the others are fractional parameters in terms of 'a', or angles in degrees. For example, if the ``prototype_label``
         provided indicates a monoclinic crystal, this function will return the values of [a,b/a,c/a,beta]
     """
+    bravais_lattice = get_bravais_lattice_from_prototype(prototype_label)
+    
     assert len(cellpar_prim) == 6, 'Got a number of cell parameters that is not 6'
     
     for length in cellpar_prim[0:3]:
@@ -519,19 +521,17 @@ def solve_for_cell_params(cellpar_prim: ArrayLike, prototype_label: str) -> List
     betaprim = cellpar_prim[4]
     gammaprim = cellpar_prim[5]
     
-    pearson = get_pearson_symbol_from_prototype(prototype_label)
-    
-    if pearson.startswith('aP'):
+    if bravais_lattice == 'aP':
         return [aprim,bprim/aprim,cprim/aprim,alphaprim,betaprim,gammaprim]
-    elif pearson.startswith('mP'):
+    elif bravais_lattice == 'mP':
         return [aprim,bprim/aprim,cprim/aprim,betaprim]
-    elif pearson.startswith('oP'):
+    elif bravais_lattice == 'oP':
         return [aprim,bprim/aprim,cprim/aprim]
-    elif pearson.startswith('tP') or pearson.startswith('hP'):
+    elif bravais_lattice == 'tP' or bravais_lattice == 'hP':
         return [aprim,cprim/aprim]
-    elif pearson.startswith('cP'):
+    elif bravais_lattice == 'cP':
         return [aprim]
-    elif pearson.startswith('mC'):
+    elif bravais_lattice == 'mC':
         cos_alphaprim = cos(radians(alphaprim))
         cos_gammaprim = cos(radians(gammaprim))
         a = aprim*sqrt(2+2*cos_gammaprim)
@@ -539,7 +539,7 @@ def solve_for_cell_params(cellpar_prim: ArrayLike, prototype_label: str) -> List
         c = cprim
         beta = degrees(acos(cos_alphaprim/sqrt((1+cos_gammaprim)/2)))
         return [a,b/a,c/a,beta]
-    elif pearson.startswith('oC'):
+    elif bravais_lattice == 'oC':
         # the 'C' is colloquial, and can refer to either C or A-centering
         space_group_number = get_space_group_number_from_prototype(prototype_label)
         if space_group_number in C_CENTERED_ORTHORHOMBIC_GROUPS:
@@ -555,14 +555,14 @@ def solve_for_cell_params(cellpar_prim: ArrayLike, prototype_label: str) -> List
         else:
             raise incorrectSpaceGroupException(f'Space group in prototype label {prototype_label} not found in lists of side-centered orthorhombic groups')
         return [a,b/a,c/a]
-    elif pearson.startswith('oI'):
+    elif bravais_lattice == 'oI':
         cos_alphaprim = cos(radians(alphaprim))
         cos_betaprim = cos(radians(betaprim))
         a = aprim*sqrt(2+2*cos_alphaprim)
         b = aprim*sqrt(2+2*cos_betaprim)
         c = aprim*sqrt(-2*(cos_alphaprim+cos_betaprim)) # I guess the cosines must sum to a negative number!? Will raise a ValueError: math domain error if not
         return [a,b/a,c/a]
-    elif pearson.startswith('oF'):
+    elif bravais_lattice == 'oF':
         aprimsq = aprim*aprim
         bprimsq = bprim*bprim
         cprimsq = cprim*cprim
@@ -570,16 +570,19 @@ def solve_for_cell_params(cellpar_prim: ArrayLike, prototype_label: str) -> List
         b = sqrt(2*(aprimsq-bprimsq+cprimsq))
         c = sqrt(2*(aprimsq+bprimsq-cprimsq))
         return [a,b/a,c/a]
-    elif pearson.startswith('tI'):
+    elif bravais_lattice == 'tI':
         cos_alphaprim = cos(radians(alphaprim))
         a = aprim*sqrt(2+2*cos_alphaprim)
         c = 2*aprim*sqrt(-cos_alphaprim) #  I guess primitive alpha is always obtuse!? Will raise a ValueError: math domain error if not
         return [a,c/a]
-    elif pearson.startswith('hR'):
-        raise NotImplementedError('Punting on rhombohedral for now since it doesn\'t work in AFLOW anyway')
-    elif pearson.startswith('cF'):
+    elif bravais_lattice == 'hR':
+        cos_alphaprim = cos(radians(alphaprim))
+        a = aprim*sqrt(2-2*cos_alphaprim)
+        c = aprim*sqrt(3+6*cos_alphaprim)
+        return [a,c/a]
+    elif bravais_lattice == 'cF':
         return [aprim*sqrt(2)]
-    elif pearson.startswith('cI'):
+    elif bravais_lattice == 'cI':
         return [aprim*2/sqrt(3)]
 
 class AFLOW:
@@ -927,34 +930,6 @@ class AFLOW:
         """
         return write_tmp_poscar_from_atoms_and_run_function(
             atoms,self.get_library_prototype_label_and_shortname_from_file,prim=prim,shortnames=shortnames)
-
-    def get_pointgroup_crystal_from_file(self, input_file: str, verbose: bool=False) -> List[Dict]:
-        """
-        Run the ``aflow --pointgroup_crystal`` command to get the point group operations of the provided coordinate file
-
-        Args:
-            input_file: path to the POSCAR file containing the structure to analyze
-
-        Returns:
-            JSON dictionaries describing the point group of the input structure.            
-            verbose: Whether to echo command to log file
-        """
-        return json.loads(self.aflow_command(
-            [" --pointgroup_crystal --screen_only --print=json < " + self.aflow_work_dir + input_file],
-            verbose=verbose))['pgroup_xtal']
-    
-    def get_pointgroup_crystal_from_atoms(self, atoms: Atoms, verbose: bool=False) -> List[Dict]:
-        """
-        Run the ``aflow --pointgroup_crystal`` command to get the point group operations of the provided atoms object
-
-        Args:
-            atoms: Atoms object containing the structure to analyze
-
-        Returns:
-            JSON dictionaries describing the point group of the input structure.            
-            verbose: Whether to echo command to log file
-        """        
-        return write_tmp_poscar_from_atoms_and_run_function(atoms,self.get_pointgroup_crystal_from_file,verbose=verbose)
     
     def _compare_poscars(self, poscar1: PathLike, poscar2: PathLike) -> Dict:
         return json.loads(self.aflow_command([' --print=JSON --compare_materials=%s,%s --screen_only --no_scale_volume --optimize_match --quiet'%(poscar1,poscar2)],verbose=False))
@@ -1176,7 +1151,7 @@ class AFLOW:
         
         """
         # solve for cell parameters
-        cell_params = solve_for_cell_params(atoms.cell.cellpar(),prototype_label)
+        cell_params = solve_for_aflow_cell_params_from_primitive_ase_cell_params(atoms.cell.cellpar(),prototype_label)
         species = sorted(list(set(atoms.get_chemical_symbols())))
         
         # First, redetect the prototype label. We can't use this as-is because it may be rotated by an operation that's within the normalizer but not
@@ -1216,6 +1191,7 @@ class AFLOW:
             logger.error(msg)
             raise self.failedToMatchException(msg)
         
+        # Transpose the change of basis equation for row vectors
         initial_origin_shift_frac = (-neg_initial_origin_shift_cart)@np.linalg.inv(atoms.cell)
         
         logger.info(f'Initial shift (to SOME standard origin, not necessarily the desired one): {-neg_initial_origin_shift_cart} (Cartesian), {initial_origin_shift_frac} (fractional)')
@@ -1229,7 +1205,7 @@ class AFLOW:
             raise inconsistentWyckoffException('Number of equivalent positions detected in Atoms object did not match the number of equivalent equations given')
                 
         space_group_number = get_space_group_number_from_prototype(prototype_label)
-        for prim_shift in POSSIBLE_PRIMITIVE_SHIFTS[space_group_number]:
+        for prim_shift in get_possible_primitive_shifts(space_group_number):
             logger.info(f'Additionally shifting atoms by internal fractional translation {prim_shift}')
             
             free_params_dict = {}
@@ -1289,7 +1265,7 @@ class AFLOW:
         logger.info(msg)
         raise self.failedToSolveException(msg)
     
-    def confirm_atoms_unrotated_when_cells_aligned(self,test_atoms,reference_atoms):
+    def confirm_atoms_unrotated_when_cells_aligned(self,test_atoms: Atoms,reference_atoms: Atoms, sgnum: Union[int,str]) -> bool:
         """
         Check whether `test_atoms` and `reference_atoms` are unrotated as follows:
         When the cells are in :func:`ase.cell.Cell.standard_form()`, the cells are identical.
@@ -1299,6 +1275,10 @@ class AFLOW:
         result). In other words, the crystals are identically oriented (but possibly translated) in reference
         to their lattice vectors, which in turn must be identical up to a rotation in reference to 
         some Cartesian coordinate system.
+        
+        Args:
+            sgnum:
+                Space group number
         """
         if not np.allclose(reference_atoms.cell.cellpar(),test_atoms.cell.cellpar(),atol=1e-4):
             logger.info(f"Cell lengths and angles do not match.\nOriginal: {reference_atoms.cell.cellpar()}\n"
@@ -1313,17 +1293,22 @@ class AFLOW:
         test_atoms_copy.set_cell(Cell.fromcellpar(cell_lengths_and_angles),scale_atoms=True)
         reference_atoms_copy.set_cell(Cell.fromcellpar(cell_lengths_and_angles),scale_atoms=True)
         
-        # the rotations below are Cartesian.
+        # the rotation below is Cartesian.
         try:
             _,cart_rot,_,_ = self.get_basistransformation_rotation_originshift_atom_map_from_atoms(test_atoms_copy,reference_atoms_copy)
         except self.failedToMatchException:
             logger.info("AFLOW failed to match the recreated crystal to reference")
             return False
+                
+        # we need to correctly order the cell and properly transpose in order to be able to compare to the 
+        # fractional rotation in ITC orientation (which is for operating on column vectors, and is not an orthogonal matrix because it's in a non-orthonormal basis)
+        # but we don't care about properly transposing the input cart_rot because that one is orthogonal, and both it and its inverse must be in the point group
+        frac_rot = np.transpose(test_atoms_copy.cell@cart_rot@np.linalg.inv(test_atoms_copy.cell))
+       
+        space_group_ops = get_primitive_genpos_ops(sgnum)
         
-        point_group_ops = self.get_pointgroup_crystal_from_atoms(reference_atoms_copy)
-        
-        for op in point_group_ops:
-            if np.allclose(cart_rot,op['Uc'],atol=1e-4):
+        for op in space_group_ops:
+            if np.allclose(frac_rot,op['W'],atol=1e-4):
                 logger.info("Found matching rotation")
                 return True
         
@@ -1360,4 +1345,4 @@ class AFLOW:
         """
         test_atoms = self.build_atoms_from_prototype(prototype_label=prototype_label,species=species,parameter_values=parameter_values)
         
-        return(self.confirm_atoms_unrotated_when_cells_aligned(test_atoms,reference_atoms))
+        return(self.confirm_atoms_unrotated_when_cells_aligned(test_atoms,reference_atoms,get_space_group_number_from_prototype(prototype_label)))

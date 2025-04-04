@@ -17,7 +17,7 @@ import logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(filename='kim-tools.log',level=logging.INFO,force=True)
 
-TEST_CASES = [577,365,1734,1199,1478,166,1210,1362,920,212,646,22]
+TEST_CASES = [572,365,1729,1194,1473,166,1205,1357,915,212,641,22]
 MATERIALS_FILE = 'test_structures.json'
 
 def shuffle_atoms(
@@ -334,4 +334,4 @@ def test_solve_for_params_of_known_prototype(input_crystal_structures):
     assert not failed_to_solve_at_least_one
 
 if __name__ == '__main__':
-    test_solve_for_params_of_known_prototype(get_test_crystal_structures(test_cases=None))
+    test_solve_for_params_of_known_prototype(get_test_crystal_structures(test_cases=None,deduplicate=False))

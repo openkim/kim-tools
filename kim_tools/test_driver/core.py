@@ -349,12 +349,12 @@ def _add_key_to_current_property_instance(property_instances: str,
 
 ################################################################################
 class KIMTestDriverError(Exception):
-    def __init__(self, msg):
+    def __init__(self, msg) -> None:
         # Call the base class constructor with the parameters it needs
         super(KIMTestDriverError, self).__init__(msg)
         self.msg = msg
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.msg
 
 ################################################################################
@@ -374,7 +374,7 @@ class KIMTestDriver(ABC):
             keys: filenames to be assigned to files, values: serialized strings to dump into those files. To be used for ``file`` type property keys
     """
 
-    def __init__(self, model: Union[str,Calculator]):
+    def __init__(self, model: Union[str,Calculator]) -> None:
         """
         Args:
             model:
@@ -390,14 +390,14 @@ class KIMTestDriver(ABC):
         self.__cached_files = {}
         self.__output_property_instances = "[]"
 
-    def _setup(self, material, **kwargs):
+    def _setup(self, material, **kwargs) -> None:
         """
         Empty method, for optional overrides
         """
         pass
                 
     @abstractmethod
-    def _calculate(self, **kwargs):
+    def _calculate(self, **kwargs) -> None:
         """
         Abstract calculate method
         """
@@ -885,8 +885,6 @@ class SingleCrystalTestDriver(KIMTestDriver):
             print()
         else:
             self.__nominal_crystal_structure_npt = material
-            
-        self.__atoms = get_atoms_from_crystal_structure(self.__nominal_crystal_structure_npt)
         
         # Pop the temperature and stress keys in case they came along with a query
         if 'temperature' in self.__nominal_crystal_structure_npt:
@@ -947,8 +945,7 @@ class SingleCrystalTestDriver(KIMTestDriver):
         if len(aflow_parameter_values) > 1:
             self.__nominal_crystal_structure_npt['parameter-values'] = {
                 'source-value': aflow_parameter_values[1:]
-            }            
-        self.__atoms = get_atoms_from_crystal_structure(self.__nominal_crystal_structure_npt)
+            }
     
     def _verify_unchanged_symmetry(self, atoms: Atoms) -> bool:
         """
@@ -1000,7 +997,6 @@ class SingleCrystalTestDriver(KIMTestDriver):
                                                                 disclaimer = disclaimer,
                                                                 property_instances = super()._get_serialized_property_instances()))
 
-        # self.__atoms should be always kept commensurate with self.__nominal_crystal_structure_npt
         # POSCAR files are always in angstrom, so rescale
         
         atoms_tmp = self._get_atoms()        
@@ -1058,9 +1054,9 @@ class SingleCrystalTestDriver(KIMTestDriver):
             Primitive unit cell of the crystal as defined in the 
             `AFLOW prototype standard <http://doi.org/10.1016/j.commatsci.2017.01.017>`_. Lengths are always in angstrom
         """
-        atoms_copy = self.__atoms.copy()
-        atoms_copy.calc = self._calc
-        return atoms_copy
+        atoms_tmp = get_atoms_from_crystal_structure(self.__nominal_crystal_structure_npt)
+        atoms_tmp.calc = self._calc
+        return atoms_tmp
     
 ################################################################################
 def query_crystal_structures(
