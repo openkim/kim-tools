@@ -9,6 +9,7 @@ from numpy.typing import ArrayLike
 import json
 import os
 from sympy import symbols, cos, sin, Matrix, matrix2numpy, sqrt
+from ase.cell import Cell
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(filename='kim-tools.log',level=logging.INFO,force=True)
@@ -21,6 +22,9 @@ __all__ = [
     "CENTERING_DIVISORS",
     "C_CENTERED_ORTHORHOMBIC_GROUPS",
     "A_CENTERED_ORTHORHOMBIC_GROUPS",
+    "cartesian_to_fractional_itc_rotation_from_ase_cell",
+    "cartesian_rotation_is_in_point_group",
+    "get_cell_from_poscar",
     "get_wyck_pos_xform_under_normalizer",
     "get_bravais_lattice_from_space_group",
     "get_formal_bravais_lattice_from_space_group",
@@ -35,6 +39,12 @@ class IncorrectCrystallographyError(Exception):
     """
     Raised when incorrect data is provided, e.g. nonexistent Bravais lattice etc.
     """
+
+def _check_space_group(sgnum: Union[int,str]):
+    try:
+        assert 1 <= int(sgnum) <= 230
+    except:
+        raise IncorrectCrystallographyError(f'Got a space group number {sgnum} that is non-numeric or not between 1 and 230 inclusive')
 
 C_CENTERED_ORTHORHOMBIC_GROUPS = (20,21,35,36,37,63,64,65,66,67,68)
 A_CENTERED_ORTHORHOMBIC_GROUPS = (38,39,40,41)
@@ -53,14 +63,87 @@ CENTERING_DIVISORS = {
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)),'data')
 
-def are_in_same_wyckoff_set(letter_1: str,letter_2: str,space_group_number: Union[str,int]):
+def cartesian_to_fractional_itc_rotation_from_ase_cell(cart_rot: ArrayLike, cell: ArrayLike) -> ArrayLike:
+    """
+    Convert Cartesian to fractional rotation. Read the arguments and returns carefully, as there is some unfortunate mixing of 
+    row and columns because of the different conventions of the ITC and ASE and other simulation packages
+    
+    Args:
+        cart_rot:
+            Cartesian rotation. It is assumed that this is for left-multiplying column vectors, although in cases where
+            we don't care if we're working with the rotation or its inverse (e.g. when checking whether or not it's in the 
+            point group), this doesn't matter due to orthogonality
+        cell:
+            The cell of the crystal, with each row being a cartesian vector representing a lattice vector. This is 
+            consistent with most simulation packages, but transposed from the ITC
+    
+    Returns:
+        The fractional rotation in ITC convention, i.e. for left-multiplying column vectors. Here the distinction with 
+        a matrix's transpose DOES matter, because the fractional coordinate system is not orthonormal.
+    """
+    
+    cell_arr = np.asarray(cell)
+    cart_rot_arr = np.asarray(cart_rot)
+    
+    if not ((cell_arr.shape == (3,3)) and (cart_rot_arr.shape == (3,3))):
+        raise IncorrectCrystallographyError(f'Either the rotation matrix or the cell provided were not 3x3 matrices')
+    
+    return np.transpose(cell_arr@cart_rot_arr@np.linalg.inv(cell_arr))
+
+def cartesian_rotation_is_in_point_group(cart_rot: ArrayLike, sgnum: Union[int,str], cell: ArrayLike) -> bool:
+    """
+    Check that a Cartesian rotation is in the point group of a crystal given by its space group number and primitive cell
+    
+    Args:
+        cart_rot:
+            Cartesian rotation
+        sgnum:
+            space group number
+        cell:
+            The PRIMITIVE cell of the crystal as defined in http://doi.org/10.1016/j.commatsci.2017.01.017,
+            with each row being a cartesian vector representing a lattice vector. This is 
+            consistent with most simulation packages, but transposed from the ITC    
+    """
+    # we don't care about properly transposing (i.e. worrying whether it's operating on row or column vectors)
+    # the input cart_rot because that one is orthogonal, and both it and its inverse must be in the point group
+    frac_rot = cartesian_to_fractional_itc_rotation_from_ase_cell(cart_rot,cell)
+    
+    space_group_ops = get_primitive_genpos_ops(sgnum)
+    
+    for op in space_group_ops:
+        if np.allclose(frac_rot,op['W'],atol=1e-4):
+            logger.info("Found matching rotation")
+            return True
+    
+    logger.info("No matching rotation found")
+    return False
+
+def get_cell_from_poscar(poscar: os.PathLike) -> ArrayLike:
+    """
+    Extract the unit cell from a POSCAR file, including the specified scaling
+    """
+    with open(poscar) as f:
+        poscar_lines = f.read().splitlines()
+    
+    scaling = float(poscar_lines[1])    
+    cell = np.asarray([[float(num) for num in line.split()] for line in poscar_lines[2:5]])
+    
+    if scaling < 0:
+        desired_volume = -scaling
+        unscaled_volume = Cell(cell).volume
+        scaling = (desired_volume/unscaled_volume)**(1/3)
+    
+    return cell*scaling
+
+def are_in_same_wyckoff_set(letter_1: str,letter_2: str,sgnum: Union[str,int]):
     """
     Given two Wyckoff letters and a space group number, return whether or not they are in the same Wyckoff set,
     meaning that their orbits are related by an operation in the normalizer of the space group
     """
+    _check_space_group(sgnum)
     with open(os.path.join(DATA_DIR,'wyckoff_sets.json')) as f:
         wyckoff_sets = json.load(f)
-    for wyckoff_set in wyckoff_sets[str(space_group_number)]:
+    for wyckoff_set in wyckoff_sets[str(sgnum)]:
         if letter_1 in wyckoff_set:
             if letter_2 in wyckoff_set:
                 return True
@@ -71,6 +154,8 @@ def space_group_numbers_are_enantiomorphic(sg_1: int, sg_2: int) -> bool:
     """
     Return whether or not two spacegroups (specified by number) are enantiomorphs of each other
     """
+    _check_space_group(sg_1)
+    _check_space_group(sg_2)
     if sg_1 == sg_2:
         return True
     else:
@@ -86,6 +171,7 @@ def get_wyck_pos_xform_under_normalizer(sgnum:Union[int,str]) -> List[List[str]]
     """
     Get the "Transformed WP" column of the tables at the bottom of the page for each space group from https://cryst.ehu.es/cryst/get_set.html
     """
+    _check_space_group(sgnum)
     with open(os.path.join(DATA_DIR,'wyck_pos_xform_under_normalizer.json')) as f:
         wyck_pos_xform_under_normalizer = json.load(f)
     return wyck_pos_xform_under_normalizer[str(sgnum)]
@@ -94,6 +180,7 @@ def get_bravais_lattice_from_space_group(sgnum:Union[int,str]):
     """
     Get the symbol (e.g. 'cF') of one of the 14 Bravais lattices from the space group number
     """
+    _check_space_group(sgnum)
     space_groups_for_each_bravais_lattice = {
         "aP":[1,2],
         "mP":[3,4,6,7,10,11,13,14],
@@ -131,6 +218,7 @@ def get_primitive_wyckoff_multiplicity(sgnum: Union[int, str], wyckoff: str)->in
     """
     Get the multiplicity of a given Wyckoff letter for a primitive cell of the crystal
     """
+    _check_space_group(sgnum)
     centering_divisor = CENTERING_DIVISORS[get_bravais_lattice_from_space_group(sgnum)[1]]
     with open(os.path.join(DATA_DIR,'wyckoff_multiplicities.json')) as f:
         wyckoff_multiplicities = json.load(f)
@@ -282,6 +370,7 @@ def get_possible_primitive_shifts(sgnum: Union[int, str]) -> List[List[float]]:
     Args:
         sgnum: space group number
     """
+    _check_space_group(sgnum)
     with open(os.path.join(DATA_DIR,'possible_primitive_shifts.json')) as f:
         return json.load(f)[str(sgnum)]
     
@@ -297,5 +386,6 @@ def get_primitive_genpos_ops(sgnum: Union[int, str]) -> List[Dict]:
         List of dictionaries, with each dictionary containing a matrix 'W' and translation 'w'
         as generally defined in the ITA, but in the primitive setting.
     """
+    _check_space_group(sgnum)
     with open(os.path.join(DATA_DIR,'primitive_GENPOS_ops.json')) as f:
         return np.asarray(json.load(f)[str(sgnum)])

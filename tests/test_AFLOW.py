@@ -2,6 +2,7 @@
 
 from kim_tools import AFLOW, split_parameter_array, get_wyckoff_lists_from_prototype, get_real_to_virtual_species_map, get_bravais_lattice_from_prototype, minimize_wrapper, \
     prototype_labels_are_equivalent, query_crystal_structures, detect_unique_crystal_structures, get_atoms_from_crystal_structure, get_space_group_number_from_prototype
+    
 from ase.calculators.kim.kim import KIM
 from ase import Atoms
 from random import random
@@ -13,6 +14,7 @@ import numpy as np
 from numpy.typing import ArrayLike
 import pytest
 import logging
+import kim_edn
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(filename='kim-tools.log',level=logging.INFO,force=True)
@@ -149,7 +151,7 @@ def atoms_frac_pos_match_allow_wrap(
         test_atoms.get_chemical_symbols()
     )
 
-def get_test_crystal_structures(materials_file: PathLike = MATERIALS_FILE, test_cases: Optional[List[int]] = TEST_CASES, deduplicate: bool = True) -> List[Dict]:
+def get_test_crystal_structures(materials_file: PathLike = MATERIALS_FILE, test_cases: Optional[List[int]] = TEST_CASES, deduplicate: bool = False) -> List[Dict]:
     """
     Query OpenKIM reference data for materials (prototype label + species) from `materials_file`. Deduplicate the structures if asked, otherwise just
     return the first index of each (you don't want to be testing 25 identical copies of FCC Aluminum)
@@ -333,5 +335,12 @@ def test_solve_for_params_of_known_prototype(input_crystal_structures):
             
     assert not failed_to_solve_at_least_one
 
+def test_detect_unique_crystal_structures():
+    reference_structure = kim_edn.load('structures/OSi.edn')
+    test_structure = kim_edn.load('structures/OSi_twin.edn')
+    assert len(detect_unique_crystal_structures([reference_structure,reference_structure,test_structure,test_structure,test_structure,test_structure],allow_rotation=True)) == 1
+    assert len(detect_unique_crystal_structures([reference_structure,reference_structure,test_structure,test_structure,test_structure,test_structure],allow_rotation=False)) == 2
+
 if __name__ == '__main__':
-    test_solve_for_params_of_known_prototype(get_test_crystal_structures(test_cases=[22],deduplicate=False))
+    test_detect_unique_crystal_structures()
+    #test_solve_for_params_of_known_prototype(get_test_crystal_structures(test_cases=[22],deduplicate=True))

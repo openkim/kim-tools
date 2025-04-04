@@ -17,7 +17,7 @@ from tempfile import NamedTemporaryFile
 from sympy import parse_expr,matrix2numpy,linear_eq_to_matrix,Symbol
 from dataclasses import dataclass
 from ..symmetry_util import are_in_same_wyckoff_set, space_group_numbers_are_enantiomorphic, get_primitive_wyckoff_multiplicity, \
-    get_wyck_pos_xform_under_normalizer, get_possible_primitive_shifts, get_primitive_genpos_ops, \
+    get_wyck_pos_xform_under_normalizer, get_possible_primitive_shifts, cartesian_rotation_is_in_point_group, \
     CENTERING_DIVISORS, C_CENTERED_ORTHORHOMBIC_GROUPS, A_CENTERED_ORTHORHOMBIC_GROUPS
 from math import cos, acos, sin, sqrt, radians, degrees
 import logging
@@ -666,7 +666,8 @@ class AFLOW:
                                     verbose: bool=True,
                                     addtl_args: str = "") -> Optional[str]:
         """
-        Run the ``aflow --proto`` command to write a POSCAR coordinate file corresponding to the provided AFLOW prototype designation
+        Run the ``aflow --proto`` command to write a POSCAR coordinate file corresponding to the provided AFLOW prototype designation.
+        This file will have fractional coordinates.
 
         Args:
             prototype_label: An AFLOW prototype label, with or without an enumeration suffix
@@ -1299,21 +1300,8 @@ class AFLOW:
         except self.failedToMatchException:
             logger.info("AFLOW failed to match the recreated crystal to reference")
             return False
-                
-        # we need to correctly order the cell and properly transpose in order to be able to compare to the 
-        # fractional rotation in ITC orientation (which is for operating on column vectors, and is not an orthogonal matrix because it's in a non-orthonormal basis)
-        # but we don't care about properly transposing the input cart_rot because that one is orthogonal, and both it and its inverse must be in the point group
-        frac_rot = np.transpose(test_atoms_copy.cell@cart_rot@np.linalg.inv(test_atoms_copy.cell))
-       
-        space_group_ops = get_primitive_genpos_ops(sgnum)
         
-        for op in space_group_ops:
-            if np.allclose(frac_rot,op['W'],atol=1e-4):
-                logger.info("Found matching rotation")
-                return True
-        
-        logger.info("No matching rotation found")
-        return False
+        return cartesian_rotation_is_in_point_group(cart_rot,sgnum,test_atoms_copy.cell)
     
     def confirm_unrotated_prototype_designation(
             self,

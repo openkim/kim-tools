@@ -1,0 +1,26 @@
+{
+        "prototype-label" {
+            "source-value" "A2B_hP9_154_c_a"
+        } 
+        "stoichiometric-species" {
+            "source-value" [
+                "O" 
+                "Si"
+            ]
+        } 
+        "a" {
+            "source-value" 5.0461 
+            "source-unit" "angstrom" 
+            "si-unit" "m" 
+            "si-value" 5.0461e-10
+        } 
+        "parameter-values" {
+            "source-value" [
+                1.063237 
+                0.46
+                0.87
+                0.59
+                0.11 
+            ]
+        }     
+}

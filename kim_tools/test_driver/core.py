@@ -51,6 +51,7 @@ from kim_property import kim_property_create, kim_property_modify, kim_property_
 from kim_property.modify import STANDARD_KEYS_SCLAR_OR_WITH_EXTENT
 import kim_edn
 from ..aflow_util import AFLOW, prototype_labels_are_equivalent
+from ..symmetry_util import get_cell_from_poscar, cartesian_rotation_is_in_point_group
 from ..kimunits import convert_units, convert_list
 from kim_query import raw_query
 import os
@@ -1136,7 +1137,7 @@ def query_crystal_structures(
     
     query_result=raw_query(**raw_query_args)
     
-    len_msg = f'Found {len(query_result)} unique equilibrium structures from query_crystal_genome_structures()'
+    len_msg = f'Found {len(query_result)} equilibrium structures from query_crystal_genome_structures()'
     logger.info(len_msg)
     logger.debug(f"Query result (length={len(query_result)}):\n{query_result}")
     
@@ -1144,7 +1145,7 @@ def query_crystal_structures(
     
     return query_result
         
-def detect_unique_crystal_structures(crystal_structures: List[Dict], aflow_np: int = 4) -> List[int]:
+def detect_unique_crystal_structures(crystal_structures: Union[List[Dict],Dict], allow_rotation: bool=True, aflow_np: int = 4) -> List[int]:
     """
     Detect which of the provided crystal structures is unique
 
@@ -1153,27 +1154,44 @@ def detect_unique_crystal_structures(crystal_structures: List[Dict], aflow_np: i
             A list of dictionaries in KIM Property format, each containing the Crystal Genome keys required
             to build a structure, namely: "stoichiometric-species", "prototype-label", "a", and, if the 
             prototype has free parameters, "parameter-values". These dictionaries are not required to be complete
-            KIM Property Instances, e.g. the keys "property-id", "instance-id" and "meta" can be absent
-    
+            KIM Property Instances, e.g. the keys "property-id", "instance-id" and "meta" can be absent.
+            Alternatively, this can be a dictionary of dictionaries with integers as indices, for the recursive call
+        allow_rotation:
+            Whether or not structures that are rotated by a rotation that is not in the crystal's point group are considered identical
     Returns:
         Indices corresponding to unique structures. Any indices not in this list are duplicates
-    """
+    """    
     if len(crystal_structures) == 0:
         return []
     
-    # TODO: Give the option to only deduplicate structures if they are unrotated (e.g. consider the two twin variants of alpha-Quartz as different structures)
     aflow = AFLOW(np=aflow_np)
     
     with TemporaryDirectory() as tmpdirname:
-        for i,structure in enumerate(crystal_structures):
+        # I don't know if crystal_structurs is a list or a dict with integer keys
+        for i in (range(len(crystal_structures)) if isinstance(crystal_structures,list) else crystal_structures):
+            structure = crystal_structures[i]
             try:
                 get_poscar_from_crystal_structure(structure,os.path.join(tmpdirname,str(i)))
             except AFLOW.changedSymmetryException:
                 logger.info(f'Comparison structure {i} failed to write a POSCAR due to a detected higher symmetry')
                 
         comparison = aflow.compare_materials_dir(tmpdirname)
+
+        unique_materials = [int(materials_group['structure_representative']['name'].split('/')[-1]) for materials_group in comparison]
         
-    return [int(materials_group['structure_representative']['name'].split('/')[-1]) for materials_group in comparison]
+        if not allow_rotation:
+            for materials_group in comparison:
+                rotated_structures = {} # to preserve their ordering in the original input list, make this a dictionary now
+                cell = get_cell_from_poscar(materials_group['structure_representative']['name'])
+                sgnum = materials_group['space_group']
+                for potential_rotated_duplicate in materials_group['structures_duplicate']:
+                    cart_rot = potential_rotated_duplicate['rotation']
+                    if not cartesian_rotation_is_in_point_group(cart_rot,sgnum,cell):
+                        rotated_duplicate_index = int(potential_rotated_duplicate['name'].split('/')[-1])
+                        rotated_structures[rotated_duplicate_index] = crystal_structures[rotated_duplicate_index]
+                unique_materials += detect_unique_crystal_structures(rotated_structures,False,aflow_np)
+    
+    return unique_materials
     
 
 # If called directly, do nothing
