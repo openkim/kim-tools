@@ -1671,7 +1671,7 @@ class AFLOW:
     ) -> bool:
         """
         Check whether `test_atoms` and `reference_atoms` are unrotated as follows:
-        When the cells are in :func:`ase.cell.Cell.standard_form()`, the cells are
+        When the cells are in :meth:`ase.cell.Cell.standard_form`, the cells are
         identical. When both crystals are rotated to standard form (rotating the cell
         and keeping the fractional coordinates unchanged), the rotation part of the
         mapping the two crystals to each other found by AFLOW is in the point group of
@@ -1730,7 +1730,7 @@ class AFLOW:
     ) -> bool:
         """
         Check whether the provided prototype designation recreates ``reference_atoms``
-        as follows: When the cells are in :func:`ase.cell.Cell.standard_form()`, the
+        as follows: When the cells are in :meth:`ase.cell.Cell.standard_form`, the
         cells are identical. When both crystals are rotated to standard form (rotating
         the cell and keeping the fractional coordinates unchanged), the rotation part
         of the mapping the two crystals to each other found by AFLOW is in the point
