@@ -11,7 +11,10 @@ dependencies = [
     "kim-edn >= 1.4.1",
     "spglib >= 2.1.0",
     "kim-query >= 3.0.0",
-    "sympy >= 1.13.2"
+    "sympy >= 1.13.2",
+    "numpy >= 1.13.1",
+    "scipy >= 1.3.0",
+    "jinja2 >= 2.7.2"
     ]
 authors = [
     { name = "ilia Nikiforov", email = "nikif002@umn.edu" },

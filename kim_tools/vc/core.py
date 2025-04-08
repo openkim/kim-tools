@@ -29,8 +29,6 @@
 Helper routines for KIM Verification Checks
 
 """
-# Python 2-3 compatible code issues
-from __future__ import print_function
 
 import time
 import os
@@ -42,8 +40,6 @@ import numpy as np
 import jinja2
 from ase import Atoms
 
-__version__ = "0.1.0"
-__author__ = ["Ellad B. Tadmor"]
 __all__ = [
     "KIMVCError",
     "VerificationCheck",
@@ -51,6 +47,7 @@ __all__ = [
     "vc_stripall",
     "vc_letter_grade_machine_precision",
 ]
+
 
 ################################################################################
 class KIMVCError(Exception):

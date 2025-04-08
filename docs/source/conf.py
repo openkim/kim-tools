@@ -66,6 +66,8 @@ html_theme = "sphinx_rtd_theme"
 
 smartquotes = False
 
-rst_prolog = """
-.. |example_url| replace:: https://github.com/openkim-hackathons/CrystalGenomeASEExample__TD_000000654321_000
-"""  # noqa: E501
+rst_prolog = (
+    "\n.. |example_url| replace:: "
+    "https://github.com/openkim-hackathons/CrystalGenomeASEExample__TD_000000654321_000"
+    "\n"
+)

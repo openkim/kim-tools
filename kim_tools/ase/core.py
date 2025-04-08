@@ -30,8 +30,6 @@
 Helper routines for KIM Tests and Verification Checks
 
 """
-# Python 2-3 compatible code issues
-from __future__ import print_function
 
 import itertools
 import random
@@ -41,8 +39,6 @@ from ase import Atoms
 from ase.data import chemical_symbols
 from ase.calculators.kim.kim import KIM
 
-__version__ = "0.2.0"
-__author__ = ["Ellad B. Tadmor", "Daniel S. Karls"]
 __all__ = [
     "KIMASEError",
     "atom_outside_cell_along_nonperiodic_dim",
@@ -216,7 +212,7 @@ def get_isolated_energy_per_atom(model, symbol):
         pbc=(False, False, False),
     )
     calc = KIM(model)
-    single_atom.calc=calc
+    single_atom.calc = calc
     energy_per_atom = single_atom.get_potential_energy()
     if hasattr(calc, "clean"):
         calc.clean()
@@ -233,7 +229,8 @@ def rescale_to_get_nonzero_energy(atoms, isolated_energy_per_atom, etol):
     isolated energy corresponding to each atom present, smaller in magnitude than 'etol'
     (presumably because the distance between atoms is too large), rescale it making it
     smaller.  The 'isolated_energy_per_atom' arg should be a dict containing an entry
-    for each atomic species present in the atoms object (additional entries are ignored).
+    for each atomic species present in the atoms object
+    (additional entries are ignored).
     """
     num_atoms = len(atoms)
     if num_atoms < 2:
@@ -337,7 +334,7 @@ def check_if_atoms_interacting_energy(model, symbols, etol):
         pbc=(False, False, False),
     )
     calc = KIM(model)
-    dimer.calc=calc
+    dimer.calc = calc
     try:
         rescale_to_get_nonzero_energy(dimer, isolated_energy_per_atom, etol)
         atoms_interacting = True
@@ -375,7 +372,7 @@ def check_if_atoms_interacting_force(model, symbols, ftol):
         pbc=(False, False, False),
     )
     calc = KIM(model)
-    dimer.calc=calc
+    dimer.calc = calc
     try:
         rescale_to_get_nonzero_forces(dimer, ftol)
         atoms_interacting = True
@@ -424,8 +421,8 @@ def rescale_to_get_nonzero_forces(atoms, ftol):
     rescale it to be smaller until the largest force component in absolute value is
     greater than or equal to 'ftol'.  In a perfect crystal, the crystal is rescaled
     until the atoms on the surface reach the minimum value (internal atoms padded with
-    another atoms around them will have zero force).  Note that any periodicity is turned
-    off for the rescaling and then restored at the end.
+    another atoms around them will have zero force).  Note that any periodicity is
+    turned off for the rescaling and then restored at the end.
     """
     if len(atoms) < 2:
         raise KIMASEError(
@@ -658,7 +655,7 @@ def get_model_energy_cutoff(
         pbc=(False, False, False),
     )
     calc = KIM(model)
-    dimer.calc=calc
+    dimer.calc = calc
 
     db = 2.0
     b = b_init - db
