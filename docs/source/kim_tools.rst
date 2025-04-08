@@ -8,8 +8,10 @@ Subpackages
    :maxdepth: 4
 
    kim_tools.aflow_util
+   kim_tools.ase
    kim_tools.symmetry_util
    kim_tools.test_driver
+   kim_tools.vc
 
 Submodules
 ----------
