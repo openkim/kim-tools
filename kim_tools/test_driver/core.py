@@ -31,11 +31,10 @@ Helper classes for KIM Test Drivers
 
 """
 import numpy as np
-from numpy.typing import ArrayLike
-from ase import Atoms
+from ase import Atoms, constraints
 from ase.calculators.calculator import Calculator
-from ase import constraints
 from ase.spacegroup import symmetrize
+from numpy.typing import ArrayLike
 
 if hasattr(constraints, "FixSymmetry"):
     from ase.constraints import FixSymmetry
@@ -46,30 +45,32 @@ else:
         "Can't find `FixSymmetry` in either `ase.constraints` or "
         "`ase.spacegroup.symmetrize`"
     )
-from typing import Any, Optional, List, Union, Dict, IO
-from ase.optimize import LBFGSLineSearch
-from ase.optimize.optimize import Optimizer
-from ase.constraints import ExpCellFilter, UnitCellFilter
-from abc import ABC, abstractmethod
-from kim_property import (
-    kim_property_create,
-    kim_property_modify,
-    kim_property_dump,
-    get_properties,
-    get_property_id_path,
-)
-from kim_property.modify import STANDARD_KEYS_SCLAR_OR_WITH_EXTENT
-import kim_edn
-from ..aflow_util import AFLOW, prototype_labels_are_equivalent
-from ..symmetry_util import get_cell_from_poscar, cartesian_rotation_is_in_point_group
-from ..kimunits import convert_units, convert_list
-from kim_query import raw_query
+import logging
 import os
 import shutil
+from abc import ABC, abstractmethod
 from pathlib import Path
-from tempfile import TemporaryDirectory, NamedTemporaryFile
+from tempfile import NamedTemporaryFile, TemporaryDirectory
+from typing import IO, Any, Dict, List, Optional, Union
+
 import ase
-import logging
+import kim_edn
+from ase.constraints import ExpCellFilter, UnitCellFilter
+from ase.optimize import LBFGSLineSearch
+from ase.optimize.optimize import Optimizer
+from kim_property import (
+    get_properties,
+    get_property_id_path,
+    kim_property_create,
+    kim_property_dump,
+    kim_property_modify,
+)
+from kim_property.modify import STANDARD_KEYS_SCLAR_OR_WITH_EXTENT
+from kim_query import raw_query
+
+from ..aflow_util import AFLOW, prototype_labels_are_equivalent
+from ..kimunits import convert_list, convert_units
+from ..symmetry_util import cartesian_rotation_is_in_point_group, get_cell_from_poscar
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(filename="kim-tools.log", level=logging.INFO, force=True)

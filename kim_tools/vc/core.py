@@ -30,14 +30,14 @@ Helper routines for KIM Verification Checks
 
 """
 
-import time
+import math
 import os
 import sys
-import math
 import textwrap
+import time
 
-import numpy as np
 import jinja2
+import numpy as np
 from ase import Atoms
 
 __all__ = [

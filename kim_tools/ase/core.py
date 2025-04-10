@@ -36,8 +36,8 @@ import random
 
 import numpy as np
 from ase import Atoms
-from ase.data import chemical_symbols
 from ase.calculators.kim.kim import KIM
+from ase.data import chemical_symbols
 
 __all__ = [
     "KIMASEError",
