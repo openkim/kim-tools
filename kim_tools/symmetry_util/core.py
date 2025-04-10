@@ -2,26 +2,27 @@
 Crystal Symmetry utilities and data that are (mostly) independent of AFLOW
 """
 
-from typing import Union, List, Dict
-import logging
-import numpy as np
-from numpy.typing import ArrayLike
 import json
+import logging
 import os
-from sympy import symbols, cos, sin, Matrix, matrix2numpy, sqrt
+from typing import Dict, List, Union
+
+import numpy as np
 from ase.cell import Cell
+from numpy.typing import ArrayLike
+from sympy import Matrix, cos, matrix2numpy, sin, sqrt, symbols
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(filename="kim-tools.log", level=logging.INFO, force=True)
 
 __all__ = [
-    "are_in_same_wyckoff_set",
-    "space_group_numbers_are_enantiomorphic",
     "BRAVAIS_LATTICES",
     "FORMAL_BRAVAIS_LATTICES",
     "CENTERING_DIVISORS",
     "C_CENTERED_ORTHORHOMBIC_GROUPS",
     "A_CENTERED_ORTHORHOMBIC_GROUPS",
+    "are_in_same_wyckoff_set",
+    "space_group_numbers_are_enantiomorphic",
     "cartesian_to_fractional_itc_rotation_from_ase_cell",
     "cartesian_rotation_is_in_point_group",
     "get_cell_from_poscar",
@@ -35,26 +36,8 @@ __all__ = [
     "get_primitive_genpos_ops",
 ]
 
-
-class IncorrectCrystallographyError(Exception):
-    """
-    Raised when incorrect data is provided, e.g. nonexistent Bravais lattice etc.
-    """
-
-
-def _check_space_group(sgnum: Union[int, str]):
-    try:
-        assert 1 <= int(sgnum) <= 230
-    except Exception:
-        raise IncorrectCrystallographyError(
-            f"Got a space group number {sgnum} that is non-numeric or not between 1 "
-            "and 230 inclusive"
-        )
-
-
 C_CENTERED_ORTHORHOMBIC_GROUPS = (20, 21, 35, 36, 37, 63, 64, 65, 66, 67, 68)
 A_CENTERED_ORTHORHOMBIC_GROUPS = (38, 39, 40, 41)
-
 BRAVAIS_LATTICES = [
     "aP",
     "mP",
@@ -72,7 +55,6 @@ BRAVAIS_LATTICES = [
     "cI",
 ]
 FORMAL_BRAVAIS_LATTICES = BRAVAIS_LATTICES + ["oA"]
-
 CENTERING_DIVISORS = {
     "P": 1,
     "C": 2,
@@ -81,8 +63,23 @@ CENTERING_DIVISORS = {
     "F": 4,
     "R": 3,
 }
-
 DATA_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "data")
+
+
+class IncorrectCrystallographyError(Exception):
+    """
+    Raised when incorrect data is provided, e.g. nonexistent Bravais lattice etc.
+    """
+
+
+def _check_space_group(sgnum: Union[int, str]):
+    try:
+        assert 1 <= int(sgnum) <= 230
+    except Exception:
+        raise IncorrectCrystallographyError(
+            f"Got a space group number {sgnum} that is non-numeric or not between 1 "
+            "and 230 inclusive"
+        )
 
 
 def cartesian_to_fractional_itc_rotation_from_ase_cell(
