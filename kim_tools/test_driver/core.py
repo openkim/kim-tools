@@ -88,13 +88,10 @@ __all__ = [
     "minimize_wrapper",
 ]
 
-FMAX_INITIAL = (
-    1e-5  # Force tolerance for the optional initial relaxation of the provided cell
-)
-MAXSTEPS_INITIAL = (
-    10000  # Maximum steps for the optional initial relaxation of the provided cell
-)
-
+# Force tolerance for the optional initial relaxation of the provided cell
+FMAX_INITIAL = 1e-5
+# Maximum steps for the optional initial relaxation of the provided cell
+MAXSTEPS_INITIAL = 10000
 PROP_SEARCH_PATHS_INFO = (
     "- $KIM_PROPERTY_PATH (expanding globs including recursive **)\n"
     "- $PWD/local-props/**/\n"
