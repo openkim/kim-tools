@@ -605,7 +605,7 @@ class KIMTestDriver(ABC):
         )
 
     def _add_file_to_current_property_instance(
-        self, name: str, filename: str, add_instance_id: bool = True
+        self, name: str, filename: os.PathLike, add_instance_id: bool = True
     ) -> None:
         """
         add a "file" type key-value pair to the current property instance.
@@ -614,8 +614,8 @@ class KIMTestDriver(ABC):
             name:
                 Name of the key, e.g. "restart-file"
             filename:
-                The relative path to the filename. If it does not start with "output/",
-                the file will be moved to the "output/" directory
+                The path to the filename. If it is not in  "$CWD/output/",
+                the file will be moved there
             add_instance_id:
                 By default, a numerical index will be added before the file extension or
                 at the end of a file with no extension. This is to ensure files do not
@@ -625,27 +625,52 @@ class KIMTestDriver(ABC):
             KIMTestDriverError:
                 If the provided filename does not exist
         """
-
         if not os.path.isfile(filename):
-            raise KIMTestDriverError("Provided filename %s does not exist." % filename)
+            raise KIMTestDriverError("Provided file {filename} does not exist.")
 
-        if filename.split("/")[0] == "output":
-            filename_final = filename
+        # all paths here should be absolute
+        cwd_path = Path(os.getcwd())
+        output_path = cwd_path / "output"
+        filename_path = Path(filename).resolve()
+
+        if output_path not in filename_path.parents:
+            # Need to move file to output
+            if cwd_path in filename_path.parents:
+                # The file is somewhere under CWD,
+                # so move it under CWD/output with
+                # its whole directory structure
+                final_dir = os.path.join(
+                    output_path, os.path.relpath(filename_path.parent)
+                )
+                os.makedirs(final_dir, exist_ok=True)
+            else:
+                # We got a file that isn't even under CWD.
+                # I can't really hope to suss out what they
+                # were going for, so just move it to CWD/output
+                final_dir = output_path
         else:
-            filename_final = os.path.join("output", filename)
+            # already under output, not moving anything
+            final_dir = filename_path.parent
 
-        # Get instance-id from self.__output_property_instances
-        current_instance_id = len(kim_edn.loads(self.__output_property_instances))
-
+        input_name = filename_path.name
         if add_instance_id:
-            root, ext = os.path.splitext(filename_final)
+            current_instance_id = len(kim_edn.loads(self.__output_property_instances))
+            root, ext = os.path.splitext(input_name)
             root = root + "-" + str(current_instance_id)
-            filename_final = root + ext
+            final_name = root + ext
+        else:
+            final_name = input_name
 
-        if filename_final != filename:
-            shutil.move(filename, filename_final)
+        final_path = os.path.join(final_dir, final_name)
 
-        self._add_key_to_current_property_instance(name, filename_final)
+        assert final_path.startswith(str(output_path))
+
+        shutil.move(filename, final_path)
+
+        # Filenames are reported relative to $CWD/output
+        self._add_key_to_current_property_instance(
+            name, os.path.relpath(final_path, output_path)
+        )
 
     @property
     def kim_model_name(self) -> Optional[str]:
@@ -1249,6 +1274,34 @@ class SingleCrystalTestDriver(KIMTestDriver):
             self.__nominal_crystal_structure_npt["prototype-label"]["source-value"],
         )
 
+    def __add_poscar_to_curr_prop_inst(
+        self,
+        change_of_basis: Union[str, ArrayLike],
+        filename: os.PathLike,
+        key_name: str,
+    ) -> None:
+        """
+        Add a POSCAR file constructed from ``self.__nominal_crystal_structure_npt``
+        to the current property instance.
+
+        Args:
+            change_of_basis:
+                Passed to :meth:`kim_tools.SingleCrystalTestDriver._get_atoms`
+            filename:
+                File to save to. Will be automatically moved and renamed,
+                e.g. 'instance.poscar' -> 'output/instance-1.poscar'
+            key_name:
+                The property key to write to
+        """
+
+        # `_get_atoms` always returns in Angstrom
+        atoms_tmp = self._get_atoms(change_of_basis)
+
+        # will automatically be renamed
+        # e.g. 'instance.poscar' -> 'output/instance-1.poscar'
+        atoms_tmp.write(filename=filename, sort=True, format="vasp")
+        self._add_file_to_current_property_instance(key_name, filename)
+
     def _add_property_instance_and_common_crystal_genome_keys(
         self,
         property_name: str,
@@ -1331,16 +1384,13 @@ class SingleCrystalTestDriver(KIMTestDriver):
             )
         )
 
-        # POSCAR files are always in angstrom, so rescale
-
-        atoms_tmp = self._get_atoms()
-        angstrom_cell, _ = convert_list(atoms_tmp.cell.tolist(), a_unit, "angstrom")
-        atoms_tmp.set_cell(angstrom_cell, scale_atoms=True)
-
-        # will automatically be renamed to e.g. 'output/instance-1.poscar'
-        atoms_tmp.write("instance.poscar", sort=True, format="vasp")
-        self._add_file_to_current_property_instance(
-            "coordinates-file", "instance.poscar"
+        self.__add_poscar_to_curr_prop_inst(
+            "primitive", "instance.poscar", "coordinates-file"
+        )
+        self.__add_poscar_to_curr_prop_inst(
+            "conventional",
+            "conventional.instance.poscar",
+            "coordinates-file-conventional",
         )
 
     def _get_temperature(self, unit: str = "K") -> float:

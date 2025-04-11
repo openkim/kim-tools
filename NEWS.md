@@ -1,7 +1,7 @@
 Summary of changes from initial unnumbered release to 0.1
 ---------------------------------------------------------
 
-- The `crystal-genome-source-structure-id` key in Property Definitions is now a 2-D array. See the example property in the example test driver for how to change your Property Definition.
+- The common fields in Crystal Genome properties have changed. These are all written automatically by `kim-tools`, so you do not need to change your test driver to accomodate this, but you need to update your Property Definitions. See the example property in the example test driver.
 - The `CrystalGenomeTestDriver` class has been renamed to `SingleCrystalTestDriver`
 - There have been significant changes to how the nominal crystal structure on which a Test Driver makes its calculations is accessed and updated from the `_calculate()` method. See the example Test Driver for an example of these changes.
     - The new way to obtain the initial Atoms object, `self._get_atoms()`, provides a primitive cell of the crystal instead of conventional. Molecular statics Test Drivers should use this cell as-is, because it is smaller and more efficient. **TODO**: Provide at least a way to get/set the conventional cell for MD drivers that have already begun development. Eventually need to integrate supercell building and refolding into the nominal structure getter and setter functions, with flexible options such as "automatically change basis to the most orthorhombic cell possible", with the refolding integrating the translation symmetry breaking analysis and able to invert an arbitrary change of basis (provided by the getter)
