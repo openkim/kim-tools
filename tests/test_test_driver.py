@@ -1,9 +1,11 @@
 #!/usr/bin/python
 
-from kim_tools.test_driver import KIMTestDriver
+import os
+
 from ase.atoms import Atoms
 from ase.calculators.lj import LennardJones
-import os
+
+from kim_tools.test_driver import KIMTestDriver
 
 
 class TestTestDriver(KIMTestDriver):

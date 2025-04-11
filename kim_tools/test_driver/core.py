@@ -68,9 +68,19 @@ from kim_property import (
 from kim_property.modify import STANDARD_KEYS_SCLAR_OR_WITH_EXTENT
 from kim_query import raw_query
 
-from ..aflow_util import AFLOW, prototype_labels_are_equivalent
+from ..aflow_util import (
+    AFLOW,
+    get_space_group_number_from_prototype,
+    prototype_labels_are_equivalent,
+)
 from ..kimunits import convert_list, convert_units
-from ..symmetry_util import cartesian_rotation_is_in_point_group, get_cell_from_poscar
+from ..symmetry_util import (
+    cartesian_rotation_is_in_point_group,
+    change_of_basis_atoms,
+    get_cell_from_poscar,
+    get_change_of_basis_matrix_to_conventional_cell_from_formal_bravais_lattice,
+    get_formal_bravais_lattice_from_space_group,
+)
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(filename="kim-tools.log", level=logging.INFO, force=True)
@@ -439,7 +449,6 @@ def _add_key_to_current_property_instance(
     return kim_property_modify(property_instances, current_instance_index, *modify_args)
 
 
-################################################################################
 class KIMTestDriverError(Exception):
     def __init__(self, msg) -> None:
         # Call the base class constructor with the parameters it needs
@@ -450,7 +459,6 @@ class KIMTestDriverError(Exception):
         return self.msg
 
 
-################################################################################
 class KIMTestDriver(ABC):
     """
     A base class for creating KIM Test Drivers. It has attributes that are likely
@@ -691,7 +699,6 @@ class KIMTestDriver(ABC):
                 f.write(self.__cached_files[cached_file])
 
 
-################################################################################
 def _add_common_crystal_genome_keys_to_current_property_instance(
     property_instances: str,
     prototype_label: str,
@@ -938,7 +945,7 @@ def get_poscar_from_crystal_structure(
         primitive unit cell of the crystal as defined in
         http://doi.org/10.1016/j.commatsci.2017.01.017. Lengths are always in angstrom.
     Raises:
-        AFLOW.changedSymmetryException: if the symmetry of the atoms object is different
+        AFLOW.ChangedSymmetryException: if the symmetry of the atoms object is different
         from ``prototype_label``
     """
     prototype_label = crystal_structure["prototype-label"]["source-value"]
@@ -973,7 +980,7 @@ def get_poscar_from_crystal_structure(
             parameter_values=aflow_parameter_values,
             output_file=output_file,
         )
-    except AFLOW.changedSymmetryException as e:
+    except AFLOW.ChangedSymmetryException as e:
         # re-raise, just indicating that this function knows about this exception
         raise e
 
@@ -1006,12 +1013,12 @@ def get_atoms_from_crystal_structure(crystal_structure: Dict) -> Atoms:
         Lengths are always in angstrom
 
     Raises:
-        AFLOW.changedSymmetryException:
+        AFLOW.ChangedSymmetryException:
             if the symmetry of the atoms object is different from ``prototype_label``
     """
     try:
         poscar_string = get_poscar_from_crystal_structure(crystal_structure)
-    except AFLOW.changedSymmetryException as e:
+    except AFLOW.ChangedSymmetryException as e:
         # re-raise, just indicating that this function knows about this exception
         raise e
 
@@ -1023,7 +1030,6 @@ def get_atoms_from_crystal_structure(crystal_structure: Dict) -> Atoms:
     return atoms
 
 
-################################################################################
 class SingleCrystalTestDriver(KIMTestDriver):
     """
     A KIM test that computes property(s) of a single nominal crystal structure
@@ -1189,11 +1195,11 @@ class SingleCrystalTestDriver(KIMTestDriver):
             atoms: Structure to analyze to get the new parameter values
 
         Raises:
-            AFLOW.failedToMatchException:
+            AFLOW.FailedToMatchException:
                 If the solution failed due to a failure to match two crystals that
                 should be identical at some point in the solution process. This
                 *usually* indicates a phase transformation
-            AFLOW.changedSymmetryException:
+            AFLOW.ChangedSymmetryException:
                 If a more definitive error indicating a phase transformation is
                 encountered
         """
@@ -1203,7 +1209,7 @@ class SingleCrystalTestDriver(KIMTestDriver):
                 atoms,
                 self.__nominal_crystal_structure_npt["prototype-label"]["source-value"],
             )
-        except (AFLOW.failedToMatchException, AFLOW.changedSymmetryException) as e:
+        except (AFLOW.FailedToMatchException, AFLOW.ChangedSymmetryException) as e:
             raise type(e)(
                 "Encountered an error that MAY be the result of the nominal crystal "
                 "being unstable under the given potential and conditions. Stopping "
@@ -1391,25 +1397,61 @@ class SingleCrystalTestDriver(KIMTestDriver):
             "in Crystal Genome Test Drivers"
         )
 
-    def _get_atoms(self) -> Atoms:
+    def _get_atoms(self, change_of_basis: Union[str, ArrayLike] = "primitive") -> Atoms:
         """
         Get the atomic configuration representing the nominal crystal,
         with a calculator already attached.
 
+        Args:
+            change_of_basis:
+                Specify the desired unit cell. The default, ``"primitive"``, gives
+                the cell as defined in the `AFLOW prototype standard
+                <http://doi.org/10.1016/j.commatsci.2017.01.017>`_. ``"conventional"``
+                gives the conventional cell defined therein.
+
+                Alternatively, provide an arbitrary change of basis matrix **P** as
+                defined in ITA 1.5.1.2, with the above-defined primitive cell
+                corresponding to the "old basis" and the returned ``Atoms`` object being
+                in the "new basis".
+
+                See the docstring for :func:`kim_tools.change_of_basis_atoms` for
+                more information on how to define the change of basis.
+
         Returns:
-            Primitive unit cell of the crystal as defined in the
-            `AFLOW prototype standard
-            <http://doi.org/10.1016/j.commatsci.2017.01.017>`_.
+            Unit cell of the crystal.
             Lengths are always in angstrom
         """
-        atoms_tmp = get_atoms_from_crystal_structure(
-            self.__nominal_crystal_structure_npt
-        )
+        crystal_structure = self.__nominal_crystal_structure_npt
+        atoms_prim = get_atoms_from_crystal_structure(crystal_structure)
+        if isinstance(change_of_basis, str):
+            if change_of_basis.lower() == "primitive":
+                change_of_basis_matrix = None
+            elif change_of_basis.lower() == "conventional":
+                prototype_label = crystal_structure["prototype-label"]["source-value"]
+                sgnum = get_space_group_number_from_prototype(prototype_label)
+                formal_bravais_lattice = get_formal_bravais_lattice_from_space_group(
+                    sgnum
+                )
+                change_of_basis_matrix = get_change_of_basis_matrix_to_conventional_cell_from_formal_bravais_lattice(  # noqa: E501
+                    formal_bravais_lattice
+                )
+            else:
+                raise KIMTestDriverError(
+                    'Allowable string values for `change_of_basis` are "primitive" or '
+                    f'"conventional". You provided f{change_of_basis}'
+                )
+        else:
+            change_of_basis_matrix = change_of_basis
+
+        if change_of_basis_matrix is None:
+            atoms_tmp = atoms_prim
+        else:
+            atoms_tmp = change_of_basis_atoms(atoms_prim, change_of_basis_matrix)
+
         atoms_tmp.calc = self._calc
         return atoms_tmp
 
 
-################################################################################
 def query_crystal_structures(
     stoichiometric_species: List[str],
     prototype_label: Optional[str] = None,
@@ -1553,7 +1595,7 @@ def detect_unique_crystal_structures(
                 get_poscar_from_crystal_structure(
                     structure, os.path.join(tmpdirname, str(i))
                 )
-            except AFLOW.changedSymmetryException:
+            except AFLOW.ChangedSymmetryException:
                 logger.info(
                     f"Comparison structure {i} failed to write a POSCAR due to a "
                     "detected higher symmetry"

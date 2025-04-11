@@ -5,10 +5,14 @@ Crystal Symmetry utilities and data that are (mostly) independent of AFLOW
 import json
 import logging
 import os
+from itertools import product
+from math import ceil
 from typing import Dict, List, Union
 
 import numpy as np
+from ase import Atoms
 from ase.cell import Cell
+from ase.geometry import get_duplicate_atoms
 from numpy.typing import ArrayLike
 from sympy import Matrix, cos, matrix2numpy, sin, sqrt, symbols
 
@@ -21,6 +25,8 @@ __all__ = [
     "CENTERING_DIVISORS",
     "C_CENTERED_ORTHORHOMBIC_GROUPS",
     "A_CENTERED_ORTHORHOMBIC_GROUPS",
+    "IncorrectCrystallographyException",
+    "IncorrectNumAtomsException",
     "are_in_same_wyckoff_set",
     "space_group_numbers_are_enantiomorphic",
     "cartesian_to_fractional_itc_rotation_from_ase_cell",
@@ -32,6 +38,7 @@ __all__ = [
     "get_primitive_wyckoff_multiplicity",
     "get_symbolic_cell_from_formal_bravais_lattice",
     "get_change_of_basis_matrix_to_conventional_cell_from_formal_bravais_lattice",
+    "change_of_basis_atoms",
     "get_possible_primitive_shifts",
     "get_primitive_genpos_ops",
 ]
@@ -66,9 +73,15 @@ CENTERING_DIVISORS = {
 DATA_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "data")
 
 
-class IncorrectCrystallographyError(Exception):
+class IncorrectCrystallographyException(Exception):
     """
     Raised when incorrect data is provided, e.g. nonexistent Bravais lattice etc.
+    """
+
+
+class IncorrectNumAtomsException(Exception):
+    """
+    Raised when the a disagreement in the number of atoms is found.
     """
 
 
@@ -76,7 +89,7 @@ def _check_space_group(sgnum: Union[int, str]):
     try:
         assert 1 <= int(sgnum) <= 230
     except Exception:
-        raise IncorrectCrystallographyError(
+        raise IncorrectCrystallographyException(
             f"Got a space group number {sgnum} that is non-numeric or not between 1 "
             "and 230 inclusive"
         )
@@ -111,7 +124,7 @@ def cartesian_to_fractional_itc_rotation_from_ase_cell(
     cart_rot_arr = np.asarray(cart_rot)
 
     if not ((cell_arr.shape == (3, 3)) and (cart_rot_arr.shape == (3, 3))):
-        raise IncorrectCrystallographyError(
+        raise IncorrectCrystallographyException(
             "Either the rotation matrix or the cell provided were not 3x3 matrices"
         )
 
@@ -302,11 +315,11 @@ def get_symbolic_cell_from_formal_bravais_lattice(
         most simulation software, but the transpose of how the ITA defines cell vectors.
 
     Raises:
-        IncorrectCrystallographyError:
+        IncorrectCrystallographyException:
             If a nonexistent Bravais lattice is provided
     """
     if formal_bravais_lattice not in FORMAL_BRAVAIS_LATTICES:
-        raise IncorrectCrystallographyError(
+        raise IncorrectCrystallographyException(
             f"The provided Bravais lattice type {formal_bravais_lattice} "
             "does not exist."
         )
@@ -406,11 +419,11 @@ def get_change_of_basis_matrix_to_conventional_cell_from_formal_bravais_lattice(
         Integral 3x3 matrix representing the change of basis
 
     Raises:
-        IncorrectCrystallographyError:
+        IncorrectCrystallographyException:
             If a nonexistent Bravais lattice is provided
     """
     if formal_bravais_lattice not in FORMAL_BRAVAIS_LATTICES:
-        raise IncorrectCrystallographyError(
+        raise IncorrectCrystallographyException(
             f"The provided Bravais lattice type {formal_bravais_lattice} "
             "does not exist."
         )
@@ -433,6 +446,79 @@ def get_change_of_basis_matrix_to_conventional_cell_from_formal_bravais_lattice(
     assert np.allclose(np.round(change_of_basis_matrix), change_of_basis_matrix)
 
     return np.round(change_of_basis_matrix)
+
+
+def change_of_basis_atoms(atoms: Atoms, change_of_basis: ArrayLike) -> Atoms:
+    """
+    Perform an arbitrary basis change on an ``Atoms`` object, duplicating or cropping
+    atoms as needed. A basic check is made that the determinant of ``change_of_basis``
+    is compatible with the number of atoms, but this is far from fully determining
+    that ``change_of_basis`` is appropriate for the particuar crystal described by
+    ``atoms``, which is up to the user.
+
+    NOTE: This requires ASE >= 3.25 to delete atoms that are close across PBCs
+
+    Args:
+        atoms:
+            The object to transform
+        change_of_basis:
+            A change of basis matrix **P** as defined in ITA 1.5.1.2, with ``atoms``
+            corresponding to the "old basis" and the returned ``Atoms`` object being
+            in the "new basis".
+
+            This matrix should be given in ITC convention, meaning that it expects to
+            operate on column vectors, i.e. The bases are related by the following,
+            where the primed symbols indicate the new basis:
+
+            Relationship between basis vectors:
+            (**a**', **b**', **c**') = (**a**, **b**, **c**) **P**
+
+            Relationship between fractional coordinates in each basis:
+            **x** = **P** **x**'
+
+    Returns:
+        The transformed ``Atoms`` object, containing the original number of
+        atoms mutiplied by the determinant of the change of basis.
+    """
+    old_cell_column = np.transpose(atoms.cell)
+    new_cell_column = old_cell_column @ change_of_basis
+    new_cell = np.transpose(new_cell_column)
+
+    # There are surely better ways to do this, but the simplest way I can think of
+    # is simply to use ``Atoms.repeat()`` to create a supercell big enough to encase
+    # the ``new_cell``, then wrap the atoms back into ``new_cell`` and delete dupes
+    repeat = []
+    for old_cell_vector in atoms.cell:
+        this_repeat = 0
+        old_cell_vector_norm = np.linalg.norm(old_cell_vector)
+        old_cell_vector_unit = old_cell_vector / old_cell_vector_norm
+        # We need to repeat the old vector enough times that it is big enough
+        # to cover all possible combinations of projected new vectors
+        projections = [
+            np.dot(new_cell_vector, old_cell_vector_unit)
+            for new_cell_vector in new_cell
+        ]
+        absmax_projected_sum = 0
+        for coeffs in product((-1, 1), repeat=3):
+            projected_sum = np.dot(coeffs, projections)
+            absmax_projected_sum = max(absmax_projected_sum, abs(projected_sum))
+        absmax_projected_sum += 0.1  # pad it a little bit
+        this_repeat = ceil(absmax_projected_sum / old_cell_vector_norm)
+        repeat.append(this_repeat)
+
+    new_atoms = atoms.repeat(repeat)
+    new_atoms.set_cell(new_cell)
+    new_atoms.wrap()
+    get_duplicate_atoms(new_atoms, delete=True)
+
+    volume_change = np.linalg.det(change_of_basis)
+    if not np.isclose(len(atoms) * volume_change, len(new_atoms)):
+        raise IncorrectNumAtomsException(
+            f"The change in the number of atoms from {len(atoms)} to {len(new_atoms)} "
+            f"disagrees with the fractional change in cell volume {volume_change}"
+        )
+
+    return new_atoms
 
 
 def get_possible_primitive_shifts(sgnum: Union[int, str]) -> List[List[float]]:

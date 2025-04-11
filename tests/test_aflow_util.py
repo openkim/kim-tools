@@ -1,31 +1,32 @@
 #!/usr/bin/python
 
+import json
+import logging
+import os
+from os import PathLike
+from random import random
+from typing import Dict, List, Optional
+
+import kim_edn
+import numpy as np
+import pytest
+from ase import Atoms
+from ase.calculators.kim.kim import KIM
+from numpy.typing import ArrayLike
+
 from kim_tools import (
     AFLOW,
-    split_parameter_array,
-    get_wyckoff_lists_from_prototype,
-    get_real_to_virtual_species_map,
+    detect_unique_crystal_structures,
+    get_atoms_from_crystal_structure,
     get_bravais_lattice_from_prototype,
+    get_real_to_virtual_species_map,
+    get_space_group_number_from_prototype,
+    get_wyckoff_lists_from_prototype,
     minimize_wrapper,
     prototype_labels_are_equivalent,
     query_crystal_structures,
-    detect_unique_crystal_structures,
-    get_atoms_from_crystal_structure,
-    get_space_group_number_from_prototype,
+    split_parameter_array,
 )
-
-from ase.calculators.kim.kim import KIM
-from ase import Atoms
-from random import random
-import json
-import os
-from os import PathLike
-from typing import Optional, List, Dict
-import numpy as np
-from numpy.typing import ArrayLike
-import pytest
-import logging
-import kim_edn
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(filename="kim-tools.log", level=logging.INFO, force=True)

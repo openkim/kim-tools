@@ -1,35 +1,38 @@
 """Tools for working with crystal prototypes using the AFLOW command line tool"""
 
-import numpy as np
-import re
-from numpy.typing import ArrayLike
-from random import random
 import json
+import logging
+import os
+import re
 import subprocess
 import sys
-import os
-from os import PathLike
-import ase
-from ase.cell import Cell
-from ase import Atoms
 from curses.ascii import isalpha, isdigit
-from typing import Dict, List, Tuple, Union, Optional, Any
-from tempfile import NamedTemporaryFile
-from sympy import parse_expr, matrix2numpy, linear_eq_to_matrix, Symbol
 from dataclasses import dataclass
+from math import acos, cos, degrees, radians, sin, sqrt
+from os import PathLike
+from random import random
+from tempfile import NamedTemporaryFile
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+import ase
+import numpy as np
+from ase import Atoms
+from ase.cell import Cell
+from numpy.typing import ArrayLike
+from sympy import Symbol, linear_eq_to_matrix, matrix2numpy, parse_expr
+
 from ..symmetry_util import (
+    A_CENTERED_ORTHORHOMBIC_GROUPS,
+    C_CENTERED_ORTHORHOMBIC_GROUPS,
+    CENTERING_DIVISORS,
+    IncorrectNumAtomsException,
     are_in_same_wyckoff_set,
-    space_group_numbers_are_enantiomorphic,
+    cartesian_rotation_is_in_point_group,
+    get_possible_primitive_shifts,
     get_primitive_wyckoff_multiplicity,
     get_wyck_pos_xform_under_normalizer,
-    get_possible_primitive_shifts,
-    cartesian_rotation_is_in_point_group,
-    CENTERING_DIVISORS,
-    C_CENTERED_ORTHORHOMBIC_GROUPS,
-    A_CENTERED_ORTHORHOMBIC_GROUPS,
+    space_group_numbers_are_enantiomorphic,
 )
-from math import cos, acos, sin, sqrt, radians, degrees
-import logging
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(filename="kim-tools.log", level=logging.INFO, force=True)
@@ -37,14 +40,13 @@ logging.basicConfig(filename="kim-tools.log", level=logging.INFO, force=True)
 
 __author__ = ["ilia Nikiforov", "Ellad Tadmor"]
 __all__ = [
-    "incorrectNumAtomsException",
     "EquivalentEqnSet",
     "EquivalentAtomSet",
     "write_tmp_poscar_from_atoms_and_run_function",
     "get_equivalent_atom_sets_from_prototype_and_atom_map",
-    "incorrectSpaceGroupException",
-    "incorrectSpeciesException",
-    "inconsistentWyckoffException",
+    "IncorrectSpaceGroupException",
+    "IncorrectSpeciesException",
+    "InconsistentWyckoffException",
     "check_number_of_atoms",
     "split_parameter_array",
     "internal_parameter_sort_key",
@@ -61,28 +63,20 @@ __all__ = [
 ]
 
 
-class incorrectNumAtomsException(Exception):
-    """
-    Raised when the number of atoms in the atoms object or in the WYCCAR returned by
-    `aflow --sgdata` does not match the number of atoms in the Pearson symbol of the
-    prototype label
-    """
-
-
-class incorrectSpaceGroupException(Exception):
+class IncorrectSpaceGroupException(Exception):
     """
     Raised when spglib or aflow --sgdata detects a different space group than the one
     specified in the prototype label
     """
 
 
-class incorrectSpeciesException(Exception):
+class IncorrectSpeciesException(Exception):
     """
     Raised when number or identity of species is inconsistent
     """
 
 
-class inconsistentWyckoffException(Exception):
+class InconsistentWyckoffException(Exception):
     """
     Raised when an insonsistency in Wyckoff positions is detected
     """
@@ -146,7 +140,7 @@ def check_number_of_atoms(
     has the correct number of atoms according to prototype_label
 
     Raises:
-    incorrectNumAtomsException
+    IncorrectNumAtomsException
     """
     prototype_label_list = prototype_label.split("_")
     pearson = prototype_label_list[1]
@@ -170,7 +164,7 @@ def check_number_of_atoms(
 
     # This check is probably really extraneous, but better safe than sorry
     if num_conv_cell % num_lattice != 0:
-        raise incorrectNumAtomsException(
+        raise IncorrectNumAtomsException(
             f"WARNING: Number of atoms in conventional cell {num_conv_cell} derived "
             f"from Pearson symbol of prototype {prototype_label} is not divisible by "
             f"the number of lattice points {num_lattice}"
@@ -179,7 +173,7 @@ def check_number_of_atoms(
     num_cell = num_conv_cell / num_lattice
 
     if len(atoms) != num_cell:
-        raise incorrectNumAtomsException(
+        raise IncorrectNumAtomsException(
             f"WARNING: Number of ASE atoms {len(atoms)} does not match Pearson symbol "
             f" of prototype {prototype_label}"
         )
@@ -672,7 +666,7 @@ def solve_for_aflow_cell_params_from_primitive_ase_cell_params(
             b = bprim * sqrt(2 + 2 * cos_alphaprim)
             c = bprim * sqrt(2 - 2 * cos_alphaprim)
         else:
-            raise incorrectSpaceGroupException(
+            raise IncorrectSpaceGroupException(
                 f"Space group in prototype label {prototype_label} not found in lists "
                 "of side-centered orthorhombic groups"
             )
@@ -725,17 +719,17 @@ class AFLOW:
 
     """
 
-    class changedSymmetryException(Exception):
+    class ChangedSymmetryException(Exception):
         """
         Raised when an unexpected symmetry change is detected
         """
 
-    class failedToMatchException(Exception):
+    class FailedToMatchException(Exception):
         """
         Raised when ``aflow --compare...`` fails to match
         """
 
-    class failedToSolveException(Exception):
+    class FailedToSolveException(Exception):
         """
         Raised when solution algorithm fails
         """
@@ -768,7 +762,7 @@ class AFLOW:
             verbose: Whether to echo command to log file
 
         Raises:
-            AFLOW.changedSymmetryException:
+            AFLOW.ChangedSymmetryException:
                 if an ``aflow --proto=`` command complains that
                 "the structure has a higher symmetry than indicated by the label"
 
@@ -800,7 +794,7 @@ class AFLOW:
                     f"AFLOW error follows:\n{str(exc.stderr)}"
                 )
                 logger.warning(warn_str)
-                raise self.changedSymmetryException(warn_str)
+                raise self.ChangedSymmetryException(warn_str)
             else:
                 raise exc
 
@@ -839,7 +833,7 @@ class AFLOW:
             The output of the command or None if an `output_file` was given
 
         Raises:
-            AFLOW.changedSymmetryException:
+            AFLOW.ChangedSymmetryException:
                 if an ``aflow --proto=`` command complains that
                 "the structure has a higher symmetry than indicated by the label"
         """
@@ -853,7 +847,7 @@ class AFLOW:
 
         try:
             poscar_string_no_species = self.aflow_command(command, verbose=verbose)
-        except self.changedSymmetryException as e:
+        except self.ChangedSymmetryException as e:
             # re-raise, just indicating that this function knows about this exception
             raise e
 
@@ -904,7 +898,7 @@ class AFLOW:
             Object representing unit cell of the material
 
         Raises:
-            AFLOW.changedSymmetryException:
+            AFLOW.ChangedSymmetryException:
                 if an ``aflow --proto=`` command complains that
                 "the structure has a higher symmetry than indicated by the label"
         """
@@ -915,7 +909,7 @@ class AFLOW:
                 parameter_values=parameter_values,
                 verbose=verbose,
             )
-        except self.changedSymmetryException as e:
+        except self.ChangedSymmetryException as e:
             # re-raise, just indicating that this function knows about this exception
             raise e
 
@@ -1207,7 +1201,7 @@ class AFLOW:
             atom_map[index_in_structure_1] = index_in_structure_2
 
         Raises:
-            AFLOW.failedToMatchException: if AFLOW fails to match the crystals
+            AFLOW.FailedToMatchException: if AFLOW fails to match the crystals
         """
         comparison_result = self._compare_Atoms(
             atoms1, atoms2, sort_atoms1, sort_atoms2
@@ -1231,7 +1225,7 @@ class AFLOW:
         else:
             msg = "AFLOW was unable to match the provided crystals"
             logger.info(msg)
-            raise self.failedToMatchException(msg)
+            raise self.FailedToMatchException(msg)
 
     def get_param_names_from_prototype(self, prototype_label: str) -> List[str]:
         """
@@ -1346,7 +1340,7 @@ class AFLOW:
                 if species is None:
                     species = line_split[3]
                 elif line_split[3] != species:
-                    raise inconsistentWyckoffException(
+                    raise InconsistentWyckoffException(
                         "Encountered different species within what I thought should be "
                         f"the lines corresponding to Wyckoff position {wyckoff_letter}"
                         f"\nEquations obtained from prototype label {prototype_label}:"
@@ -1370,7 +1364,7 @@ class AFLOW:
                 if param_names is None:
                     param_names = curr_line_free_params
                 elif param_names != curr_line_free_params:
-                    raise inconsistentWyckoffException(
+                    raise InconsistentWyckoffException(
                         "Encountered different free params within what I thought "
                         "should be the lines corresponding to Wyckoff position "
                         f"{wyckoff_letter}\nEquations obtained from prototype label "
@@ -1406,7 +1400,7 @@ class AFLOW:
                 equation_set = next(equation_sets_iter)
                 if species_must_change:
                     if equation_set.species == species:
-                        raise inconsistentWyckoffException(
+                        raise InconsistentWyckoffException(
                             "The species in the equations obtained below are "
                             "inconsistent with the number and multiplicity of Wyckoff "
                             f"positions in prototype label {prototype_label}\n"
@@ -1449,9 +1443,9 @@ class AFLOW:
             rotations, and translations) when paired with `prototype_label`
 
         Raises:
-            AFLOW.changedSymmetryException:
+            AFLOW.ChangedSymmetryException:
                 if the symmetry of the atoms object is different from `prototype_label`
-            AFLOW.failedToMatchException:
+            AFLOW.FailedToMatchException:
                 if AFLOW fails to match the re-generated crystal to the input crystal
 
         """
@@ -1480,7 +1474,7 @@ class AFLOW:
                 f"nominal {prototype_label}."
             )
             logger.info(msg)
-            raise self.changedSymmetryException(msg)
+            raise self.ChangedSymmetryException(msg)
 
         # rebuild the atoms
         try:
@@ -1491,7 +1485,7 @@ class AFLOW:
                     "aflow_prototype_params_values"
                 ],
             )
-        except self.changedSymmetryException as e:
+        except self.ChangedSymmetryException as e:
             # re-raise, just indicating that this function knows about this exception
             raise e
 
@@ -1510,7 +1504,7 @@ class AFLOW:
                     atoms, atoms_rebuilt, sort_atoms1=True, sort_atoms2=False
                 )
             )
-        except self.failedToMatchException:
+        except self.FailedToMatchException:
             # Re-raise with a more informative error message
             msg = (
                 "Execution cannot continue because AFLOW failed to match the crystal "
@@ -1519,7 +1513,7 @@ class AFLOW:
                 "of a symmetry increase (e.g. a BCT structure with c/a very close to 1)"
             )
             logger.error(msg)
-            raise self.failedToMatchException(msg)
+            raise self.FailedToMatchException(msg)
 
         # Transpose the change of basis equation for row vectors
         initial_origin_shift_frac = (-neg_initial_origin_shift_cart) @ np.linalg.inv(
@@ -1540,7 +1534,7 @@ class AFLOW:
         equation_set_list = self.get_equation_sets_from_prototype(prototype_label)
 
         if len(position_set_list) != len(equation_set_list):
-            raise inconsistentWyckoffException(
+            raise InconsistentWyckoffException(
                 "Number of equivalent positions detected in Atoms object "
                 "did not match the number of equivalent equations given"
             )
@@ -1664,7 +1658,7 @@ class AFLOW:
             "on any shift attempt"
         )
         logger.info(msg)
-        raise self.failedToSolveException(msg)
+        raise self.FailedToSolveException(msg)
 
     def confirm_atoms_unrotated_when_cells_aligned(
         self, test_atoms: Atoms, reference_atoms: Atoms, sgnum: Union[int, str]
@@ -1713,7 +1707,7 @@ class AFLOW:
                     test_atoms_copy, reference_atoms_copy
                 )
             )
-        except self.failedToMatchException:
+        except self.FailedToMatchException:
             logger.info("AFLOW failed to match the recreated crystal to reference")
             return False
 
