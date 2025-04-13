@@ -730,6 +730,7 @@ def _add_common_crystal_genome_keys_to_current_property_instance(
     stoichiometric_species: List[str],
     a: float,
     parameter_values: Optional[List[float]] = None,
+    library_prototype_label: Optional[Union[List[str], str]] = None,
     short_name: Optional[Union[List[str], str]] = None,
     cell_cauchy_stress: Optional[List[float]] = None,
     temperature: Optional[float] = None,
@@ -791,6 +792,11 @@ def _add_common_crystal_genome_keys_to_current_property_instance(
             property_instances, "short-name", short_name
         )
 
+    if library_prototype_label is not None:
+        property_instances = _add_key_to_current_property_instance(
+            property_instances, "library-prototype-label", library_prototype_label
+        )
+
     if cell_cauchy_stress is not None:
         if len(cell_cauchy_stress) != 6:
             raise KIMTestDriverError(
@@ -825,6 +831,7 @@ def _add_property_instance_and_common_crystal_genome_keys(
     stoichiometric_species: List[str],
     a: float,
     parameter_values: Optional[List[float]] = None,
+    library_prototype_label: Optional[Union[List[str], str]] = None,
     short_name: Optional[Union[List[str], str]] = None,
     cell_cauchy_stress: Optional[List[float]] = None,
     temperature: Optional[float] = None,
@@ -867,6 +874,7 @@ def _add_property_instance_and_common_crystal_genome_keys(
         stoichiometric_species,
         a,
         parameter_values,
+        library_prototype_label,
         short_name,
         cell_cauchy_stress,
         temperature,
@@ -915,7 +923,7 @@ def get_crystal_structure_from_atoms(
     aflow = AFLOW(np=aflow_np)
 
     proto_des = aflow.get_prototype_designation_from_atoms(atoms, prim=prim)
-    _, short_name = (
+    library_prototype_label, short_name = (
         aflow.get_library_prototype_label_and_shortname_from_atoms(atoms, prim=prim)
         if get_short_name
         else (None, None)
@@ -934,6 +942,7 @@ def get_crystal_structure_from_atoms(
         stoichiometric_species=sorted(list(set(atoms.get_chemical_symbols()))),
         a=a,
         parameter_values=parameter_values,
+        library_prototype_label=library_prototype_label,
         short_name=short_name,
     )
 
@@ -1344,6 +1353,10 @@ class SingleCrystalTestDriver(KIMTestDriver):
             crystal_structure, "parameter-values"
         )
 
+        library_prototype_label = _get_optional_source_value(
+            crystal_structure, "library-prototype-label"
+        )
+
         short_name = _get_optional_source_value(crystal_structure, "short-name")
 
         # stress and temperature are always there (default 0), but we don't always write
@@ -1372,6 +1385,7 @@ class SingleCrystalTestDriver(KIMTestDriver):
                 stoichiometric_species=stoichiometric_species,
                 a=a,
                 parameter_values=parameter_values,
+                library_prototype_label=library_prototype_label,
                 short_name=short_name,
                 cell_cauchy_stress=cell_cauchy_stress,
                 temperature=temperature,
