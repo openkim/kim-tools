@@ -1375,7 +1375,7 @@ class SingleCrystalTestDriver(KIMTestDriver):
         temperature_unit = crystal_structure["temperature"]["source-unit"]
 
         crystal_genome_source_structure_id = _get_optional_source_value(
-            crystal_structure, "crystal_genome_source_structure_id"
+            crystal_structure, "crystal-genome-source-structure-id"
         )
 
         super()._set_serialized_property_instances(
