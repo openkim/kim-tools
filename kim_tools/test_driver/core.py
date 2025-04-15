@@ -33,6 +33,7 @@ Helper classes for KIM Test Drivers
 import numpy as np
 from ase import Atoms, constraints
 from ase.calculators.calculator import Calculator
+from ase.data import atomic_masses
 from ase.spacegroup import symmetrize
 from numpy.typing import ArrayLike
 
@@ -1447,6 +1448,31 @@ class SingleCrystalTestDriver(KIMTestDriver):
         else:
             stress = source_value
         return stress
+
+    def _get_mass_density(self, unit: str = "amu/angstrom^3") -> float:
+        """
+        Get the mass density of the current nominal state of the system,
+        according to the masses defined in :data:`ase.data.atomic_masses`
+
+        Args:
+            unit:
+                The requested units
+
+        Returns:
+            The mass density of the crystal
+        """
+        atoms = self._get_atoms()  # always in angstrom
+        vol_ang3 = atoms.get_volume()
+        mass_amu = 0.0
+        for atomic_number in atoms.get_atomic_numbers():
+            mass_amu += atomic_masses[atomic_number]
+        density_amu_ang3 = mass_amu / vol_ang3
+        if unit != "amu/angstrom^3":
+            density = convert_units(density_amu_ang3, "amu/angstrom^3", unit, True)
+        else:
+            density = density_amu_ang3
+
+        return density
 
     def _get_nominal_crystal_structure_npt(self) -> Dict:
         """
