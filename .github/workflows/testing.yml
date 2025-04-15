@@ -3,6 +3,16 @@ name: Testing
 on: [push, pull_request]
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: pip install pre-commit
+      - name: Lint
+        run: pre-commit run --show-diff-on-failure --all-files
+
   test:
     runs-on: ubuntu-latest
 
@@ -54,8 +64,7 @@ jobs:
         run: |
           git submodule init
           git submodule update
-          export PATH=$PATH:$PWD/aflow.3.2.14          
-          kim-api-collections-management install user SW_ZhouWardMartin_2013_CdTeZnSeHgS__MO_503261197030_003 
+          export PATH=$PATH:$PWD/aflow.3.2.14
+          kim-api-collections-management install user SW_ZhouWardMartin_2013_CdTeZnSeHgS__MO_503261197030_003
           cd examples/CrystalGenomeASEExample__TD_000000654321_000
           python run.py
-

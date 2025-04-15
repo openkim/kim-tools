@@ -1,6 +1,7 @@
-import setuptools
 import subprocess
 from warnings import warn
+
+import setuptools
 
 try:
     subprocess.check_output(["aflow", "--proto=A_cF4_225_a"])
@@ -20,6 +21,17 @@ except Exception:
 try:
     subprocess.check_output(["units", "--help"])
 except Exception:
-    raise RuntimeError("units executable not found. It is required.")
+    message = (
+        "GNU `units` executable not found in PATH. "
+        "Unit conversions will not be available."
+    )
+    lines = "=" * 89
+    warn(message)
+    print()
+    print(lines)
+    print(message)
+    print(lines)
+    print()
+
 
 setuptools.setup()

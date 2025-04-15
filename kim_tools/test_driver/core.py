@@ -988,12 +988,15 @@ def get_poscar_from_crystal_structure(
     aflow_parameter_names = aflow.get_param_names_from_prototype(prototype_label)
 
     # Atoms objects are always in angstrom
-    a_angstrom = convert_units(
-        crystal_structure["a"]["source-value"],
-        crystal_structure["a"]["source-unit"],
-        "angstrom",
-        True,
-    )
+    if crystal_structure["a"]["source-unit"] == "angstrom":
+        a_angstrom = crystal_structure["a"]["source-value"]
+    else:
+        a_angstrom = convert_units(
+            crystal_structure["a"]["source-value"],
+            crystal_structure["a"]["source-unit"],
+            "angstrom",
+            True,
+        )
 
     aflow_parameter_values = [a_angstrom]
 
@@ -1419,7 +1422,11 @@ class SingleCrystalTestDriver(KIMTestDriver):
             "source-value"
         ]
         source_unit = self.__nominal_crystal_structure_npt["temperature"]["source-unit"]
-        return convert_units(source_value, source_unit, unit, True)
+        if source_unit != unit:
+            temp = convert_units(source_value, source_unit, unit, True)
+        else:
+            temp = source_value
+        return temp
 
     def _get_cell_cauchy_stress(self, unit: str = "eV/angstrom^3") -> List[float]:
         """
@@ -1435,7 +1442,10 @@ class SingleCrystalTestDriver(KIMTestDriver):
         source_unit = self.__nominal_crystal_structure_npt["cell-cauchy-stress"][
             "source-unit"
         ]
-        stress, _ = convert_list(source_value, source_unit, unit)
+        if source_unit != unit:
+            stress, _ = convert_list(source_value, source_unit, unit)
+        else:
+            stress = source_value
         return stress
 
     def _get_nominal_crystal_structure_npt(self) -> Dict:
