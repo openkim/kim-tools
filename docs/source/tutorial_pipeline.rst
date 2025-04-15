@@ -8,11 +8,11 @@ The final step in creating your Test Driver is to set up the auxiliary files nee
 As with the rest of this documentation, this page follows the example test driver from |example_url|. Most of the files are
 pre-configured to work as-is for most Test Drivers, and only a few changes are needed.
 
-To test that everything is correctly configured, you will need to use the :ref:`doc.KDP` and place your Driver in the 
+To test that everything is correctly configured, you will need to use the :ref:`doc.KDP` and place your Driver in the
 :ref:`correct path <note.td_path>`.
 
 .. todo::
-    
+
     In the future, we will automate the manual processes described here.
 
 First, let's go over the files you will need to change.
@@ -38,7 +38,7 @@ using the example Test Driver that set ``max_volume_scale=0.1`` and different Te
 of lines in ``test_generator.json``.
 
 .. todo::
-    
+
     Currently the temperature and stress inputs only set the internal values of those variables in the :class:`~kim_tools.test_driver.CrystalGenomeTestDriver` class, and do not affect querying. The structure queried for is always the zero temperature, zero pressure structure
 
 Generating and Running Tests
@@ -52,7 +52,7 @@ To generate tests from the example Test Driver you've placed in ``~/test-drivers
 
     kimgenie tests --add-random-kimnums --test-driver CrystalGenomeASEExample__TD_000000654321_000
 
-.. note:: 
+.. note::
     The ``--add-random-kimnums`` option has added a ``kimnum`` key to each line in ``test_generator.json``. Do not use this option after these keys have been added.
 
 Assuming you have left the first few lines of ``test_generator.json`` intact, you will have created a test for FCC silver. Let's install a model for silver and run it with the created test (adding the custom property as well if we have not done so already). The random ``kimnum`` generated for your test will vary, but the ``pipeline-run-pair`` command accepts wildcards:
@@ -62,7 +62,7 @@ Assuming you have left the first few lines of ``test_generator.json`` intact, yo
     kimitems install -D  EAM_Dynamo_AcklandTichyVitek_1987_Ag__MO_212700056563_005
     pipeline-run-pair CrystalGenomeASEExample_A_cF4_225_a_Ag_0_1__TE_* EAM_Dynamo_AcklandTichyVitek_1987_Ag__MO_212700056563_005 -v
 
-You should see the output of the test, and there should be a new directory in ``~/test-results/`` with the ``results.edn`` file containing the resulting KIM Property Instance, 
+You should see the output of the test, and there should be a new directory in ``~/test-results/`` with the ``results.edn`` file containing the resulting KIM Property Instance,
 as well as several other files documenting the run.
 
 For more info regarding the utilities available in the KIM Developer Platform, see https://openkim.org/doc/evaluation/kim-developer-platform/, consult the ``README.txt`` in the home directory of the KDP, or run any of them with the ``-h`` option.
@@ -70,15 +70,15 @@ For more info regarding the utilities available in the KIM Developer Platform, s
 ``test_template/kimspec.edn.genie``
 ===================================
 
-If you look in your ``~/tests/`` directory, you will see that a subdirectory has been created for each Test. Within it is a file named ``kimspec.edn``, which is a metadata file required to be provided with every piece of KIM content. 
-The ``kimgenie`` utility generates these from the ``test_template/kimspec.edn.genie`` file in the Test Driver directory using Jinja2 templating. 
+If you look in your ``~/tests/`` directory, you will see that a subdirectory has been created for each Test. Within it is a file named ``kimspec.edn``, which is a metadata file required to be provided with every piece of KIM content.
+The ``kimgenie`` utility generates these from the ``test_template/kimspec.edn.genie`` file in the Test Driver directory using Jinja2 templating.
 A Jinja2 tutorial is available here: https://ttl255.com/jinja2-tutorial-part-1-introduction-and-variable-substitution/.
 Below is the file in from the example Test Driver. Compare with one of the rendered ``kimspec.edn`` files in ``~/tests/`` to see how the templating works.
 
 .. literalinclude:: ../../examples/CrystalGenomeASEExample__TD_000000654321_000/test_template/kimspec.edn.genie
     :language: jinja
 
-Here are the keys you will need to edit. You can leave the templating involving ``TEST_DRIVER_NAME``, ``prototype_label``, ``stoichiometric_species`` and ``kimnum`` as-is, 
+Here are the keys you will need to edit. You can leave the templating involving ``TEST_DRIVER_NAME``, ``prototype_label``, ``stoichiometric_species`` and ``kimnum`` as-is,
 but you will need to change descriptive prose, as well as render the arguments specific to your Test Driver (if any). Note, for example, how the ``max_volume_scale`` argument is templated
 in the fields below. See https://openkim.org/doc/schema/kimspec/ for a detailed definition of each field.
 

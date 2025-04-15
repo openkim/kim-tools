@@ -2,7 +2,7 @@
 Creating a Crystal Genome Property
 ==================================
 
-The first step is to create an OpenKIM *Property Definition* to describe the material property your Test Driver will calculate. 
+The first step is to create an OpenKIM *Property Definition* to describe the material property your Test Driver will calculate.
 
 Under the `KIM Properties Framework <https://openkim.org/doc/schema/properties-framework/>`_, a *Property Definition* is a file in `EDN format <https://openkim.org/doc/schema/edn-format/>`_ that defines the fields required to fully characterize a material property.
 

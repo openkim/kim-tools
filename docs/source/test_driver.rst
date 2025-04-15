@@ -4,7 +4,7 @@ Main Computational Code
 
 .. contents:: Table of Contents
 
-The next step is to write the main computational code. It must be contained in a Python file named ``test_driver/test_driver.py``, 
+The next step is to write the main computational code. It must be contained in a Python file named ``test_driver/test_driver.py``,
 although you may include as many other Python files as you wish for utility functions.
 
 .. note::
@@ -28,9 +28,9 @@ although you may include as many other Python files as you wish for utility func
 
 
 You must create a class named ``TestDriver`` inheriting from :class:`~kim_tools.SingleCrystalTestDriver`.
-In your ``TestDriver`` class, you must overload the function :func:`~kim_tools.KIMTestDriver._calculate`. 
-Besides ``self``, the function must also accept ``**kwargs``. Before ``**kwargs``, you may add any additional arguments that 
-you wish users or the OpenKIM Pipeline to be able to vary. 
+In your ``TestDriver`` class, you must overload the function :func:`~kim_tools.KIMTestDriver._calculate`.
+Besides ``self``, the function must also accept ``**kwargs``. Before ``**kwargs``, you may add any additional arguments that
+you wish users or the OpenKIM Pipeline to be able to vary.
 
 .. note::
 
@@ -43,11 +43,11 @@ you wish users or the OpenKIM Pipeline to be able to vary.
   Replace ``temperature_K`` and ``cell_cauchy_stress_eV_angstrom3`` with ``temperature`` and ``cell_cauchy_stress``, and
   allow the user to specify units?
 
-An example ``test_driver.py`` from |example_url| is shown below. The ``_calculate`` function computes the energy vs. volume 
-curve for isotropic expansion and compression of a crystal at zero temperature. You can use it as a starting point for your Test Driver. 
+An example ``test_driver.py`` from |example_url| is shown below. The ``_calculate`` function computes the energy vs. volume
+curve for isotropic expansion and compression of a crystal at zero temperature. You can use it as a starting point for your Test Driver.
 Additional documentation about functionality not demonstrated in the example can be found at the bottom of this page.
 
-Once ``test_driver.py`` is written, you will have to make some small modifications to the auxiliary files provided in the example 
+Once ``test_driver.py`` is written, you will have to make some small modifications to the auxiliary files provided in the example
 Test Driver in order for your Driver to work in the OpenKIM pipeline: :doc:`tutorial_pipeline`. Before this, you will likely wish
 to debug your code by invoking it directly in Python. See how to do that here: :doc:`tutorial_debug`
 
@@ -57,13 +57,13 @@ the usage of the following functions. Click the links below for more information
 - ``self.``:func:`~kim_tools.SingleCrystalTestDriver._get_atoms`:
   returns an :class:`~ase.Atoms` object representing a primitive unit cell of the crystal as a starting point for your calculations.
 
-- ``self.``:func:`~kim_tools.SingleCrystalTestDriver._update_nominal_parameter_values`: 
+- ``self.``:func:`~kim_tools.SingleCrystalTestDriver._update_nominal_parameter_values`:
   if your Test Driver changes the crystal structure, pass this a primitive unit cell of the crystal to update the nominal crystal structure.
-  
+
   .. note::
 
     If the symmetry of your crystal has changed in the process of your simulation, this function will raise an error.
-    This is intended and it is expected that you do not handle this exception. It is our convention that if the 
+    This is intended and it is expected that you do not handle this exception. It is our convention that if the
     crystal undergoes a symmetry-changing phase transition, the result is invalid and the Test Driver should exit with an error.
 
 - ``self.``:func:`~kim_tools.SingleCrystalTestDriver._verify_unchanged_symmetry`:
@@ -97,7 +97,7 @@ Example ``test_driver.py``
 Functionality not covered in the above example
 ==============================================
 
-- ``self.``:func:`~kim_tools.KIMTestDriver._calc`: 
+- ``self.``:func:`~kim_tools.KIMTestDriver._calc`:
   This gives you access to the ASE calculator object, if you are building a separate :class:`~ase.Atoms` object and need to attach a calculator to it.
 
 - ``self.``:attr:`~kim_tools.KIMTestDriver.kim_model_name`:
@@ -110,29 +110,29 @@ Functionality not covered in the above example
 
 .. note::
 
-  If you are running an MD simulation, the structure you report should be time-averaged and likely averaged over the supercell folded back into the unit cell. 
-  This will give you more robust averages. Additionally, if you are performing an NPT simulation, you may as well write an instance of the 
-  `crystal-structure-npt <https://openkim.org/properties/show/crystal-structure-npt>`_ property for future re-use. Note the optional ``restart-file`` key. 
+  If you are running an MD simulation, the structure you report should be time-averaged and likely averaged over the supercell folded back into the unit cell.
+  This will give you more robust averages. Additionally, if you are performing an NPT simulation, you may as well write an instance of the
+  `crystal-structure-npt <https://openkim.org/properties/show/crystal-structure-npt>`_ property for future re-use. Note the optional ``restart-file`` key.
   It is recommended that you save a restart file (for example, ``restart.dump``). You can then add it using ``self.``:func:`~kim_tools.KIMTestDriver._add_file_to_current_property_instance`.
 
   .. code-block:: Python
 
     self._add_property_instance_and_common_crystal_genome_keys("crystal-structure-npt",write_temp=True,write_stress=True)
-    self._add_file_to_current_property_instance("restart-file","restart.dump")  
+    self._add_file_to_current_property_instance("restart-file","restart.dump")
 
 .. todo::
-    
+
   This should be an integrated part of ``kim-tools``
 
 LAMMPS and other non-ASE simulators
 -----------------------------------
 .. note::
 
-  Non-ASE calculations require extra steps. 
+  Non-ASE calculations require extra steps.
   For example, one way to run a LAMMPS simulation in this framework is to export your atomic configuration using :func:`ase.io.write`, create LAMMPS input file(s)
   with `kim commands <https://docs.lammps.org/kim_commands.html>`_ using the KIM model stored in the base class' attribute ``self.``:attr:`~kim_tools.KIMTestDriver.kim_model_name`,
   run your simulation(s), and read the configuration back in using :func:`ase.io.read` (for example, to re-detect the changed crystal structure).
 
 .. todo::
-    
+
   This should be an integrated part of ``kim-tools``

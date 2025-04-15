@@ -14,7 +14,7 @@ Welcome to kim-tools's documentation!
 .. toctree::
    :maxdepth: 3
    :caption: Contents:
-   
+
    tutorial
    modules
 
@@ -29,7 +29,7 @@ This package is designed to facilitate writing `OpenKIM Test Drivers <https://op
    :align: center
    :width: 500px
 
-   The AFLOW prototype label. In short, it is a string providing the stoichiometry, Pearson symbol, space group, and Wyckoff positions of an arbitrary crystal. Image source and more info: https://arxiv.org/pdf/2401.06875. 
+   The AFLOW prototype label. In short, it is a string providing the stoichiometry, Pearson symbol, space group, and Wyckoff positions of an arbitrary crystal. Image source and more info: https://arxiv.org/pdf/2401.06875.
 
 
 This package addresses these issues by providing a base class :class:`~kim_tools.SingleCrystalTestDriver` (itself inheriting from a yet more general class :class:`~kim_tools.KIMTestDriver`) that automates many of the common programming tasks needed to write an OpenKIM Test Driver for Crystal Genome. Additionally, due to the common interface, Test Drivers written using this base class are easier to invoke outside of the OpenKIM infrastructure, and can work with arbitrary ASE :class:`~ase.Atoms` objects. If a Test Driver uses only ASE for computations, it can even work with arbitrary ASE :class:`~ase.calculators.calculator.Calculator` objects. In the future, all ASE-only Test Drivers written using :mod:`kim_tools` will be incorporated into the `kimvv <https://github.com/openkim/kimvv>`_ package to be distributed for users to test their own models.
@@ -39,7 +39,7 @@ Contact us at https://openkim.org/contact/ with any comments or questions.
 Test Driver Creation Tutorial
 =============================
 
-If you wish to use this package to develop an OpenKIM Test Driver, after setting up a suitable development environment (detailed on the rest of this page), follow the :doc:`tutorial`. 
+If you wish to use this package to develop an OpenKIM Test Driver, after setting up a suitable development environment (detailed on the rest of this page), follow the :doc:`tutorial`.
 
 .. _doc.KDP:
 
@@ -53,7 +53,7 @@ The `KIM Developer Platform (KDP) <https://openkim.org/doc/evaluation/kim-develo
 Standalone Installation
 =======================
 
-Standalone usage of ``kim-tools`` is possible and makes sense if you wish to use the package on an HPC resource, as most do not support running Docker images. 
+Standalone usage of ``kim-tools`` is possible and makes sense if you wish to use the package on an HPC resource, as most do not support running Docker images.
 
 .. todo::
 

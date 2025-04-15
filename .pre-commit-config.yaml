@@ -23,5 +23,5 @@ repos:
     hooks:
     - id: flake8
       args:
-        - '--per-file-ignores=kim_tools/__init__.py:F401,F403'
+        - '--per-file-ignores=kim_tools/__init__.py:F401,F403,kim_tools/*/__init__.py:F401,F403'
         - --max-line-length=88

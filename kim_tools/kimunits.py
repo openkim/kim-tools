@@ -7,8 +7,8 @@ reserved.
 This software may be distributed as-is, without modification.
 """
 
-import re
 import math
+import re
 import subprocess
 import warnings
 
