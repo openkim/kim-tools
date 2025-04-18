@@ -30,35 +30,23 @@
 Helper classes for KIM Test Drivers
 
 """
-from copy import deepcopy
-
-import numpy as np
-from ase import Atoms, constraints
-from ase.calculators.calculator import Calculator
-from ase.data import atomic_masses
-from ase.spacegroup import symmetrize
-from numpy.typing import ArrayLike
-
-if hasattr(constraints, "FixSymmetry"):
-    from ase.constraints import FixSymmetry
-elif hasattr(symmetrize, "FixSymmetry"):
-    from ase.spacegroup.symmetrize import FixSymmetry
-else:
-    raise ImportError(
-        "Can't find `FixSymmetry` in either `ase.constraints` or "
-        "`ase.spacegroup.symmetrize`"
-    )
 import logging
 import os
 import shutil
 from abc import ABC, abstractmethod
+from copy import deepcopy
 from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import IO, Any, Dict, List, Optional, Union
 
 import ase
 import kim_edn
-from ase.constraints import ExpCellFilter, UnitCellFilter
+import numpy as np
+from ase import Atoms
+from ase.calculators.calculator import Calculator
+from ase.constraints import FixSymmetry
+from ase.data import atomic_masses
+from ase.filters import FrechetCellFilter, UnitCellFilter
 from ase.optimize import LBFGSLineSearch
 from ase.optimize.optimize import Optimizer
 from kim_property import (
@@ -70,6 +58,7 @@ from kim_property import (
 )
 from kim_property.modify import STANDARD_KEYS_SCLAR_OR_WITH_EXTENT
 from kim_query import raw_query
+from numpy.typing import ArrayLike
 
 from ..aflow_util import (
     AFLOW,
@@ -131,11 +120,11 @@ def minimize_wrapper(
     variable_cell: bool = True,
     logfile: Optional[Union[str, IO]] = "kim-tools.log",
     algorithm: Optimizer = LBFGSLineSearch,
-    CellFilter: UnitCellFilter = ExpCellFilter,
+    cell_filter: UnitCellFilter = FrechetCellFilter,
     fix_symmetry: bool = False,
     opt_kwargs: Dict = {},
     flt_kwargs: Dict = {},
-) -> None:
+) -> bool:
     """
     Use LBFGSLineSearch (default) to Minimize cell energy with respect to cell shape and
     internal atom positions.
@@ -177,12 +166,15 @@ def minimize_wrapper(
             Dictionary of kwargs to pass to optimizer
         flt_kwargs:
             Dictionary of kwargs to pass to filter (e.g. "scalar_pressure")
+
+    Returns:
+        Whether the minimization succeeded
     """
     if fix_symmetry:
         symmetry = FixSymmetry(atoms)
         atoms.set_constraint(symmetry)
     if variable_cell:
-        supercell_wrapped = CellFilter(atoms, **flt_kwargs)
+        supercell_wrapped = cell_filter(atoms, **flt_kwargs)
         opt = algorithm(supercell_wrapped, logfile=logfile, **opt_kwargs)
     else:
         opt = algorithm(atoms, logfile=logfile, **opt_kwargs)
@@ -212,13 +204,16 @@ def minimize_wrapper(
         + " steps."
     )
 
+    del atoms.constraints
+
     if minimization_stalled or iteration_limits_reached:
         logger.info("Final forces:")
         logger.info(atoms.get_forces())
         logger.info("Final stress:")
         logger.info(atoms.get_stress())
-
-    del atoms.constraints
+        return False
+    else:
+        return True
 
 
 def _add_property_instance(
@@ -1182,22 +1177,22 @@ class SingleCrystalTestDriver(KIMTestDriver):
         if force_max > FMAX_INITIAL:
             msg = (
                 "The configuration you provided has a maximum force component "
-                f"{force_max} eV/angstrom. You may wish to relax it before running "
-                "this Test Driver."
+                f"{force_max} eV/angstrom. Unless the Test Driver you are running "
+                "provides minimization, you may wish to relax the configuration."
             )
-            print(f"WARNING: {msg}\n")
-            logger.warning(msg)
+            print(f"\nNOTE: {msg}\n")
+            logger.info(msg)
         if cell_cauchy_stress_eV_angstrom3 != [0, 0, 0, 0, 0, 0]:
             stress_max = np.max(atoms_tmp.get_stress())
             if stress_max > FMAX_INITIAL:
                 msg = (
                     "The configuration you provided has a maximum stress component "
                     f"{stress_max} eV/angstrom^3 even though the nominal state of the "
-                    "system is unstressed. You may wish to relax it before running "
-                    "this Test Driver."
+                    "system is unstressed. Unless the Test Driver you are running "
+                    "provides minimization, you may wish to relax the configuration."
                 )
-                print(f"WARNING: {msg}\n")
-                logger.warning(msg)
+                print(f"\nNOTE: {msg}\n")
+                logger.info(msg)
 
     def _update_nominal_parameter_values(self, atoms: Atoms) -> None:
         """

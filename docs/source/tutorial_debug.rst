@@ -52,3 +52,33 @@ your ``TestDriver`` class.
    :file: structure_table.csv
    :widths: 10, 10, 40, 40
    :delim: tab
+
+Commands to install all required models in the KDP using ``kimitems``, or outside the KDP using ``kim-api-collections-management``:
+
+.. code-block:: console
+
+   kimitems install -D Sim_LAMMPS_Buckingham_FreitasSantosColaco_2015_SiCaOAl__SM_154093256665_000
+   kimitems install -D EDIP_LAMMPS_Marks_2000_C__MO_374144505645_000
+   kimitems install -D MEAM_LAMMPS_FernandezPascuet_2014_U__MO_399431830125_002
+   kimitems install -D SNAP_LiHuChen_2018_NiMo__MO_468686727341_000
+   kimitems install -D Sim_LAMMPS_Buckingham_MatsuiAkaogi_1991_TiO__SM_690504433912_000
+   kimitems install -D MEAM_LAMMPS_JeongParkDo_2018_PdAl__MO_616482358807_002
+   kimitems install -D Sim_LAMMPS_Vashishta_BroughtonMeliVashishta_1997_SiO__SM_422553794879_000
+   kimitems install -D MEAM_LAMMPS_KoJimLee_2012_FeP__MO_179420363944_002
+   kimitems install -D Sim_LAMMPS_BOP_MurdickZhouWadley_2006_GaAs__SM_104202807866_001
+   kimitems install -D Sim_LAMMPS_ReaxFF_BrugnoliMiyataniAkaji_SiCeNaClHO_2023__SM_282799919035_000
+   kimitems install -D EAM_Dynamo_ErcolessiAdams_1994_Al__MO_123629422045_005
+
+.. code-block:: console
+
+   kim-api-collections-management install user Sim_LAMMPS_Buckingham_FreitasSantosColaco_2015_SiCaOAl__SM_154093256665_000
+   kim-api-collections-management install user EDIP_LAMMPS_Marks_2000_C__MO_374144505645_000
+   kim-api-collections-management install user MEAM_LAMMPS_FernandezPascuet_2014_U__MO_399431830125_002
+   kim-api-collections-management install user SNAP_LiHuChen_2018_NiMo__MO_468686727341_000
+   kim-api-collections-management install user Sim_LAMMPS_Buckingham_MatsuiAkaogi_1991_TiO__SM_690504433912_000
+   kim-api-collections-management install user MEAM_LAMMPS_JeongParkDo_2018_PdAl__MO_616482358807_002
+   kim-api-collections-management install user Sim_LAMMPS_Vashishta_BroughtonMeliVashishta_1997_SiO__SM_422553794879_000
+   kim-api-collections-management install user MEAM_LAMMPS_KoJimLee_2012_FeP__MO_179420363944_002
+   kim-api-collections-management install user Sim_LAMMPS_BOP_MurdickZhouWadley_2006_GaAs__SM_104202807866_001
+   kim-api-collections-management install user Sim_LAMMPS_ReaxFF_BrugnoliMiyataniAkaji_SiCeNaClHO_2023__SM_282799919035_000
+   kim-api-collections-management install user EAM_Dynamo_ErcolessiAdams_1994_Al__MO_123629422045_005

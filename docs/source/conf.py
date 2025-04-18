@@ -16,9 +16,14 @@ sys.path.insert(0, os.path.abspath("../../"))
 
 project = "kim-tools"
 copyright = (
-    f"2024-{datetime.today().year} " "ilia Nikiforov, Ellad Tadmor, and Eric Fuemmeler"
+    f"2024-{datetime.today().year} "
+    "ilia Nikiforov, Ellad Tadmor, Claire Waters, "
+    "Daniel Karls, Matt Bierbaum, and Eric Fuemmeler"
 )
-author = "ilia Nikiforov, Ellad Tadmor, and Eric Fuemmeler"
+author = (
+    "ilia Nikiforov, Ellad Tadmor, Claire Waters, "
+    "Daniel Karls, Matt Bierbaum, and Eric Fuemmeler"
+)
 release = __version__
 
 # -- General configuration ---------------------------------------------------

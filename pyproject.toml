@@ -6,8 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "kim-tools"
 dynamic = ["version"]
 dependencies = [
-    "ase >= 3.19.0b1",
-    "kim-property >= 2.6.7",
+    "ase >= 3.23",
+    "kim-property >= 2.6.8",
     "kim-edn >= 1.4.1",
     "spglib >= 2.1.0",
     "kim-query >= 3.0.0",
@@ -21,14 +21,15 @@ authors = [
     { name = "Ellad Tadmor", email = "	tadmor@umn.edu" },
     { name = "Claire Waters", email = "bwaters@umn.edu" },
     { name = "Daniel S. Karls", email = "karl0100umn@gmail.com" },
-    { name = "Matt Bierbaum", email = "matt.bierbaum@gmail.com" }
+    { name = "Matt Bierbaum", email = "matt.bierbaum@gmail.com" },
+    { name = "Eric Fuemmeler", email = "efuemmel@umn.edu"}
 ]
 maintainers = [
     { name = "ilia Nikiforov", email = "nikif002@umn.edu" },
 ]
 description = "Base classes and helper routines for writing KIM Tests"
 readme = { file = "README.md", content-type = "text/markdown" }
-requires-python = ">=3.6"
+requires-python = ">=3.8"
 classifiers=[
     "Development Status :: 4 - Beta",
     "License :: OSI Approved :: Common Development and Distribution License 1.0 (CDDL-1.0)",
