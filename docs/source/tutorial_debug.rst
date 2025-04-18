@@ -63,7 +63,9 @@ Commands to install all required models in the KDP using ``kimitems``, or outsid
    kimitems install -D SNAP_LiHuChen_2018_NiMo__MO_468686727341_000
    kimitems install -D Sim_LAMMPS_Buckingham_MatsuiAkaogi_1991_TiO__SM_690504433912_000
    kimitems install -D MEAM_LAMMPS_JeongParkDo_2018_PdAl__MO_616482358807_002
+   kimitems install -D Tersoff_LAMMPS_MunetohMotookaMoriguchi_2007_SiO__MO_501246546792_000
    kimitems install -D Sim_LAMMPS_Vashishta_BroughtonMeliVashishta_1997_SiO__SM_422553794879_000
+   kimitems install -D EAM_Dynamo_AcklandMendelevSrolovitz_2004_FeP__MO_884343146310_005
    kimitems install -D MEAM_LAMMPS_KoJimLee_2012_FeP__MO_179420363944_002
    kimitems install -D Sim_LAMMPS_BOP_MurdickZhouWadley_2006_GaAs__SM_104202807866_001
    kimitems install -D Sim_LAMMPS_ReaxFF_BrugnoliMiyataniAkaji_SiCeNaClHO_2023__SM_282799919035_000
@@ -77,7 +79,9 @@ Commands to install all required models in the KDP using ``kimitems``, or outsid
    kim-api-collections-management install user SNAP_LiHuChen_2018_NiMo__MO_468686727341_000
    kim-api-collections-management install user Sim_LAMMPS_Buckingham_MatsuiAkaogi_1991_TiO__SM_690504433912_000
    kim-api-collections-management install user MEAM_LAMMPS_JeongParkDo_2018_PdAl__MO_616482358807_002
+   kim-api-collections-management install user Tersoff_LAMMPS_MunetohMotookaMoriguchi_2007_SiO__MO_501246546792_000
    kim-api-collections-management install user Sim_LAMMPS_Vashishta_BroughtonMeliVashishta_1997_SiO__SM_422553794879_000
+   kim-api-collections-management install user EAM_Dynamo_AcklandMendelevSrolovitz_2004_FeP__MO_884343146310_005
    kim-api-collections-management install user MEAM_LAMMPS_KoJimLee_2012_FeP__MO_179420363944_002
    kim-api-collections-management install user Sim_LAMMPS_BOP_MurdickZhouWadley_2006_GaAs__SM_104202807866_001
    kim-api-collections-management install user Sim_LAMMPS_ReaxFF_BrugnoliMiyataniAkaji_SiCeNaClHO_2023__SM_282799919035_000
