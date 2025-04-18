@@ -20,22 +20,24 @@ First, let's go over the files you will need to change.
 ``test_generator.json``
 =======================
 
-This is the file that specifies the inputs to your Test Driver. It contains all structures currently in Crystal Genome.
-Here are the first few lines of it. Each line is a JSON dictionary. Each line corresponds to a separate `KIM Test <https://openkim.org/doc/evaluation/kim-tests/>`_
-that will be created using your Test Driver.
+This is the file that specifies the inputs to your Test Driver. Each line is a JSON dictionary.
+Each line corresponds to a separate `KIM Test <https://openkim.org/doc/evaluation/kim-tests/>`_
+that will be created using your Test Driver. The provided file contains the :ref:`doc.curated_tests`.
 
 .. literalinclude:: ../../examples/CrystalGenomeASEExample__TD_000000654321_000/test_generator.json
     :language: json
-    :lines: 1-4
 
-As you can see, it specifies the crystal structure and allows you to pass any additional arguments you defined in your ``_calculate()`` method as a sub-dictionary
-under ``crystal_genome_test_args``. At the very least, you will need to edit this sub-dictionary to reflect the inputs your Test Driver uses. You can omit any
-arguments you wish to set to their default value, and if your ``_calculate()`` takes no additional arguments, you may make it an empty dictionary: ``{}``. If your
+As you can see, it specifies the crystal structure and optionally allows you to pass any additional arguments you defined in your ``_calculate()`` method as a sub-dictionary
+under ``crystal_genome_test_args``. If needed, edit this sub-dictionary to reflect the inputs your Test Driver uses. You can omit any
+arguments you wish to set to their default value, and if your ``_calculate()`` takes no additional arguments, you can omit ``crystal_genome_test_args`` entirely. If your
 Test Driver does not use temperature and/or stress, you may omit these keys as well (the example Test Driver does not use them, but they are left for demonstration).
 
 If you wish to create Tests for different inputs (e.g. multiple temperatures), you must create a separate line for each one. For example, if we wanted to create Tests
 using the example Test Driver that set ``max_volume_scale=0.1`` and different Tests that set ``max_volume_scale=0.2``, both for all structures, we would double the number
 of lines in ``test_generator.json``.
+
+There is a file called ``test_generator_full.json`` that contains all structures currently on OpenKIM.org. Before submitting, you should expand your ``test_generator.json``
+to include all of these structures.
 
 .. todo::
 
@@ -46,8 +48,7 @@ Generating and Running Tests
 
 There is one more file that you will need to change from the example Test Driver, but it will be easier to contextualize if we first demonstrate how Tests are generated and run in the KIM Developer Platform using the example Test Driver.
 
-To generate tests from the example Test Driver you've placed in ``~/test-drivers/CrystalGenomeASEExample__TD_000000654321_000`` of your KDP, run the following command. Note that it takes several minutes to generate Tests for the large number of lines in ``test_generator.json``! You can either stop the process (Ctrl-C or Command-C) after a few tests have been generated, or edit ``test_generator.json`` to only leave a few lines remaining.
-
+To generate tests from the example Test Driver you've placed in ``~/test-drivers/CrystalGenomeASEExample__TD_000000654321_000`` of your KDP, run the following command.
 .. code-block:: bash
 
     kimgenie tests --add-random-kimnums --test-driver CrystalGenomeASEExample__TD_000000654321_000
@@ -55,12 +56,12 @@ To generate tests from the example Test Driver you've placed in ``~/test-drivers
 .. note::
     The ``--add-random-kimnums`` option has added a ``kimnum`` key to each line in ``test_generator.json``. Do not use this option after these keys have been added.
 
-Assuming you have left the first few lines of ``test_generator.json`` intact, you will have created a test for FCC silver. Let's install a model for silver and run it with the created test (adding the custom property as well if we have not done so already). The random ``kimnum`` generated for your test will vary, but the ``pipeline-run-pair`` command accepts wildcards:
+Let's install a model for aluminum and run it with the created test for FCC aluminum. The random ``kimnum`` generated for your test will vary, but the ``pipeline-run-pair`` command accepts wildcards:
 
 .. code-block:: bash
 
-    kimitems install -D  EAM_Dynamo_AcklandTichyVitek_1987_Ag__MO_212700056563_005
-    pipeline-run-pair CrystalGenomeASEExample_A_cF4_225_a_Ag_0_1__TE_* EAM_Dynamo_AcklandTichyVitek_1987_Ag__MO_212700056563_005 -v
+    kimitems install -D EAM_Dynamo_ErcolessiAdams_1994_Al__MO_123629422045_005
+    pipeline-run-pair CrystalGenomeASEExample_A_cF4_225_a_Al_0_1__TE_* EAM_Dynamo_ErcolessiAdams_1994_Al__MO_123629422045_005 -v
 
 You should see the output of the test, and there should be a new directory in ``~/test-results/`` with the ``results.edn`` file containing the resulting KIM Property Instance,
 as well as several other files documenting the run.
