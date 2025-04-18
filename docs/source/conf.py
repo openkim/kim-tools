@@ -5,6 +5,9 @@
 
 import os
 import sys
+from datetime import datetime
+
+from kim_tools import __version__
 
 sys.path.insert(0, os.path.abspath("../../"))
 
@@ -12,9 +15,11 @@ sys.path.insert(0, os.path.abspath("../../"))
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = "kim-tools"
-copyright = "2024, ilia Nikiforov, Ellad Tadmor, and Eric Fuemmeler"
+copyright = (
+    f"2024-{datetime.today().year} " "ilia Nikiforov, Ellad Tadmor, and Eric Fuemmeler"
+)
 author = "ilia Nikiforov, Ellad Tadmor, and Eric Fuemmeler"
-release = "0.1.0"
+release = __version__
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

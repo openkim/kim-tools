@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kim-tools"
-version = "0.1.0"
+dynamic = ["version"]
 dependencies = [
     "ase >= 3.19.0b1",
     "kim-property >= 2.6.7",
@@ -41,6 +41,9 @@ keywords = [ "kim-tools" , "kim_tools", "openkim", "crystal genome" ]
 [project.urls]
 Homepage = "https://github.com/openkim/kim-tools"
 Issues = "https://github.com/openkim/kim-tools/issues"
+
+[tool.setuptools.dynamic]
+version = {attr = 'kim_tools.__version__'}
 
 [tool.setuptools.packages.find]
 include = [ "kim_tools*" ]

@@ -1,4 +1,4 @@
-Summary of changes from initial unnumbered release to 0.1
+Summary of changes from v0.1 to v0.2b
 ---------------------------------------------------------
 
 - The common fields in Crystal Genome properties have changed. These are all written automatically by `kim-tools`, so you do not need to change your test driver to accomodate this, but you need to update your Property Definitions. See the example property in the example test driver.
