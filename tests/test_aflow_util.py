@@ -7,7 +7,6 @@ from os import PathLike
 from random import random
 from typing import Dict, List, Optional
 
-import kim_edn
 import numpy as np
 import pytest
 from ase import Atoms
@@ -441,43 +440,5 @@ def test_solve_for_params_of_known_prototype(input_crystal_structures):
     assert not failed_to_solve_at_least_one
 
 
-def test_detect_unique_crystal_structures():
-    reference_structure = kim_edn.load("structures/OSi.edn")
-    test_structure = kim_edn.load("structures/OSi_twin.edn")
-    assert (
-        len(
-            detect_unique_crystal_structures(
-                [
-                    reference_structure,
-                    reference_structure,
-                    test_structure,
-                    test_structure,
-                    test_structure,
-                    test_structure,
-                ],
-                allow_rotation=True,
-            )
-        )
-        == 1
-    )
-    assert (
-        len(
-            detect_unique_crystal_structures(
-                [
-                    reference_structure,
-                    reference_structure,
-                    test_structure,
-                    test_structure,
-                    test_structure,
-                    test_structure,
-                ],
-                allow_rotation=False,
-            )
-        )
-        == 2
-    )
-
-
 if __name__ == "__main__":
-    test_detect_unique_crystal_structures()
-    # test_solve_for_params_of_known_prototype(get_test_crystal_structures(test_cases=[22],deduplicate=True))
+    pass

@@ -2,10 +2,15 @@
 
 import os
 
+import kim_edn
 from ase.atoms import Atoms
 from ase.calculators.lj import LennardJones
 
-from kim_tools.test_driver import KIMTestDriver
+from kim_tools import (
+    KIMTestDriver,
+    detect_unique_crystal_structures,
+    get_deduplicated_property_instances,
+)
 
 
 class TestTestDriver(KIMTestDriver):
@@ -52,3 +57,82 @@ def test_kimtest(monkeypatch):
 
     assert len(test.property_instances) == 6
     test.write_property_instances_to_file()
+
+
+def test_detect_unique_crystal_structures():
+    reference_structure = kim_edn.load("structures/OSi.edn")
+    test_structure = kim_edn.load("structures/OSi_twin.edn")
+    assert (
+        len(
+            detect_unique_crystal_structures(
+                [
+                    reference_structure,
+                    reference_structure,
+                    test_structure,
+                    test_structure,
+                    test_structure,
+                    test_structure,
+                ],
+                allow_rotation=True,
+            )
+        )
+        == 1
+    )
+    assert (
+        len(
+            detect_unique_crystal_structures(
+                [
+                    reference_structure,
+                    reference_structure,
+                    test_structure,
+                    test_structure,
+                    test_structure,
+                    test_structure,
+                ],
+                allow_rotation=False,
+            )
+        )
+        == 2
+    )
+
+
+def test_get_deduplicated_property_instances():
+    property_instances = kim_edn.load("structures/results.edn")
+    fully_deduplicated = get_deduplicated_property_instances(property_instances)
+    assert len(fully_deduplicated) == 6
+    inst_with_1_source = 0
+    inst_with_2_source = 0
+    for property_instance in fully_deduplicated:
+        n_inst = len(
+            property_instance["crystal-genome-source-structure-id"]["source-value"][0]
+        )
+        if n_inst == 1:
+            inst_with_1_source += 1
+        elif n_inst == 2:
+            inst_with_2_source += 1
+        else:
+            assert False
+    assert inst_with_1_source == 3
+    assert inst_with_2_source == 3
+    partially_deduplicated = get_deduplicated_property_instances(
+        property_instances, ["mass-density-crystal-npt"]
+    )
+    assert len(partially_deduplicated) == 8
+    inst_with_1_source = 0
+    inst_with_2_source = 0
+    for property_instance in partially_deduplicated:
+        n_inst = len(
+            property_instance["crystal-genome-source-structure-id"]["source-value"][0]
+        )
+        if n_inst == 1:
+            inst_with_1_source += 1
+        elif n_inst == 2:
+            inst_with_2_source += 1
+        else:
+            assert False
+    assert inst_with_1_source == 7
+    assert inst_with_2_source == 1
+
+
+if __name__ == "__main__":
+    test_get_deduplicated_property_instances()

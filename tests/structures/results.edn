@@ -1,0 +1,785 @@
+[
+    {
+        "property-id" "tag:staff@noreply.openkim.org,2023-02-21:property/crystal-structure-npt"
+        "instance-id" 1
+        "disclaimer" "The forces failed to converge below the requested tolerance"
+        "prototype-label" {
+            "source-value" "A2B_oC24_20_abc_c"
+        }
+        "stoichiometric-species" {
+            "source-value" [
+                "O"
+                "Si"
+            ]
+        }
+        "a" {
+            "source-value" 4.922550515749715
+            "source-unit" "angstrom"
+            "si-unit" "m"
+            "si-value" 4.922550515749715e-10
+        }
+        "parameter-names" {
+            "source-value" [
+                "b/a"
+                "c/a"
+                "x1"
+                "y2"
+                "x3"
+                "y3"
+                "z3"
+                "x4"
+                "y4"
+                "z4"
+            ]
+        }
+        "parameter-values" {
+            "source-value" [
+                1.8219685643183359
+                1.6513845466117385
+                0.7088781184014328
+                0.6527831031874163
+                0.6358324190758566
+                0.7780460371566862
+                0.450028468431378
+                0.3872693740841735
+                0.837271654558314
+                0.5636532285264149
+            ]
+        }
+        "short-name" {
+            "source-value" [
+                "Orthorhombic Tridymite"
+            ]
+        }
+        "library-prototype-label" {
+            "source-value" "A2B_oC24_20_abc_c-001"
+        }
+        "cell-cauchy-stress" {
+            "source-value" [
+                0.0
+                0.0
+                0.0
+                0.0
+                0.0
+                0.0
+            ]
+            "source-unit" "eV/angstrom^3"
+            "si-unit" "kg / m s^2"
+            "si-value" [
+                0.0
+                0.0
+                0.0
+                0.0
+                0.0
+                0.0
+            ]
+        }
+        "temperature" {
+            "source-value" 0.0
+            "source-unit" "K"
+            "si-unit" "K"
+            "si-value" 0.0
+        }
+        "crystal-genome-source-structure-id" {
+            "source-value" [
+                [
+                    "RD_891201918979_000"
+                ]
+            ]
+        }
+        "coordinates-file" {
+            "source-value" "instance-1.poscar"
+        }
+        "coordinates-file-conventional" {
+            "source-value" "conventional.instance-1.poscar"
+        }
+    }
+    {
+        "property-id" "tag:staff@noreply.openkim.org,2023-02-21:property/binding-energy-crystal"
+        "instance-id" 2
+        "disclaimer" "The forces failed to converge below the requested tolerance"
+        "prototype-label" {
+            "source-value" "A2B_oC24_20_abc_c"
+        }
+        "stoichiometric-species" {
+            "source-value" [
+                "O"
+                "Si"
+            ]
+        }
+        "a" {
+            "source-value" 4.922550515749715
+            "source-unit" "angstrom"
+            "si-unit" "m"
+            "si-value" 4.922550515749715e-10
+        }
+        "parameter-names" {
+            "source-value" [
+                "b/a"
+                "c/a"
+                "x1"
+                "y2"
+                "x3"
+                "y3"
+                "z3"
+                "x4"
+                "y4"
+                "z4"
+            ]
+        }
+        "parameter-values" {
+            "source-value" [
+                1.8219685643183359
+                1.6513845466117385
+                0.7088781184014328
+                0.6527831031874163
+                0.6358324190758566
+                0.7780460371566862
+                0.450028468431378
+                0.3872693740841735
+                0.837271654558314
+                0.5636532285264149
+            ]
+        }
+        "short-name" {
+            "source-value" [
+                "Orthorhombic Tridymite"
+            ]
+        }
+        "library-prototype-label" {
+            "source-value" "A2B_oC24_20_abc_c-001"
+        }
+        "crystal-genome-source-structure-id" {
+            "source-value" [
+                [
+                    "RD_891201918979_000"
+                ]
+            ]
+        }
+        "coordinates-file" {
+            "source-value" "instance-2.poscar"
+        }
+        "coordinates-file-conventional" {
+            "source-value" "conventional.instance-2.poscar"
+        }
+        "binding-potential-energy-per-atom" {
+            "source-value" -13.731337469695925
+            "source-unit" "eV"
+            "si-unit" "kg m^2 / s^2"
+            "si-value" -2.200002804751549e-18
+        }
+        "binding-potential-energy-per-formula" {
+            "source-value" -41.194012409087776
+            "source-unit" "eV"
+            "si-unit" "kg m^2 / s^2"
+            "si-value" -6.600008414254648e-18
+        }
+    }
+    {
+        "property-id" "tag:staff@noreply.openkim.org,2025-04-15:property/mass-density-crystal-npt"
+        "instance-id" 3
+        "disclaimer" "The forces failed to converge below the requested tolerance"
+        "prototype-label" {
+            "source-value" "A2B_oC24_20_abc_c"
+        }
+        "stoichiometric-species" {
+            "source-value" [
+                "O"
+                "Si"
+            ]
+        }
+        "a" {
+            "source-value" 4.922550515749715
+            "source-unit" "angstrom"
+            "si-unit" "m"
+            "si-value" 4.922550515749715e-10
+        }
+        "parameter-names" {
+            "source-value" [
+                "b/a"
+                "c/a"
+                "x1"
+                "y2"
+                "x3"
+                "y3"
+                "z3"
+                "x4"
+                "y4"
+                "z4"
+            ]
+        }
+        "parameter-values" {
+            "source-value" [
+                1.8219685643183359
+                1.6513845466117385
+                0.7088781184014328
+                0.6527831031874163
+                0.6358324190758566
+                0.7780460371566862
+                0.450028468431378
+                0.3872693740841735
+                0.837271654558314
+                0.5636532285264149
+            ]
+        }
+        "short-name" {
+            "source-value" [
+                "Orthorhombic Tridymite"
+            ]
+        }
+        "library-prototype-label" {
+            "source-value" "A2B_oC24_20_abc_c-001"
+        }
+        "cell-cauchy-stress" {
+            "source-value" [
+                0.0
+                0.0
+                0.0
+                0.0
+                0.0
+                0.0
+            ]
+            "source-unit" "eV/angstrom^3"
+            "si-unit" "kg / m s^2"
+            "si-value" [
+                0.0
+                0.0
+                0.0
+                0.0
+                0.0
+                0.0
+            ]
+        }
+        "temperature" {
+            "source-value" 0.0
+            "source-unit" "K"
+            "si-unit" "K"
+            "si-value" 0.0
+        }
+        "crystal-genome-source-structure-id" {
+            "source-value" [
+                [
+                    "RD_891201918979_000"
+                ]
+            ]
+        }
+        "coordinates-file" {
+            "source-value" "instance-3.poscar"
+        }
+        "coordinates-file-conventional" {
+            "source-value" "conventional.instance-3.poscar"
+        }
+        "mass-density" {
+            "source-value" 1.3393126032987295
+            "source-unit" "amu/angstrom^3"
+            "si-unit" "kg / m^3"
+            "si-value" 2223.980900167288
+        }
+    }
+    {
+        "property-id" "tag:staff@noreply.openkim.org,2023-02-21:property/crystal-structure-npt"
+        "instance-id" 4
+        "disclaimer" "The forces failed to converge below the requested tolerance"
+        "prototype-label" {
+            "source-value" "A2B_oC24_20_abc_c"
+        }
+        "stoichiometric-species" {
+            "source-value" [
+                "O"
+                "Si"
+            ]
+        }
+        "a" {
+            "source-value" 7.720891539121117
+            "source-unit" "angstrom"
+            "si-unit" "m"
+            "si-value" 7.720891539121117e-10
+        }
+        "parameter-names" {
+            "source-value" [
+                "b/a"
+                "c/a"
+                "x1"
+                "y2"
+                "x3"
+                "y3"
+                "z3"
+                "x4"
+                "y4"
+                "z4"
+            ]
+        }
+        "parameter-values" {
+            "source-value" [
+                1.1328736643819661
+                0.6301169204285387
+                0.7334143296801667
+                0.12565133229763648
+                0.30435595466725807
+                0.7859074236212579
+                0.9049038649036301
+                0.19539480755846417
+                0.8447180368336402
+                0.6417616996810163
+            ]
+        }
+        "cell-cauchy-stress" {
+            "source-value" [
+                0.0
+                0.0
+                0.0
+                0.0
+                0.0
+                0.0
+            ]
+            "source-unit" "eV/angstrom^3"
+            "si-unit" "kg / m s^2"
+            "si-value" [
+                0.0
+                0.0
+                0.0
+                0.0
+                0.0
+                0.0
+            ]
+        }
+        "temperature" {
+            "source-value" 0.0
+            "source-unit" "K"
+            "si-unit" "K"
+            "si-value" 0.0
+        }
+        "crystal-genome-source-structure-id" {
+            "source-value" [
+                [
+                    "RD_436429116809_000"
+                ]
+            ]
+        }
+        "coordinates-file" {
+            "source-value" "instance-4.poscar"
+        }
+        "coordinates-file-conventional" {
+            "source-value" "conventional.instance-4.poscar"
+        }
+    }
+    {
+        "property-id" "tag:staff@noreply.openkim.org,2023-02-21:property/binding-energy-crystal"
+        "instance-id" 5
+        "disclaimer" "The forces failed to converge below the requested tolerance"
+        "prototype-label" {
+            "source-value" "A2B_oC24_20_abc_c"
+        }
+        "stoichiometric-species" {
+            "source-value" [
+                "O"
+                "Si"
+            ]
+        }
+        "a" {
+            "source-value" 7.720891539121117
+            "source-unit" "angstrom"
+            "si-unit" "m"
+            "si-value" 7.720891539121117e-10
+        }
+        "parameter-names" {
+            "source-value" [
+                "b/a"
+                "c/a"
+                "x1"
+                "y2"
+                "x3"
+                "y3"
+                "z3"
+                "x4"
+                "y4"
+                "z4"
+            ]
+        }
+        "parameter-values" {
+            "source-value" [
+                1.1328736643819661
+                0.6301169204285387
+                0.7334143296801667
+                0.12565133229763648
+                0.30435595466725807
+                0.7859074236212579
+                0.9049038649036301
+                0.19539480755846417
+                0.8447180368336402
+                0.6417616996810163
+            ]
+        }
+        "crystal-genome-source-structure-id" {
+            "source-value" [
+                [
+                    "RD_436429116809_000"
+                ]
+            ]
+        }
+        "coordinates-file" {
+            "source-value" "instance-5.poscar"
+        }
+        "coordinates-file-conventional" {
+            "source-value" "conventional.instance-5.poscar"
+        }
+        "binding-potential-energy-per-atom" {
+            "source-value" -13.743226615937004
+            "source-unit" "eV"
+            "si-unit" "kg m^2 / s^2"
+            "si-value" -2.201907655982116e-18
+        }
+        "binding-potential-energy-per-formula" {
+            "source-value" -41.22967984781101
+            "source-unit" "eV"
+            "si-unit" "kg m^2 / s^2"
+            "si-value" -6.605722967946348e-18
+        }
+    }
+    {
+        "property-id" "tag:staff@noreply.openkim.org,2025-04-15:property/mass-density-crystal-npt"
+        "instance-id" 6
+        "disclaimer" "The forces failed to converge below the requested tolerance"
+        "prototype-label" {
+            "source-value" "A2B_oC24_20_abc_c"
+        }
+        "stoichiometric-species" {
+            "source-value" [
+                "O"
+                "Si"
+            ]
+        }
+        "a" {
+            "source-value" 7.720891539121117
+            "source-unit" "angstrom"
+            "si-unit" "m"
+            "si-value" 7.720891539121117e-10
+        }
+        "parameter-names" {
+            "source-value" [
+                "b/a"
+                "c/a"
+                "x1"
+                "y2"
+                "x3"
+                "y3"
+                "z3"
+                "x4"
+                "y4"
+                "z4"
+            ]
+        }
+        "parameter-values" {
+            "source-value" [
+                1.1328736643819661
+                0.6301169204285387
+                0.7334143296801667
+                0.12565133229763648
+                0.30435595466725807
+                0.7859074236212579
+                0.9049038649036301
+                0.19539480755846417
+                0.8447180368336402
+                0.6417616996810163
+            ]
+        }
+        "cell-cauchy-stress" {
+            "source-value" [
+                0.0
+                0.0
+                0.0
+                0.0
+                0.0
+                0.0
+            ]
+            "source-unit" "eV/angstrom^3"
+            "si-unit" "kg / m s^2"
+            "si-value" [
+                0.0
+                0.0
+                0.0
+                0.0
+                0.0
+                0.0
+            ]
+        }
+        "temperature" {
+            "source-value" 0.0
+            "source-unit" "K"
+            "si-unit" "K"
+            "si-value" 0.0
+        }
+        "crystal-genome-source-structure-id" {
+            "source-value" [
+                [
+                    "RD_436429116809_000"
+                ]
+            ]
+        }
+        "coordinates-file" {
+            "source-value" "instance-6.poscar"
+        }
+        "coordinates-file-conventional" {
+            "source-value" "conventional.instance-6.poscar"
+        }
+        "mass-density" {
+            "source-value" 1.4629740357044054
+            "source-unit" "amu/angstrom^3"
+            "si-unit" "kg / m^3"
+            "si-value" 2429.325539708628
+        }
+    }
+    {
+        "property-id" "tag:staff@noreply.openkim.org,2023-02-21:property/crystal-structure-npt"
+        "instance-id" 7
+        "disclaimer" "The forces failed to converge below the requested tolerance"
+        "prototype-label" {
+            "source-value" "A2B_oC24_20_abc_c"
+        }
+        "stoichiometric-species" {
+            "source-value" [
+                "O"
+                "Si"
+            ]
+        }
+        "a" {
+            "source-value" 4.921848616214208
+            "source-unit" "angstrom"
+            "si-unit" "m"
+            "si-value" 4.921848616214208e-10
+        }
+        "parameter-names" {
+            "source-value" [
+                "b/a"
+                "c/a"
+                "x1"
+                "y2"
+                "x3"
+                "y3"
+                "z3"
+                "x4"
+                "y4"
+                "z4"
+            ]
+        }
+        "parameter-values" {
+            "source-value" [
+                1.824219316758194
+                1.6503803231180671
+                0.7089369581403693
+                0.6525223749292968
+                0.6353344758017967
+                0.7777651795419895
+                0.449973053398546
+                0.3869206155114169
+                0.8373639813747016
+                0.5636278606344018
+            ]
+        }
+        "cell-cauchy-stress" {
+            "source-value" [
+                0.0
+                0.0
+                0.0
+                0.0
+                0.0
+                0.0
+            ]
+            "source-unit" "eV/angstrom^3"
+            "si-unit" "kg / m s^2"
+            "si-value" [
+                0.0
+                0.0
+                0.0
+                0.0
+                0.0
+                0.0
+            ]
+        }
+        "temperature" {
+            "source-value" 0.0
+            "source-unit" "K"
+            "si-unit" "K"
+            "si-value" 0.0
+        }
+        "crystal-genome-source-structure-id" {
+            "source-value" [
+                [
+                    "RD_643892983050_000"
+                ]
+            ]
+        }
+        "coordinates-file" {
+            "source-value" "instance-7.poscar"
+        }
+        "coordinates-file-conventional" {
+            "source-value" "conventional.instance-7.poscar"
+        }
+    }
+    {
+        "property-id" "tag:staff@noreply.openkim.org,2023-02-21:property/binding-energy-crystal"
+        "instance-id" 8
+        "disclaimer" "The forces failed to converge below the requested tolerance"
+        "prototype-label" {
+            "source-value" "A2B_oC24_20_abc_c"
+        }
+        "stoichiometric-species" {
+            "source-value" [
+                "O"
+                "Si"
+            ]
+        }
+        "a" {
+            "source-value" 4.921848616214208
+            "source-unit" "angstrom"
+            "si-unit" "m"
+            "si-value" 4.921848616214208e-10
+        }
+        "parameter-names" {
+            "source-value" [
+                "b/a"
+                "c/a"
+                "x1"
+                "y2"
+                "x3"
+                "y3"
+                "z3"
+                "x4"
+                "y4"
+                "z4"
+            ]
+        }
+        "parameter-values" {
+            "source-value" [
+                1.824219316758194
+                1.6503803231180671
+                0.7089369581403693
+                0.6525223749292968
+                0.6353344758017967
+                0.7777651795419895
+                0.449973053398546
+                0.3869206155114169
+                0.8373639813747016
+                0.5636278606344018
+            ]
+        }
+        "crystal-genome-source-structure-id" {
+            "source-value" [
+                [
+                    "RD_643892983050_000"
+                ]
+            ]
+        }
+        "coordinates-file" {
+            "source-value" "instance-8.poscar"
+        }
+        "coordinates-file-conventional" {
+            "source-value" "conventional.instance-8.poscar"
+        }
+        "binding-potential-energy-per-atom" {
+            "source-value" -13.731231276209229
+            "source-unit" "eV"
+            "si-unit" "kg m^2 / s^2"
+            "si-value" -2.199985790679243e-18
+        }
+        "binding-potential-energy-per-formula" {
+            "source-value" -41.19369382862769
+            "source-unit" "eV"
+            "si-unit" "kg m^2 / s^2"
+            "si-value" -6.599957372037727e-18
+        }
+    }
+    {
+        "property-id" "tag:staff@noreply.openkim.org,2025-04-15:property/mass-density-crystal-npt"
+        "instance-id" 9
+        "disclaimer" "The forces failed to converge below the requested tolerance"
+        "prototype-label" {
+            "source-value" "A2B_oC24_20_abc_c"
+        }
+        "stoichiometric-species" {
+            "source-value" [
+                "O"
+                "Si"
+            ]
+        }
+        "a" {
+            "source-value" 4.921848616214208
+            "source-unit" "angstrom"
+            "si-unit" "m"
+            "si-value" 4.921848616214208e-10
+        }
+        "parameter-names" {
+            "source-value" [
+                "b/a"
+                "c/a"
+                "x1"
+                "y2"
+                "x3"
+                "y3"
+                "z3"
+                "x4"
+                "y4"
+                "z4"
+            ]
+        }
+        "parameter-values" {
+            "source-value" [
+                1.824219316758194
+                1.6503803231180671
+                0.7089369581403693
+                0.6525223749292968
+                0.6353344758017967
+                0.7777651795419895
+                0.449973053398546
+                0.3869206155114169
+                0.8373639813747016
+                0.5636278606344018
+            ]
+        }
+        "cell-cauchy-stress" {
+            "source-value" [
+                0.0
+                0.0
+                0.0
+                0.0
+                0.0
+                0.0
+            ]
+            "source-unit" "eV/angstrom^3"
+            "si-unit" "kg / m s^2"
+            "si-value" [
+                0.0
+                0.0
+                0.0
+                0.0
+                0.0
+                0.0
+            ]
+        }
+        "temperature" {
+            "source-value" 0.0
+            "source-unit" "K"
+            "si-unit" "K"
+            "si-value" 0.0
+        }
+        "crystal-genome-source-structure-id" {
+            "source-value" [
+                [
+                    "RD_643892983050_000"
+                ]
+            ]
+        }
+        "coordinates-file" {
+            "source-value" "instance-9.poscar"
+        }
+        "coordinates-file-conventional" {
+            "source-value" "conventional.instance-9.poscar"
+        }
+        "mass-density" {
+            "source-value" 1.3390467931194583
+            "source-unit" "amu/angstrom^3"
+            "si-unit" "kg / m^3"
+            "si-value" 2223.539511980308
+        }
+    }
+]

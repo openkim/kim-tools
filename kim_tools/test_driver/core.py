@@ -30,6 +30,8 @@
 Helper classes for KIM Test Drivers
 
 """
+from copy import deepcopy
+
 import numpy as np
 from ase import Atoms, constraints
 from ase.calculators.calculator import Calculator
@@ -96,6 +98,7 @@ __all__ = [
     "SingleCrystalTestDriver",
     "query_crystal_structures",
     "detect_unique_crystal_structures",
+    "get_deduplicated_property_instances",
     "minimize_wrapper",
 ]
 
@@ -473,9 +476,6 @@ class KIMTestDriver(ABC):
         __output_property_instances (str):
             Property instances, possibly accumulated over multiple invocations of
             the Test Driver
-        __cached_files (dict):
-            keys: filenames to be assigned to files, values: serialized strings to dump
-            into those files. To be used for ``file`` type property keys
     """
 
     def __init__(self, model: Union[str, Calculator]) -> None:
@@ -493,7 +493,6 @@ class KIMTestDriver(ABC):
             self.__kim_model_name = model
             self.__calc = KIM(self.__kim_model_name)
 
-        self.__cached_files = {}
         self.__output_property_instances = "[]"
 
     def _setup(self, material, **kwargs) -> None:
@@ -720,9 +719,6 @@ class KIMTestDriver(ABC):
             kim_property_dump(
                 self.__output_property_instances, f
             )  # serialize the dictionary to string first
-        for cached_file in self.__cached_files:
-            with open(os.path.join(os.path.dirname(filename), cached_file), "w") as f:
-                f.write(self.__cached_files[cached_file])
 
 
 def _add_common_crystal_genome_keys_to_current_property_instance(
@@ -1487,6 +1483,67 @@ class SingleCrystalTestDriver(KIMTestDriver):
         """
         return self.__nominal_crystal_structure_npt
 
+    def deduplicate_property_instances(
+        self,
+        properties_to_deduplicate: Optional[List[str]] = None,
+        allow_rotation: bool = True,
+    ) -> None:
+        """
+        In the internally stored property instances,
+        deduplicate any repeated crystal structures for each property id and merge
+        their "crystal-genome-source-structure-id" keys.
+
+        WARNING: Only the crystal structures are checked. If you for some reason have a
+        property that can reasonably report different non-structural values for the
+        same atomic configuration, this will delete the extras!
+
+        Args:
+            properties_to_deduplicate:
+                A list of property names to pick out of ``property_instances`` to
+                deduplicate. Each element can be the long or short name, e.g.
+                "tag:staff@noreply.openkim.org,2023-02-21:property/binding-energy-crystal"
+                or "binding-energy-crystal". If omitted, all properties will be
+                deduplicated.
+            allow_rotation:
+                Whether or not structures that are rotated by a rotation that is not in
+                the crystal's point group are considered identical
+        """
+        deduplicated_property_instances = get_deduplicated_property_instances(
+            self.property_instances, properties_to_deduplicate, allow_rotation
+        )
+        logger.info(
+            f"Deduplicated {len(self.property_instances)} Property Instances "
+            f"down to {len(deduplicated_property_instances)}."
+        )
+        # Remove files
+        for original_property_instance in self.property_instances:
+            instance_id = original_property_instance["instance-id"]
+            instance_id_still_there = False
+            for deduplicated_property_instance in deduplicated_property_instances:
+                if instance_id == deduplicated_property_instance["instance-id"]:
+                    instance_id_still_there = True
+                    break
+            if not instance_id_still_there:
+                for key in original_property_instance:
+                    value_dict = original_property_instance[key]
+                    if not isinstance(value_dict, dict):
+                        continue
+                    if "source-unit" in value_dict:
+                        continue
+                    value = value_dict["source-value"]
+                    if isinstance(value, str):
+                        # TODO: should really check the property def that this is a
+                        # "file" type key, but come on, how incredibly unlikely is it
+                        # that there just happends to be a string type property that
+                        # happens to have a valid file path in it
+                        candidate_filename = os.path.join("output", value)
+                        if os.path.isfile(candidate_filename):
+                            os.remove(candidate_filename)
+
+        super()._set_serialized_property_instances(
+            kim_edn.dumps(deduplicated_property_instances)
+        )
+
     def _set_serialized_property_instances(self, property_instances) -> None:
         """
         An override to prevent SingleCrystalTestDriver derived classes from setting
@@ -1658,7 +1715,7 @@ def detect_unique_crystal_structures(
     crystal_structures: Union[List[Dict], Dict],
     allow_rotation: bool = True,
     aflow_np: int = 4,
-) -> List[int]:
+) -> Dict:
     """
     Detect which of the provided crystal structures is unique
 
@@ -1675,8 +1732,8 @@ def detect_unique_crystal_structures(
             Whether or not structures that are rotated by a rotation that is not in the
             crystal's point group are considered identical
     Returns:
-        Indices corresponding to unique structures. Any indices not in this list are
-        duplicates
+        Dictionary with keys corresponding to indices of unique structures and values
+        being lists of indices of their duplicates
     """
     if len(crystal_structures) == 0:
         return []
@@ -1703,36 +1760,152 @@ def detect_unique_crystal_structures(
 
         comparison = aflow.compare_materials_dir(tmpdirname)
 
-        unique_materials = [
-            int(materials_group["structure_representative"]["name"].split("/")[-1])
-            for materials_group in comparison
-        ]
+        unique_materials = {}
+        for materials_group in comparison:
+            i_repr = int(
+                materials_group["structure_representative"]["name"].split("/")[-1]
+            )
+            unique_materials[i_repr] = []
+            for structure_duplicate in materials_group["structures_duplicate"]:
+                unique_materials[i_repr].append(
+                    int(structure_duplicate["name"].split("/")[-1])
+                )
 
         if not allow_rotation:
             for materials_group in comparison:
                 # to preserve their ordering in the original input list, make this a
                 # dictionary now
+                repr_filename = materials_group["structure_representative"]["name"]
                 rotated_structures = {}
-                cell = get_cell_from_poscar(
-                    materials_group["structure_representative"]["name"]
-                )
+                cell = get_cell_from_poscar(repr_filename)
                 sgnum = materials_group["space_group"]
                 for potential_rotated_duplicate in materials_group[
                     "structures_duplicate"
                 ]:
                     cart_rot = potential_rotated_duplicate["rotation"]
                     if not cartesian_rotation_is_in_point_group(cart_rot, sgnum, cell):
-                        rotated_duplicate_index = int(
+                        i_rot_dup = int(
                             potential_rotated_duplicate["name"].split("/")[-1]
                         )
-                        rotated_structures[rotated_duplicate_index] = (
-                            crystal_structures[rotated_duplicate_index]
-                        )
-                unique_materials += detect_unique_crystal_structures(
-                    rotated_structures, False, aflow_np
+                        rotated_structures[i_rot_dup] = crystal_structures[i_rot_dup]
+                        # Now that we know it's rotated, need to remove
+                        # it from the list of duplicates
+                        i_repr = int(repr_filename.split("/")[-1])
+                        unique_materials[i_repr].remove(i_rot_dup)
+
+                unique_materials.update(
+                    detect_unique_crystal_structures(
+                        rotated_structures, False, aflow_np
+                    )
                 )
 
     return unique_materials
+
+
+def get_deduplicated_property_instances(
+    property_instances: List[Dict],
+    properties_to_deduplicate: Optional[List[str]] = None,
+    allow_rotation: bool = True,
+) -> List[Dict]:
+    """
+    Given a list of dictionaries constituting KIM Property instances,
+    deduplicate any repeated crystal structures for each property id and merge
+    their "crystal-genome-source-structure-id" keys.
+
+    WARNING: Only the crystal structures are checked. If you for some reason have a
+    property that can reasonably report different non-structural values for the
+    same atomic configuration, this will delete the extras!
+
+    Args:
+        property_instances:
+            The list of KIM Property Instances to deduplicate
+        properties_to_deduplicate:
+            A list of property names to pick out of ``property_instances`` to
+            deduplicate. Each element can be the long or short name, e.g.
+            "tag:staff@noreply.openkim.org,2023-02-21:property/binding-energy-crystal"
+            or "binding-energy-crystal". If omitted, all properties will be
+            deduplicated.
+        allow_rotation:
+            Whether or not structures that are rotated by a rotation that is not in the
+            crystal's point group are considered identical
+
+    Returns:
+        The deduplicated property instances
+    """
+    if properties_to_deduplicate is None:
+        properties_set = set()
+        for property_instance in property_instances:
+            properties_set.add(property_instance["property-id"])
+        properties_to_deduplicate = list(properties_set)
+
+    property_instances_deduplicated = []
+    for property_name in properties_to_deduplicate:
+        # Pick out property instances with the relevant name
+        property_instances_curr_name = []
+        for property_instance in property_instances:
+            property_id = property_instance["property-id"]
+            if (
+                property_id == property_name
+                or get_property_id_path(property_id)[3] == property_name
+            ):
+                property_instances_curr_name.append(deepcopy(property_instance))
+        if len(property_instances_curr_name) == 0:
+            raise KIMTestDriverError(
+                "The property you asked to deduplicate "
+                "is not in the property instances you provided"
+            )
+
+        # Get unique-duplicate dictionary
+        unique_crystal_structures = detect_unique_crystal_structures(
+            property_instances_curr_name, allow_rotation
+        )
+
+        # Put together the list of unique instances for the current
+        # name only
+        property_instances_curr_name_deduplicated = []
+        for i_unique in unique_crystal_structures:
+            property_instances_curr_name_deduplicated.append(
+                property_instances_curr_name[i_unique]
+            )
+            # Put together a list of "crystal-genome-source-structure-id"
+            # to gather into the deduplicated structure
+            additional_source_structure_id = []
+            for i_dup in unique_crystal_structures[i_unique]:
+                source_structure_id = _get_optional_source_value(
+                    property_instances_curr_name[i_dup],
+                    "crystal-genome-source-structure-id",
+                )
+                if source_structure_id is not None:
+                    # "crystal-genome-source-structure-id" is a 2D list
+                    # but only the first row should be populated
+                    additional_source_structure_id += source_structure_id[0]
+
+            if len(additional_source_structure_id) != 0:
+                if (
+                    "crystal-genome-source-structure-id"
+                    not in property_instances_curr_name_deduplicated[-1]
+                ):
+                    property_instances_curr_name_deduplicated[-1][
+                        "crystal-genome-source-structure-id"
+                    ] = [[]]
+                property_instances_curr_name_deduplicated[-1][
+                    "crystal-genome-source-structure-id"
+                ]["source-value"][0] += additional_source_structure_id
+
+        property_instances_deduplicated += property_instances_curr_name_deduplicated
+
+    # Add any instances of properties that weren't deduplicated
+    for property_instance in property_instances:
+        property_id = property_instance["property-id"]
+        if (
+            property_id not in properties_to_deduplicate
+            and get_property_id_path(property_id)[3] not in properties_to_deduplicate
+        ):
+            property_instances_deduplicated.append(deepcopy(property_instance))
+
+    property_instances_deduplicated.sort(key=lambda a: a["instance-id"])
+
+    return property_instances_deduplicated
 
 
 # If called directly, do nothing
