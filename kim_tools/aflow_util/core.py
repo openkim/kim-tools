@@ -1661,7 +1661,12 @@ class AFLOW:
         raise self.FailedToSolveException(msg)
 
     def confirm_atoms_unrotated_when_cells_aligned(
-        self, test_atoms: Atoms, reference_atoms: Atoms, sgnum: Union[int, str]
+        self,
+        test_atoms: Atoms,
+        ref_atoms: Atoms,
+        sgnum: Union[int, str],
+        rtol: float = 1.0e-4,
+        atol: float = 1.0e-8,
     ) -> bool:
         """
         Check whether `test_atoms` and `reference_atoms` are unrotated as follows:
@@ -1673,30 +1678,40 @@ class AFLOW:
         In other words, the crystals are identically oriented (but possibly translated)
         in reference to their lattice vectors, which in turn must be identical up to a
         rotation in reference to some Cartesian coordinate system.
+        The crystals must be primitive cells as defined in
+        https://doi.org/10.1016/j.commatsci.2017.01.017.
 
         Args:
+            test_atoms:
+                Primitive cell of a crystal
+            ref_atoms:
+                Primitive cell of a crystal
             sgnum:
                 Space group number
+            rtol:
+                Parameter to pass to :func:`numpy.allclose` for comparing cell params
+            atol:
+                Parameter to pass to :func:`numpy.allclose` for comparing cell params
         """
         if not np.allclose(
-            reference_atoms.cell.cellpar(), test_atoms.cell.cellpar(), atol=1e-4
+            ref_atoms.cell.cellpar(), test_atoms.cell.cellpar(), atol=atol, rtol=rtol
         ):
             logger.info(
                 "Cell lengths and angles do not match.\n"
-                f"Original: {reference_atoms.cell.cellpar()}\n"
+                f"Original: {ref_atoms.cell.cellpar()}\n"
                 f"Regenerated: {test_atoms.cell.cellpar()}"
             )
             return False
         else:
-            cell_lengths_and_angles = reference_atoms.cell.cellpar()
+            cell_lengths_and_angles = ref_atoms.cell.cellpar()
 
         test_atoms_copy = test_atoms.copy()
-        reference_atoms_copy = reference_atoms.copy()
+        ref_atoms_copy = ref_atoms.copy()
 
         test_atoms_copy.set_cell(
             Cell.fromcellpar(cell_lengths_and_angles), scale_atoms=True
         )
-        reference_atoms_copy.set_cell(
+        ref_atoms_copy.set_cell(
             Cell.fromcellpar(cell_lengths_and_angles), scale_atoms=True
         )
 
@@ -1704,7 +1719,7 @@ class AFLOW:
         try:
             _, cart_rot, _, _ = (
                 self.get_basistransformation_rotation_originshift_atom_map_from_atoms(
-                    test_atoms_copy, reference_atoms_copy
+                    test_atoms_copy, ref_atoms_copy
                 )
             )
         except self.FailedToMatchException:
@@ -1721,6 +1736,8 @@ class AFLOW:
         species: List[str],
         prototype_label: str,
         parameter_values: List[float],
+        rtol: float = 1.0e-4,
+        atol: float = 1.0e-8,
     ) -> bool:
         """
         Check whether the provided prototype designation recreates ``reference_atoms``
@@ -1742,6 +1759,10 @@ class AFLOW:
                 without specified atomic species
             parameter_values:
                 The free parameters of the AFLOW prototype designation
+            rtol:
+                Parameter to pass to :func:`numpy.allclose` for comparing cell params
+            atol:
+                Parameter to pass to :func:`numpy.allclose` for comparing cell params
 
         Returns:
             Whether or not the crystals match
@@ -1756,4 +1777,6 @@ class AFLOW:
             test_atoms,
             reference_atoms,
             get_space_group_number_from_prototype(prototype_label),
+            rtol,
+            atol,
         )
