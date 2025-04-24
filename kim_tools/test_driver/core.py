@@ -942,7 +942,7 @@ def get_crystal_structure_from_atoms(
 
 
 def get_poscar_from_crystal_structure(
-    crystal_structure: Dict, output_file: Optional[str] = None
+    crystal_structure: Dict, output_file: Optional[str] = None, flat: bool = False
 ) -> Optional[str]:
     """
     Write a POSCAR coordinate file (or output it as a multiline string) from the AFLOW
@@ -966,6 +966,8 @@ def get_poscar_from_crystal_structure(
             Dictionary containing the required keys in KIM Property Instance format
         output_file:
             Name of the output file. If not provided, the output is returned as a string
+        flat:
+            whether the input dictionary is flattened
     Returns:
         If ``output_file`` is not provided, a string in POSCAR format containg the
         primitive unit cell of the crystal as defined in
@@ -974,33 +976,51 @@ def get_poscar_from_crystal_structure(
         AFLOW.ChangedSymmetryException: if the symmetry of the atoms object is different
         from ``prototype_label``
     """
-    prototype_label = crystal_structure["prototype-label"]["source-value"]
+    if flat:
+        prototype_label = crystal_structure["prototype-label.source-value"]
+        a_unit = crystal_structure["a.source-unit"]
+        a_value = crystal_structure["a.source-value"]
+        parameter_values_key = "parameter-values.source-value"
+        stoichiometric_species = crystal_structure[
+            "stoichiometric-species.source-value"
+        ]
+    else:
+        prototype_label = crystal_structure["prototype-label"]["source-value"]
+        a_unit = crystal_structure["a"]["source-unit"]
+        a_value = crystal_structure["a"]["source-value"]
+        parameter_values_key = "parameter-values"
+        stoichiometric_species = crystal_structure["stoichiometric-species"][
+            "source-value"
+        ]
 
     aflow = AFLOW()
     aflow_parameter_names = aflow.get_param_names_from_prototype(prototype_label)
 
     # Atoms objects are always in angstrom
-    if crystal_structure["a"]["source-unit"] == "angstrom":
-        a_angstrom = crystal_structure["a"]["source-value"]
+    if a_unit == "angstrom":
+        a_angstrom = a_value
     else:
         a_angstrom = convert_units(
-            crystal_structure["a"]["source-value"],
+            a_value,
             crystal_structure["a"]["source-unit"],
-            "angstrom",
+            a_unit,
             True,
         )
 
     aflow_parameter_values = [a_angstrom]
 
-    if "parameter-values" in crystal_structure:
+    if parameter_values_key in crystal_structure:
         if len(aflow_parameter_names) == 1:
             raise KIMTestDriverError(
                 f'Prototype label {prototype_label} implies only "a" parameter, but '
                 'you provided "parameter-values"'
             )
-        aflow_parameter_values += crystal_structure["parameter-values"]["source-value"]
-
-    stoichiometric_species = crystal_structure["stoichiometric-species"]["source-value"]
+        if flat:
+            aflow_parameter_values += crystal_structure[parameter_values_key]
+        else:
+            aflow_parameter_values += crystal_structure[parameter_values_key][
+                "source-value"
+            ]
 
     try:
         return aflow.write_poscar_from_prototype(
@@ -1014,7 +1034,9 @@ def get_poscar_from_crystal_structure(
         raise e
 
 
-def get_atoms_from_crystal_structure(crystal_structure: Dict) -> Atoms:
+def get_atoms_from_crystal_structure(
+    crystal_structure: Dict, flat: bool = False
+) -> Atoms:
     """
     Generate an :class:`~ase.Atoms` object from the AFLOW Prototype Designation obtained
     from a KIM Property Instance. The following keys from
@@ -1035,6 +1057,8 @@ def get_atoms_from_crystal_structure(crystal_structure: Dict) -> Atoms:
     Args:
         crystal_structure:
             Dictionary containing the required keys in KIM Property Instance format
+        flat:
+            whether the dictionary is flattened
 
     Returns:
         Primitive unit cell of the crystal as defined in the
@@ -1046,7 +1070,7 @@ def get_atoms_from_crystal_structure(crystal_structure: Dict) -> Atoms:
             if the symmetry of the atoms object is different from ``prototype_label``
     """
     try:
-        poscar_string = get_poscar_from_crystal_structure(crystal_structure)
+        poscar_string = get_poscar_from_crystal_structure(crystal_structure, flat=flat)
     except AFLOW.ChangedSymmetryException as e:
         # re-raise, just indicating that this function knows about this exception
         raise e
