@@ -40,7 +40,7 @@ classifiers=[
 keywords = [ "kim-tools" , "kim_tools", "openkim", "crystal genome" ]
 
 [project.urls]
-Homepage = "https://github.com/openkim/kim-tools"
+Homepage = "https://kim-tools.readthedocs.io"
 Issues = "https://github.com/openkim/kim-tools/issues"
 
 [tool.setuptools.dynamic]
