@@ -1302,7 +1302,7 @@ class AFLOW:
                 equation_poscar = self.write_poscar_from_prototype(
                     prototype_label,
                     parameter_values=param_values,
-                    addtl_args="--equations_only",
+                    addtl_args="--add_equations",
                 )
                 break
             except subprocess.CalledProcessError:
@@ -1319,8 +1319,13 @@ class AFLOW:
         wyckoff_lists = get_wyckoff_lists_from_prototype(prototype_label)
         wyckoff_joined_list = "".join(wyckoff_lists)
 
-        coord_lines = equation_poscar.splitlines()[7:]
+        coord_lines = equation_poscar.splitlines()
         coord_iter = iter(coord_lines)
+        seen_this_many_lines_starting_with_direct = 0
+        while seen_this_many_lines_starting_with_direct < 2:
+            line = next(coord_iter)
+            if line.startswith("Direct("):
+                seen_this_many_lines_starting_with_direct += 1
 
         space_group_number = get_space_group_number_from_prototype(prototype_label)
 

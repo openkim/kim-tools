@@ -254,9 +254,6 @@ def test_get_equations_from_prototype(input_crystal_structures):
         prototype_label = material["prototype-label"]["source-value"]
         parameter_names = aflow.get_param_names_from_prototype(prototype_label)
         _, internal_parameter_names_ref = split_parameter_array(parameter_names)
-        # TODO: Fix this
-        if prototype_label.split("_")[1][:2] == "hR":
-            continue
         parameter_values = [material["a"]["source-value"]]
         if "parameter-values" in material:
             parameter_values += material["parameter-values"]["source-value"]
@@ -369,10 +366,6 @@ def test_solve_for_params_of_known_prototype(input_crystal_structures):
         prototype_label = material["prototype-label"]["source-value"]
 
         bravais_lattice = get_bravais_lattice_from_prototype(prototype_label)
-
-        # TODO: Fix this
-        if bravais_lattice == "hR":
-            continue
 
         bravais_lattice = get_bravais_lattice_from_prototype(prototype_label)
         spacegroup = get_space_group_number_from_prototype(prototype_label)
