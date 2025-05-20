@@ -24,6 +24,19 @@ _units_output_expression = re.compile(
 )
 
 
+def check_units_util():
+    """
+    Check that units util can be found
+    """
+    try:
+        subprocess.check_output(["units", "--help"])
+    except Exception:
+        raise UnitConversion(
+            "Failed to run a 'units' test command. It is likely "
+            "that the 'units' executable was not found."
+        )
+
+
 def linear_fit(x, y):
     """
     Perform a linear fit between x,y, returning the average error for each data
@@ -55,6 +68,7 @@ def islinear(unit, to_unit=None):
 
 def convert_units(from_value, from_unit, wanted_unit=None, suppress_unit=False):
     """Works with 'units' utility"""
+    check_units_util()
     from_sign = from_value < 0
     from_value = str(abs(from_value))
     from_unit = str(from_unit)
