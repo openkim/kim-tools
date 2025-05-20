@@ -131,6 +131,42 @@ def cartesian_to_fractional_itc_rotation_from_ase_cell(
     return np.transpose(cell_arr @ cart_rot_arr @ np.linalg.inv(cell_arr))
 
 
+def fractional_to_cartesian_itc_rotation_from_ase_cell(
+    frac_rot: ArrayLike, cell: ArrayLike
+) -> ArrayLike:
+    """
+    Convert fractional to Cartesian rotation. Read the arguments and returns carefully,
+    as there is some unfortunate mixing of row and columns because of the different
+    conventions of the ITC and ASE and other simulation packages
+
+    Args:
+        frac_rot:
+            The fractional rotation in ITC convention, i.e. for left-multiplying column
+            vectors. Here the distinction with a matrix's transpose DOES matter, because
+            the fractional coordinate system is not orthonormal.
+        cell:
+            The cell of the crystal, with each row being a cartesian vector
+            representing a lattice vector. This is consistent with most simulation
+            packages, but transposed from the ITC
+
+    Returns:
+        Cartesian rotation. It is assumed that this is for left-multiplying column
+        vectors, although in cases where we don't care if we're working with the
+        rotation or its inverse (e.g. when checking whether or not it's in the
+        point group), this doesn't matter due to orthogonality
+    """
+
+    cell_arr = np.asarray(cell)
+    frac_rot_arr = np.asarray(frac_rot)
+
+    if not ((cell_arr.shape == (3, 3)) and (frac_rot_arr.shape == (3, 3))):
+        raise IncorrectCrystallographyException(
+            "Either the rotation matrix or the cell provided were not 3x3 matrices"
+        )
+
+    return np.transpose(np.linalg.inv(cell_arr) @ frac_rot_arr @ cell_arr)
+
+
 def cartesian_rotation_is_in_point_group(
     cart_rot: ArrayLike, sgnum: Union[int, str], cell: ArrayLike
 ) -> bool:

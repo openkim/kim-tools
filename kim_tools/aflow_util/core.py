@@ -719,6 +719,11 @@ class AFLOW:
 
     """
 
+    class AFLOWNotFoundException(Exception):
+        """
+        Raised when the AFLOW executable is not found
+        """
+
     class ChangedSymmetryException(Exception):
         """
         Raised when an unexpected symmetry change is detected
@@ -744,6 +749,15 @@ class AFLOW:
             np: Sets :attr:`np`
         """
         self.aflow_executable = aflow_executable
+
+        try:
+            subprocess.check_output(["aflow", "--proto=A_cF4_225_a"])
+        except Exception:
+            raise self.AFLOWNotFoundException(
+                "Failed to run an AFLOW test command. It is likely "
+                "that the AFLOW executable was not found."
+            )
+
         self.np = np
         if aflow_work_dir != "" and not aflow_work_dir.endswith("/"):
             self.aflow_work_dir = aflow_work_dir + "/"
