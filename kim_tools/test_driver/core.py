@@ -1219,7 +1219,7 @@ class SingleCrystalTestDriver(KIMTestDriver):
                 logger.info(msg)
 
     def _update_nominal_parameter_values(
-        self, atoms: Atoms, max_resid: float = 1e-5
+        self, atoms: Atoms, max_resid: float = 1e-5, cell_rtol: float = 0.01
     ) -> None:
         """
         Update the nominal parameter values of the nominal crystal structure from the
@@ -1251,6 +1251,8 @@ class SingleCrystalTestDriver(KIMTestDriver):
             max_resid:
                 Maximum residual allowed when attempting to match the fractional
                 positions of the atoms to the crystallographic equations
+            cell_rtol:
+                Relative tolerance on cell lengths and angles
 
         Raises:
             AFLOW.FailedToMatchException:
@@ -1269,6 +1271,7 @@ class SingleCrystalTestDriver(KIMTestDriver):
                     "source-value"
                 ],
                 max_resid=max_resid,
+                cell_rtol=cell_rtol,
             )
         except (AFLOW.FailedToMatchException, AFLOW.ChangedSymmetryException) as e:
             raise type(e)(
