@@ -19,9 +19,7 @@ def test_change_of_basis_atoms(
 ):
     calc = KIM("LJ_ElliottAkerson_2015_Universal__MO_959249795837_003")
     atoms_conventional.calc = calc
-    crystal_structure = get_crystal_structure_from_atoms(
-        atoms_conventional, get_short_name=False
-    )
+    crystal_structure = get_crystal_structure_from_atoms(atoms_conventional)
     prototype_label = crystal_structure["prototype-label"]["source-value"]
     sgnum = get_space_group_number_from_prototype(prototype_label)
     formal_bravais_lattice = get_formal_bravais_lattice_from_space_group(sgnum)
