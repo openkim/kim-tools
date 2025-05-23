@@ -1431,7 +1431,11 @@ class AFLOW:
         return equation_sets
 
     def solve_for_params_of_known_prototype(
-        self, atoms: Atoms, prototype_label: str, max_resid: float = 1e-5
+        self,
+        atoms: Atoms,
+        prototype_label: str,
+        max_resid: float = 1e-5,
+        cell_rtol: float = 0.01,
     ) -> List[float]:
         """
         Given an Atoms object that is a primitive cell of its Bravais lattice as
@@ -1456,6 +1460,8 @@ class AFLOW:
             max_resid:
                 Maximum residual allowed when attempting to match the fractional
                 positions of the atoms to the crystallographic equations
+            cell_rtol:
+                Relative tolerance on cell lengths and angles
 
         Returns:
             List of free parameters that will regenerate `atoms` (up to permutations,
@@ -1654,7 +1660,11 @@ class AFLOW:
                 # The internal shift may have taken us to an internal parameter
                 # solution that represents a rotation, so we need to check
                 if self.confirm_unrotated_prototype_designation(
-                    atoms, species, prototype_label, candidate_prototype_param_values
+                    atoms,
+                    species,
+                    prototype_label,
+                    candidate_prototype_param_values,
+                    cell_rtol,
                 ):
                     logger.info(
                         f"Found set of parameters for prototype {prototype_label} "
@@ -1684,8 +1694,7 @@ class AFLOW:
         test_atoms: Atoms,
         ref_atoms: Atoms,
         sgnum: Union[int, str],
-        rtol: float = 1.0e-4,
-        atol: float = 1.0e-8,
+        rtol: float = 0.01,
     ) -> bool:
         """
         Check whether `test_atoms` and `reference_atoms` are unrotated as follows:
@@ -1708,12 +1717,10 @@ class AFLOW:
             sgnum:
                 Space group number
             rtol:
-                Parameter to pass to :func:`numpy.allclose` for comparing cell params
-            atol:
-                Parameter to pass to :func:`numpy.allclose` for comparing cell params
+                Parameter to pass to :func:`numpy.allclose` for comparing cell params.
         """
         if not np.allclose(
-            ref_atoms.cell.cellpar(), test_atoms.cell.cellpar(), atol=atol, rtol=rtol
+            ref_atoms.cell.cellpar(), test_atoms.cell.cellpar(), rtol=rtol
         ):
             logger.info(
                 "Cell lengths and angles do not match.\n"
@@ -1755,8 +1762,7 @@ class AFLOW:
         species: List[str],
         prototype_label: str,
         parameter_values: List[float],
-        rtol: float = 1.0e-4,
-        atol: float = 1.0e-8,
+        rtol: float = 0.01,
     ) -> bool:
         """
         Check whether the provided prototype designation recreates ``reference_atoms``
@@ -1780,8 +1786,6 @@ class AFLOW:
                 The free parameters of the AFLOW prototype designation
             rtol:
                 Parameter to pass to :func:`numpy.allclose` for comparing cell params
-            atol:
-                Parameter to pass to :func:`numpy.allclose` for comparing cell params
 
         Returns:
             Whether or not the crystals match
@@ -1797,5 +1801,4 @@ class AFLOW:
             reference_atoms,
             get_space_group_number_from_prototype(prototype_label),
             rtol,
-            atol,
         )

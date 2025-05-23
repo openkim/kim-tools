@@ -1218,7 +1218,9 @@ class SingleCrystalTestDriver(KIMTestDriver):
                 print(f"\nNOTE: {msg}\n")
                 logger.info(msg)
 
-    def _update_nominal_parameter_values(self, atoms: Atoms) -> None:
+    def _update_nominal_parameter_values(
+        self, atoms: Atoms, max_resid: float = 1e-5, cell_rtol: float = 0.01
+    ) -> None:
         """
         Update the nominal parameter values of the nominal crystal structure from the
         provided :class:`~ase.Atoms` object. It is assumed that the crystallographic
@@ -1246,6 +1248,11 @@ class SingleCrystalTestDriver(KIMTestDriver):
 
         Args:
             atoms: Structure to analyze to get the new parameter values
+            max_resid:
+                Maximum residual allowed when attempting to match the fractional
+                positions of the atoms to the crystallographic equations
+            cell_rtol:
+                Relative tolerance on cell lengths and angles
 
         Raises:
             AFLOW.FailedToMatchException:
@@ -1259,8 +1266,12 @@ class SingleCrystalTestDriver(KIMTestDriver):
 
         try:
             aflow_parameter_values = AFLOW().solve_for_params_of_known_prototype(
-                atoms,
-                self.__nominal_crystal_structure_npt["prototype-label"]["source-value"],
+                atoms=atoms,
+                prototype_label=self.__nominal_crystal_structure_npt["prototype-label"][
+                    "source-value"
+                ],
+                max_resid=max_resid,
+                cell_rtol=cell_rtol,
             )
         except (AFLOW.FailedToMatchException, AFLOW.ChangedSymmetryException) as e:
             raise type(e)(
