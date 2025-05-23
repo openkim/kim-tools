@@ -1116,9 +1116,7 @@ class AFLOW:
                 misfit_min_overall = struct["misfit"]
                 library_proto_overall = struct["name"]
                 found_overall = True
-            if struct["misfit"] < misfit_min_inlist and any(
-                proto in struct["name"] for proto in shortnames
-            ):
+            if struct["misfit"] < misfit_min_inlist and struct["name"] in shortnames:
                 misfit_min_inlist = struct["misfit"]
                 library_proto_inlist = struct["name"]
                 found_inlist = True
