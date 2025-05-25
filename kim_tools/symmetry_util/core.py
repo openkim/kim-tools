@@ -168,7 +168,11 @@ def fractional_to_cartesian_itc_rotation_from_ase_cell(
 
 
 def cartesian_rotation_is_in_point_group(
-    cart_rot: ArrayLike, sgnum: Union[int, str], cell: ArrayLike
+    cart_rot: ArrayLike,
+    sgnum: Union[int, str],
+    cell: ArrayLike,
+    rtol: float = 1e-2,
+    atol: float = 1e-2,
 ) -> bool:
     """
     Check that a Cartesian rotation is in the point group of a crystal given by its
@@ -184,6 +188,14 @@ def cartesian_rotation_is_in_point_group(
             http://doi.org/10.1016/j.commatsci.2017.01.017, with each row being a
             cartesian vector representing a lattice vector. This is
             consistent with most simulation packages, but transposed from the ITC
+        rtol:
+            Parameter to pass to :func:`numpy.allclose` for compariong fractional
+            rotations. Default value chosen to be commensurate with AFLOW
+            default distance tolerance of 0.01*(NN distance)
+        atol:
+            Parameter to pass to :func:`numpy.allclose` for compariong fractional
+            rotations. Default value chosen to be commensurate with AFLOW
+            default distance tolerance of 0.01*(NN distance)
     """
     # we don't care about properly transposing (i.e. worrying whether it's operating on
     # row or column vectors) the input cart_rot because that one is orthogonal, and
@@ -192,9 +204,11 @@ def cartesian_rotation_is_in_point_group(
 
     space_group_ops = get_primitive_genpos_ops(sgnum)
 
+    logger.info(f"Attempting to match fractional rotation:\n{frac_rot}")
+
     for op in space_group_ops:
-        if np.allclose(frac_rot, op["W"], atol=1e-4):
-            logger.info("Found matching rotation")
+        if np.allclose(frac_rot, op["W"], rtol=rtol, atol=atol):
+            logger.info(f"Found matching rotation with point group op:\n{op['W']}")
             return True
 
     logger.info("No matching rotation found")
