@@ -1219,7 +1219,12 @@ class SingleCrystalTestDriver(KIMTestDriver):
                 logger.info(msg)
 
     def _update_nominal_parameter_values(
-        self, atoms: Atoms, max_resid: float = 1e-5, cell_rtol: float = 0.01
+        self,
+        atoms: Atoms,
+        max_resid: Optional[float] = None,
+        cell_rtol: float = 0.01,
+        rot_rtol: float = 0.01,
+        rot_atol: float = 0.01,
     ) -> None:
         """
         Update the nominal parameter values of the nominal crystal structure from the
@@ -1250,9 +1255,20 @@ class SingleCrystalTestDriver(KIMTestDriver):
             atoms: Structure to analyze to get the new parameter values
             max_resid:
                 Maximum residual allowed when attempting to match the fractional
-                positions of the atoms to the crystallographic equations
+                positions of the atoms to the crystallographic equations.
+                If not provided, this is automatically set to 0.01*(minimum NN distance)
             cell_rtol:
-                Relative tolerance on cell lengths and angles
+                Relative tolerance on cell lengths and angles.
+                Justification for default value: AFLOW uses 0.01*(minimum NN distance)
+                as default tolerance.
+            rot_rtol:
+                Parameter to pass to :func:`numpy.allclose` for compariong fractional
+                rotations. Default value chosen to be commensurate with AFLOW
+                default distance tolerance of 0.01*(NN distance)
+            rot_atol:
+                Parameter to pass to :func:`numpy.allclose` for compariong fractional
+                rotations. Default value chosen to be commensurate with AFLOW
+                default distance tolerance of 0.01*(NN distance)
 
         Raises:
             AFLOW.FailedToMatchException:
@@ -1272,6 +1288,8 @@ class SingleCrystalTestDriver(KIMTestDriver):
                 ],
                 max_resid=max_resid,
                 cell_rtol=cell_rtol,
+                rot_rtol=rot_rtol,
+                rot_atol=rot_atol,
             )
         except (AFLOW.FailedToMatchException, AFLOW.ChangedSymmetryException) as e:
             raise type(e)(
@@ -1516,7 +1534,10 @@ class SingleCrystalTestDriver(KIMTestDriver):
     def deduplicate_property_instances(
         self,
         properties_to_deduplicate: Optional[List[str]] = None,
-        allow_rotation: bool = True,
+        allow_rotation: bool = False,
+        aflow_np: int = 4,
+        rot_rtol: float = 0.01,
+        rot_atol: float = 0.01,
     ) -> None:
         """
         In the internally stored property instances,
@@ -1537,9 +1558,26 @@ class SingleCrystalTestDriver(KIMTestDriver):
             allow_rotation:
                 Whether or not structures that are rotated by a rotation that is not in
                 the crystal's point group are considered identical
+            aflow_np:
+                Number of processors to use to run the AFLOW executable
+            rot_rtol:
+                Parameter to pass to :func:`numpy.allclose` for compariong fractional
+                rotations. Default value chosen to be commensurate with AFLOW
+                default distance tolerance of 0.01*(NN distance). Used only if
+                `allow_rotation` is False
+            rot_atol:
+                Parameter to pass to :func:`numpy.allclose` for compariong fractional
+                rotations. Default value chosen to be commensurate with AFLOW
+                default distance tolerance of 0.01*(NN distance). Used only if
+                `allow_rotation` is False
         """
         deduplicated_property_instances = get_deduplicated_property_instances(
-            self.property_instances, properties_to_deduplicate, allow_rotation
+            property_instances=self.property_instances,
+            properties_to_deduplicate=properties_to_deduplicate,
+            allow_rotation=allow_rotation,
+            aflow_np=aflow_np,
+            rot_rtol=rot_rtol,
+            rot_atol=rot_atol,
         )
         logger.info(
             f"Deduplicated {len(self.property_instances)} Property Instances "
@@ -1743,8 +1781,10 @@ def query_crystal_structures(
 
 def detect_unique_crystal_structures(
     crystal_structures: Union[List[Dict], Dict],
-    allow_rotation: bool = True,
+    allow_rotation: bool = False,
     aflow_np: int = 4,
+    rot_rtol: float = 0.01,
+    rot_atol: float = 0.01,
 ) -> Dict:
     """
     Detect which of the provided crystal structures is unique
@@ -1761,6 +1801,18 @@ def detect_unique_crystal_structures(
         allow_rotation:
             Whether or not structures that are rotated by a rotation that is not in the
             crystal's point group are considered identical
+        aflow_np:
+            Number of processors to use to run the AFLOW executable
+        rot_rtol:
+            Parameter to pass to :func:`numpy.allclose` for compariong fractional
+            rotations. Default value chosen to be commensurate with AFLOW
+            default distance tolerance of 0.01*(NN distance). Used only if
+            `allow_rotation` is False
+        rot_atol:
+            Parameter to pass to :func:`numpy.allclose` for compariong fractional
+            rotations. Default value chosen to be commensurate with AFLOW
+            default distance tolerance of 0.01*(NN distance). Used only if
+            `allow_rotation` is False
     Returns:
         Dictionary with keys corresponding to indices of unique structures and values
         being lists of indices of their duplicates
@@ -1813,7 +1865,13 @@ def detect_unique_crystal_structures(
                     "structures_duplicate"
                 ]:
                     cart_rot = potential_rotated_duplicate["rotation"]
-                    if not cartesian_rotation_is_in_point_group(cart_rot, sgnum, cell):
+                    if not cartesian_rotation_is_in_point_group(
+                        cart_rot=cart_rot,
+                        sgnum=sgnum,
+                        cell=cell,
+                        rtol=rot_rtol,
+                        atol=rot_atol,
+                    ):
                         i_rot_dup = int(
                             potential_rotated_duplicate["name"].split("/")[-1]
                         )
@@ -1825,7 +1883,11 @@ def detect_unique_crystal_structures(
 
                 unique_materials.update(
                     detect_unique_crystal_structures(
-                        rotated_structures, False, aflow_np
+                        crystal_structures=rotated_structures,
+                        allow_rotation=False,
+                        aflow_np=aflow_np,
+                        rot_rtol=rot_rtol,
+                        rot_atol=rot_atol,
                     )
                 )
 
@@ -1835,7 +1897,10 @@ def detect_unique_crystal_structures(
 def get_deduplicated_property_instances(
     property_instances: List[Dict],
     properties_to_deduplicate: Optional[List[str]] = None,
-    allow_rotation: bool = True,
+    allow_rotation: bool = False,
+    aflow_np: int = 4,
+    rot_rtol: float = 0.01,
+    rot_atol: float = 0.01,
 ) -> List[Dict]:
     """
     Given a list of dictionaries constituting KIM Property instances,
@@ -1858,6 +1923,18 @@ def get_deduplicated_property_instances(
         allow_rotation:
             Whether or not structures that are rotated by a rotation that is not in the
             crystal's point group are considered identical
+        aflow_np:
+            Number of processors to use to run the AFLOW executable
+        rot_rtol:
+            Parameter to pass to :func:`numpy.allclose` for compariong fractional
+            rotations. Default value chosen to be commensurate with AFLOW
+            default distance tolerance of 0.01*(NN distance). Used only if
+            `allow_rotation` is False
+        rot_atol:
+            Parameter to pass to :func:`numpy.allclose` for compariong fractional
+            rotations. Default value chosen to be commensurate with AFLOW
+            default distance tolerance of 0.01*(NN distance). Used only if
+            `allow_rotation` is False
 
     Returns:
         The deduplicated property instances
@@ -1887,7 +1964,11 @@ def get_deduplicated_property_instances(
 
         # Get unique-duplicate dictionary
         unique_crystal_structures = detect_unique_crystal_structures(
-            property_instances_curr_name, allow_rotation
+            crystal_structures=property_instances_curr_name,
+            allow_rotation=allow_rotation,
+            aflow_np=aflow_np,
+            rot_rtol=rot_rtol,
+            rot_atol=rot_atol,
         )
 
         # Put together the list of unique instances for the current

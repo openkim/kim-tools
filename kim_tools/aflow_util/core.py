@@ -18,6 +18,7 @@ import ase
 import numpy as np
 from ase import Atoms
 from ase.cell import Cell
+from ase.neighborlist import natural_cutoffs, neighbor_list
 from numpy.typing import ArrayLike
 from sympy import Symbol, linear_eq_to_matrix, matrix2numpy, parse_expr
 
@@ -1427,8 +1428,10 @@ class AFLOW:
         self,
         atoms: Atoms,
         prototype_label: str,
-        max_resid: float = 1e-5,
+        max_resid: Optional[float] = None,
         cell_rtol: float = 0.01,
+        rot_rtol: float = 0.01,
+        rot_atol: float = 0.01,
     ) -> List[float]:
         """
         Given an Atoms object that is a primitive cell of its Bravais lattice as
@@ -1453,8 +1456,19 @@ class AFLOW:
             max_resid:
                 Maximum residual allowed when attempting to match the fractional
                 positions of the atoms to the crystallographic equations
+                If not provided, this is automatically set to 0.01*(minimum NN distance)
             cell_rtol:
                 Relative tolerance on cell lengths and angles
+                Justification for default value: AFLOW uses 0.01*(minimum NN distance)
+                as default tolerance.
+            rot_rtol:
+                Parameter to pass to :func:`numpy.allclose` for compariong fractional
+                rotations. Default value chosen to be commensurate with AFLOW
+                default distance tolerance of 0.01*(NN distance)
+            rot_atol:
+                Parameter to pass to :func:`numpy.allclose` for compariong fractional
+                rotations. Default value chosen to be commensurate with AFLOW
+                default distance tolerance of 0.01*(NN distance)
 
         Returns:
             List of free parameters that will regenerate `atoms` (up to permutations,
@@ -1467,6 +1481,25 @@ class AFLOW:
                 if AFLOW fails to match the re-generated crystal to the input crystal
 
         """
+        # If max_resid not provided, determine it from neighborlist
+        if max_resid is None:
+            nl_len = 0
+            cov_mult = 1
+            while nl_len == 0:
+                logger.info(
+                    "Attempting to find NN distance by searching "
+                    f"within covalent radii times {cov_mult}"
+                )
+                nl = neighbor_list("d", atoms, natural_cutoffs(atoms, mult=cov_mult))
+                nl_len = nl.size
+                cov_mult += 1
+            # set the maximum error to 1% of NN distance to follow AFLOW convention
+            max_resid = nl.min() * 0.01
+            logger.info(
+                "Automatically set max residual for solving position "
+                f"equations to {max_resid}"
+            )
+
         # solve for cell parameters
         cell_params = solve_for_aflow_cell_params_from_primitive_ase_cell_params(
             atoms.cell.cellpar(), prototype_label
@@ -1653,11 +1686,13 @@ class AFLOW:
                 # The internal shift may have taken us to an internal parameter
                 # solution that represents a rotation, so we need to check
                 if self.confirm_unrotated_prototype_designation(
-                    atoms,
-                    species,
-                    prototype_label,
-                    candidate_prototype_param_values,
-                    cell_rtol,
+                    reference_atoms=atoms,
+                    species=species,
+                    prototype_label=prototype_label,
+                    parameter_values=candidate_prototype_param_values,
+                    cell_rtol=cell_rtol,
+                    rot_rtol=rot_rtol,
+                    rot_atol=rot_atol,
                 ):
                     logger.info(
                         f"Found set of parameters for prototype {prototype_label} "
@@ -1687,7 +1722,9 @@ class AFLOW:
         test_atoms: Atoms,
         ref_atoms: Atoms,
         sgnum: Union[int, str],
-        rtol: float = 0.01,
+        cell_rtol: float = 0.01,
+        rot_rtol: float = 0.01,
+        rot_atol: float = 0.01,
     ) -> bool:
         """
         Check whether `test_atoms` and `reference_atoms` are unrotated as follows:
@@ -1709,11 +1746,21 @@ class AFLOW:
                 Primitive cell of a crystal
             sgnum:
                 Space group number
-            rtol:
+            cell_rtol:
                 Parameter to pass to :func:`numpy.allclose` for comparing cell params.
+                Justification for default value: AFLOW uses 0.01*(minimum NN distance)
+                as default tolerance.
+            rot_rtol:
+                Parameter to pass to :func:`numpy.allclose` for compariong fractional
+                rotations. Default value chosen to be commensurate with AFLOW
+                default distance tolerance of 0.01*(NN distance)
+            rot_atol:
+                Parameter to pass to :func:`numpy.allclose` for compariong fractional
+                rotations. Default value chosen to be commensurate with AFLOW
+                default distance tolerance of 0.01*(NN distance)
         """
         if not np.allclose(
-            ref_atoms.cell.cellpar(), test_atoms.cell.cellpar(), rtol=rtol
+            ref_atoms.cell.cellpar(), test_atoms.cell.cellpar(), rtol=cell_rtol
         ):
             logger.info(
                 "Cell lengths and angles do not match.\n"
@@ -1746,7 +1793,11 @@ class AFLOW:
             return False
 
         return cartesian_rotation_is_in_point_group(
-            cart_rot, sgnum, test_atoms_copy.cell
+            cart_rot=cart_rot,
+            sgnum=sgnum,
+            cell=test_atoms_copy.cell,
+            rtol=rot_rtol,
+            atol=rot_atol,
         )
 
     def confirm_unrotated_prototype_designation(
@@ -1755,7 +1806,9 @@ class AFLOW:
         species: List[str],
         prototype_label: str,
         parameter_values: List[float],
-        rtol: float = 0.01,
+        cell_rtol: float = 0.01,
+        rot_rtol: float = 0.01,
+        rot_atol: float = 0.01,
     ) -> bool:
         """
         Check whether the provided prototype designation recreates ``reference_atoms``
@@ -1777,8 +1830,18 @@ class AFLOW:
                 without specified atomic species
             parameter_values:
                 The free parameters of the AFLOW prototype designation
-            rtol:
+            cell_rtol:
                 Parameter to pass to :func:`numpy.allclose` for comparing cell params
+                Justification for default value: AFLOW uses 0.01*(minimum NN distance)
+                as default tolerance.
+            rot_rtol:
+                Parameter to pass to :func:`numpy.allclose` for compariong fractional
+                rotations. Default value chosen to be commensurate with AFLOW
+                default distance tolerance of 0.01*(NN distance)
+            rot_atol:
+                Parameter to pass to :func:`numpy.allclose` for compariong fractional
+                rotations. Default value chosen to be commensurate with AFLOW
+                default distance tolerance of 0.01*(NN distance)
 
         Returns:
             Whether or not the crystals match
@@ -1790,8 +1853,10 @@ class AFLOW:
         )
 
         return self.confirm_atoms_unrotated_when_cells_aligned(
-            test_atoms,
-            reference_atoms,
-            get_space_group_number_from_prototype(prototype_label),
-            rtol,
+            test_atoms=test_atoms,
+            ref_atoms=reference_atoms,
+            sgnum=get_space_group_number_from_prototype(prototype_label),
+            cell_rtol=cell_rtol,
+            rot_rtol=rot_rtol,
+            rot_atol=rot_atol,
         )
