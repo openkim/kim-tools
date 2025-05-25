@@ -3,6 +3,8 @@
 *.egg
 *scratch*
 
+.vscode/
+
 # PyPI-specific dirs
 dist/
 build/
