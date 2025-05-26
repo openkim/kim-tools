@@ -8,9 +8,8 @@ import subprocess
 import sys
 from curses.ascii import isalpha, isdigit
 from dataclasses import dataclass
-from math import acos, cos, degrees, radians, sin, sqrt
+from math import acos, cos, degrees, radians, sqrt
 from os import PathLike
-from random import random
 from tempfile import NamedTemporaryFile
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -63,7 +62,7 @@ __all__ = [
     "AFLOW",
 ]
 
-AFLOW_EXECUTABLE = "aflow"
+AFLOW_EXECUTABLE = "/home/openkim/aflow-v4.0.4.2/build/release_vcpkg/aflow"
 
 
 class IncorrectSpaceGroupException(Exception):
@@ -1285,52 +1284,10 @@ class AFLOW:
                 - const_terms_list: A list of 3 x 1 columns of constant terms in the
                   coordinates.
         """
-        param_names = self.get_param_names_from_prototype(prototype_label)
-        MAX_ATTEMPTS = 20
-        ANGLE_NAMES = ["alpha", "beta", "gamma"]
-        for i in range(MAX_ATTEMPTS):
-            param_values = []
-            triclinic = False
-            if all([angle_name in param_names for angle_name in ANGLE_NAMES]):
-                triclinic = True
-                beta = 5 + random() * 165
-                gamma = 5 + random() * 165
-                beta_rad = radians(beta)
-                gamma_rad = radians(gamma)
-                max_cosalpha = abs(sin(beta_rad) * sin(gamma_rad)) + cos(
-                    beta_rad
-                ) * cos(gamma_rad)
-                min_cosalpha = -abs(sin(beta_rad) * sin(gamma_rad)) + cos(
-                    beta_rad
-                ) * cos(gamma_rad)
-                cosalpha = min_cosalpha + random() * (max_cosalpha - min_cosalpha)
-                alpha = degrees(acos(cosalpha))
-                angles_dict = {"alpha": alpha, "beta": beta, "gamma": gamma}
-
-            for pname in param_names:
-                if pname in ANGLE_NAMES:
-                    if triclinic:
-                        param_values.append(angles_dict[pname])
-                    else:
-                        param_values.append(180.0 * random())
-                else:
-                    param_values.append(random())
-
-            try:
-                equation_poscar = self.write_poscar_from_prototype(
-                    prototype_label,
-                    parameter_values=param_values,
-                    addtl_args="--add_equations",
-                )
-                break
-            except subprocess.CalledProcessError:
-                if i == MAX_ATTEMPTS - 1:
-                    raise RuntimeError(
-                        "Random parameters failed to pass "
-                        "AFLOW checks 20 times in a row"
-                    )
-                else:
-                    pass
+        equation_poscar = self.write_poscar_from_prototype(
+            prototype_label,
+            addtl_args="--equations_only",
+        )
 
         # get a string with one character per Wyckoff position
         # (with possible repeated letters for positions with free params)
@@ -1339,11 +1296,11 @@ class AFLOW:
 
         coord_lines = equation_poscar.splitlines()
         coord_iter = iter(coord_lines)
-        seen_this_many_lines_starting_with_direct = 0
-        while seen_this_many_lines_starting_with_direct < 2:
+        reading_coord = False
+        while not reading_coord:
             line = next(coord_iter)
-            if line.startswith("Direct("):
-                seen_this_many_lines_starting_with_direct += 1
+            if line.startswith("BEGIN EQUATIONS WITH WYCKOFF"):
+                reading_coord = True
 
         space_group_number = get_space_group_number_from_prototype(prototype_label)
 
@@ -1361,8 +1318,8 @@ class AFLOW:
             ):
                 line_split = next(coord_iter).split()
                 if species is None:
-                    species = line_split[3]
-                elif line_split[3] != species:
+                    species = line_split[4]
+                elif line_split[4] != species:
                     raise InconsistentWyckoffException(
                         "Encountered different species within what I thought should be "
                         f"the lines corresponding to Wyckoff position {wyckoff_letter}"
@@ -1372,7 +1329,7 @@ class AFLOW:
                 # first, get the free parameters of this line
                 curr_line_free_params = set()  # sympy.Symbol
                 coordinate_expr_list = []
-                for expression_string in line_split[:3]:
+                for expression_string in line_split[1:4]:
                     coordinate_expr = parse_expr(expression_string)
                     curr_line_free_params.update(coordinate_expr.free_symbols)
                     coordinate_expr_list.append(coordinate_expr)
