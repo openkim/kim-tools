@@ -65,6 +65,7 @@ from ..aflow_util import (
     get_space_group_number_from_prototype,
     prototype_labels_are_equivalent,
 )
+from ..aflow_util.core import AFLOW_EXECUTABLE
 from ..kimunits import convert_list, convert_units
 from ..symmetry_util import (
     cartesian_rotation_is_in_point_group,
@@ -730,6 +731,7 @@ def _add_common_crystal_genome_keys_to_current_property_instance(
     a_unit: str = "angstrom",
     cell_cauchy_stress_unit: str = "eV/angstrom^3",
     temperature_unit: str = "K",
+    aflow_executable: str = AFLOW_EXECUTABLE,
 ) -> str:
     """
     Write common Crystal Genome keys to the last element of ``property_instances``. See
@@ -741,6 +743,8 @@ def _add_common_crystal_genome_keys_to_current_property_instance(
         property_instances:
             An EDN-serialized list of dictionaries representing KIM Property Instances.
             The key will be added to the last dictionary in the list
+        aflow_executable:
+            Path to the AFLOW executable
 
     Returns:
         Updated EDN-serialized list of property instances
@@ -756,7 +760,7 @@ def _add_common_crystal_genome_keys_to_current_property_instance(
     )
 
     # get parameter names
-    aflow = AFLOW()
+    aflow = AFLOW(aflow_executable=aflow_executable)
     aflow_parameter_names = aflow.get_param_names_from_prototype(prototype_label)
     if parameter_values is None:
         if len(aflow_parameter_names) > 1:
@@ -833,6 +837,7 @@ def _add_property_instance_and_common_crystal_genome_keys(
     temperature_unit: str = "K",
     disclaimer: Optional[str] = None,
     property_instances: Optional[str] = None,
+    aflow_executable: str = AFLOW_EXECUTABLE,
 ) -> str:
     """
     Initialize a new property instance to ``property_instances`` (an empty
@@ -853,6 +858,8 @@ def _add_property_instance_and_common_crystal_genome_keys(
             "This relaxation did not reach the desired tolerance."
         property_instances:
             A pre-existing EDN-serialized list of KIM Property instances to add to
+        aflow_executable:
+            Path to the AFLOW executable
 
     Returns:
             Updated EDN-serialized list of property instances
@@ -861,24 +868,29 @@ def _add_property_instance_and_common_crystal_genome_keys(
         property_name, disclaimer, property_instances
     )
     return _add_common_crystal_genome_keys_to_current_property_instance(
-        property_instances,
-        prototype_label,
-        stoichiometric_species,
-        a,
-        parameter_values,
-        library_prototype_label,
-        short_name,
-        cell_cauchy_stress,
-        temperature,
-        crystal_genome_source_structure_id,
-        a_unit,
-        cell_cauchy_stress_unit,
-        temperature_unit,
+        property_instances=property_instances,
+        prototype_label=prototype_label,
+        stoichiometric_species=stoichiometric_species,
+        a=a,
+        parameter_values=parameter_values,
+        library_prototype_label=library_prototype_label,
+        short_name=short_name,
+        cell_cauchy_stress=cell_cauchy_stress,
+        temperature=temperature,
+        crystal_genome_source_structure_id=crystal_genome_source_structure_id,
+        a_unit=a_unit,
+        cell_cauchy_stress_unit=cell_cauchy_stress_unit,
+        temperature_unit=temperature_unit,
+        aflow_executable=aflow_executable,
     )
 
 
 def get_crystal_structure_from_atoms(
-    atoms: Atoms, get_short_name: bool = True, prim: bool = True, aflow_np: int = 4
+    atoms: Atoms,
+    get_short_name: bool = True,
+    prim: bool = True,
+    aflow_np: int = 4,
+    aflow_executable: str = AFLOW_EXECUTABLE,
 ) -> Dict:
     """
     By performing a symmetry analysis on an :class:`~ase.Atoms` object, generate a
@@ -896,6 +908,8 @@ def get_crystal_structure_from_atoms(
             whether to compare against AFLOW prototype library to obtain short-name
         prim: whether to primitivize the atoms object first
         aflow_np: Number of processors to use with AFLOW executable
+        aflow_executable:
+            Path to the AFLOW executable
 
     Returns:
         A dictionary that has the following Property Keys (possibly optionally) defined.
@@ -912,7 +926,7 @@ def get_crystal_structure_from_atoms(
         - "short-name"
 
     """
-    aflow = AFLOW(np=aflow_np)
+    aflow = AFLOW(aflow_executable=aflow_executable, np=aflow_np)
 
     proto_des = aflow.get_prototype_designation_from_atoms(atoms, prim=prim)
     library_prototype_label, short_name = (
@@ -936,13 +950,17 @@ def get_crystal_structure_from_atoms(
         parameter_values=parameter_values,
         library_prototype_label=library_prototype_label,
         short_name=short_name,
+        aflow_executable=aflow_executable,
     )
 
     return kim_edn.loads(property_instances)[0]
 
 
 def get_poscar_from_crystal_structure(
-    crystal_structure: Dict, output_file: Optional[str] = None, flat: bool = False
+    crystal_structure: Dict,
+    output_file: Optional[str] = None,
+    flat: bool = False,
+    aflow_executable: str = AFLOW_EXECUTABLE,
 ) -> Optional[str]:
     """
     Write a POSCAR coordinate file (or output it as a multiline string) from the AFLOW
@@ -968,6 +986,8 @@ def get_poscar_from_crystal_structure(
             Name of the output file. If not provided, the output is returned as a string
         flat:
             whether the input dictionary is flattened
+        aflow_executable:
+            path to AFLOW executable
     Returns:
         If ``output_file`` is not provided, a string in POSCAR format containg the
         primitive unit cell of the crystal as defined in
@@ -993,7 +1013,7 @@ def get_poscar_from_crystal_structure(
             "source-value"
         ]
 
-    aflow = AFLOW()
+    aflow = AFLOW(aflow_executable=aflow_executable)
     aflow_parameter_names = aflow.get_param_names_from_prototype(prototype_label)
 
     # Atoms objects are always in angstrom
@@ -1035,7 +1055,9 @@ def get_poscar_from_crystal_structure(
 
 
 def get_atoms_from_crystal_structure(
-    crystal_structure: Dict, flat: bool = False
+    crystal_structure: Dict,
+    flat: bool = False,
+    aflow_executable: str = AFLOW_EXECUTABLE,
 ) -> Atoms:
     """
     Generate an :class:`~ase.Atoms` object from the AFLOW Prototype Designation obtained
@@ -1059,6 +1081,8 @@ def get_atoms_from_crystal_structure(
             Dictionary containing the required keys in KIM Property Instance format
         flat:
             whether the dictionary is flattened
+        aflow_executable:
+            path to AFLOW executable
 
     Returns:
         Primitive unit cell of the crystal as defined in the
@@ -1070,7 +1094,9 @@ def get_atoms_from_crystal_structure(
             if the symmetry of the atoms object is different from ``prototype_label``
     """
     try:
-        poscar_string = get_poscar_from_crystal_structure(crystal_structure, flat=flat)
+        poscar_string = get_poscar_from_crystal_structure(
+            crystal_structure, flat=flat, aflow_executable=aflow_executable
+        )
     except AFLOW.ChangedSymmetryException as e:
         # re-raise, just indicating that this function knows about this exception
         raise e
@@ -1094,7 +1120,22 @@ class SingleCrystalTestDriver(KIMTestDriver):
             <https://openkim.org/properties/show/crystal-structure-npt>`_
             property representing the nominal crystal structure and conditions of the
             current call to the Test Driver.
+        aflow_executable [str]:
+            Path to the AFLOW executable
     """
+
+    def __init__(
+        self, model: Union[str, Calculator], aflow_executable: str = AFLOW_EXECUTABLE
+    ) -> None:
+        """
+        Args:
+            model:
+                ASE calculator or KIM model name to use
+            aflow_executable:
+                Path to AFLOW executable
+        """
+        self.aflow_executable = aflow_executable
+        super().__init__(model)
 
     def _setup(
         self,
@@ -1156,11 +1197,14 @@ class SingleCrystalTestDriver(KIMTestDriver):
                 simply provides recordkeeping of it. It is up to derived classes to
                 implement actually setting the temperature of the system.
         """
+
         if cell_cauchy_stress_eV_angstrom3 is None:
             cell_cauchy_stress_eV_angstrom3 = [0, 0, 0, 0, 0, 0]
 
         if isinstance(material, Atoms):
-            crystal_structure = get_crystal_structure_from_atoms(material)
+            crystal_structure = get_crystal_structure_from_atoms(
+                atoms=material, aflow_executable=self.aflow_executable
+            )
             msg = (
                 "Rebuilding atoms object in a standard setting defined by "
                 "doi.org/10.1016/j.commatsci.2017.01.017. See log file or computed "
@@ -1279,9 +1323,9 @@ class SingleCrystalTestDriver(KIMTestDriver):
                 If a more definitive error indicating a phase transformation is
                 encountered
         """
-
+        aflow = AFLOW(aflow_executable=self.aflow_executable)
         try:
-            aflow_parameter_values = AFLOW().solve_for_params_of_known_prototype(
+            aflow_parameter_values = aflow.solve_for_params_of_known_prototype(
                 atoms=atoms,
                 prototype_label=self.__nominal_crystal_structure_npt["prototype-label"][
                     "source-value"
@@ -1324,10 +1368,9 @@ class SingleCrystalTestDriver(KIMTestDriver):
             Whether or not the symmetry is unchanged
 
         """
+        aflow = AFLOW(aflow_executable=self.aflow_executable)
         return prototype_labels_are_equivalent(
-            AFLOW().get_prototype_designation_from_atoms(atoms)[
-                "aflow_prototype_label"
-            ],
+            aflow.get_prototype_designation_from_atoms(atoms)["aflow_prototype_label"],
             self.__nominal_crystal_structure_npt["prototype-label"]["source-value"],
         )
 
@@ -1443,6 +1486,7 @@ class SingleCrystalTestDriver(KIMTestDriver):
                 temperature_unit=temperature_unit,
                 disclaimer=disclaimer,
                 property_instances=super()._get_serialized_property_instances(),
+                aflow_executable=self.aflow_executable,
             )
         )
 
@@ -1578,6 +1622,7 @@ class SingleCrystalTestDriver(KIMTestDriver):
             aflow_np=aflow_np,
             rot_rtol=rot_rtol,
             rot_atol=rot_atol,
+            aflow_executable=self.aflow_executable,
         )
         logger.info(
             f"Deduplicated {len(self.property_instances)} Property Instances "
@@ -1647,7 +1692,9 @@ class SingleCrystalTestDriver(KIMTestDriver):
             Lengths are always in angstrom
         """
         crystal_structure = self.__nominal_crystal_structure_npt
-        atoms_prim = get_atoms_from_crystal_structure(crystal_structure)
+        atoms_prim = get_atoms_from_crystal_structure(
+            crystal_structure, aflow_executable=self.aflow_executable
+        )
         if isinstance(change_of_basis, str):
             if change_of_basis.lower() == "primitive":
                 change_of_basis_matrix = None
@@ -1785,6 +1832,7 @@ def detect_unique_crystal_structures(
     aflow_np: int = 4,
     rot_rtol: float = 0.01,
     rot_atol: float = 0.01,
+    aflow_executable=AFLOW_EXECUTABLE,
 ) -> Dict:
     """
     Detect which of the provided crystal structures is unique
@@ -1813,6 +1861,8 @@ def detect_unique_crystal_structures(
             rotations. Default value chosen to be commensurate with AFLOW
             default distance tolerance of 0.01*(NN distance). Used only if
             `allow_rotation` is False
+        aflow_executable:
+            Path to AFLOW executable
     Returns:
         Dictionary with keys corresponding to indices of unique structures and values
         being lists of indices of their duplicates
@@ -1820,7 +1870,7 @@ def detect_unique_crystal_structures(
     if len(crystal_structures) == 0:
         return []
 
-    aflow = AFLOW(np=aflow_np)
+    aflow = AFLOW(aflow_executable=aflow_executable, np=aflow_np)
 
     with TemporaryDirectory() as tmpdirname:
         # I don't know if crystal_structurs is a list or a dict with integer keys
@@ -1832,7 +1882,9 @@ def detect_unique_crystal_structures(
             structure = crystal_structures[i]
             try:
                 get_poscar_from_crystal_structure(
-                    structure, os.path.join(tmpdirname, str(i))
+                    structure,
+                    os.path.join(tmpdirname, str(i)),
+                    aflow_executable=aflow_executable,
                 )
             except AFLOW.ChangedSymmetryException:
                 logger.info(
@@ -1888,6 +1940,7 @@ def detect_unique_crystal_structures(
                         aflow_np=aflow_np,
                         rot_rtol=rot_rtol,
                         rot_atol=rot_atol,
+                        aflow_executable=aflow_executable,
                     )
                 )
 
@@ -1901,6 +1954,7 @@ def get_deduplicated_property_instances(
     aflow_np: int = 4,
     rot_rtol: float = 0.01,
     rot_atol: float = 0.01,
+    aflow_executable: str = AFLOW_EXECUTABLE,
 ) -> List[Dict]:
     """
     Given a list of dictionaries constituting KIM Property instances,
@@ -1935,6 +1989,8 @@ def get_deduplicated_property_instances(
             rotations. Default value chosen to be commensurate with AFLOW
             default distance tolerance of 0.01*(NN distance). Used only if
             `allow_rotation` is False
+        aflow_executable:
+            Path to aflow executable
 
     Returns:
         The deduplicated property instances
@@ -1969,6 +2025,7 @@ def get_deduplicated_property_instances(
             aflow_np=aflow_np,
             rot_rtol=rot_rtol,
             rot_atol=rot_atol,
+            aflow_executable=aflow_executable,
         )
 
         # Put together the list of unique instances for the current

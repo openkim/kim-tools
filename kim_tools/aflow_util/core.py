@@ -63,6 +63,8 @@ __all__ = [
     "AFLOW",
 ]
 
+AFLOW_EXECUTABLE = "aflow_"
+
 
 class IncorrectSpaceGroupException(Exception):
     """
@@ -741,7 +743,10 @@ class AFLOW:
         """
 
     def __init__(
-        self, aflow_executable: str = "aflow", aflow_work_dir: str = "", np: int = 4
+        self,
+        aflow_executable: str = AFLOW_EXECUTABLE,
+        aflow_work_dir: str = "",
+        np: int = 4,
     ):
         """
         Args:
@@ -752,7 +757,7 @@ class AFLOW:
         self.aflow_executable = aflow_executable
 
         try:
-            subprocess.check_output(["aflow", "--proto=A_cF4_225_a"])
+            subprocess.check_output([aflow_executable, "--proto=A_cF4_225_a"])
         except Exception:
             raise self.AFLOWNotFoundException(
                 "Failed to run an AFLOW test command. It is likely "
