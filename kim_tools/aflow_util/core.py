@@ -63,7 +63,7 @@ __all__ = [
     "AFLOW",
 ]
 
-AFLOW_EXECUTABLE = "aflow_"
+AFLOW_EXECUTABLE = "aflow"
 
 
 class IncorrectSpaceGroupException(Exception):
