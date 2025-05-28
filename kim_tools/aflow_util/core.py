@@ -1461,9 +1461,11 @@ class AFLOW:
                 nl_len = nl.size
                 cov_mult += 1
             # set the maximum error to 1% of NN distance to follow AFLOW convention
-            max_resid = nl.min() * 0.01
+            # rescale by cube root of cell volume to get rough conversion from
+            # cartesian to fractional
+            max_resid = nl.min() * 0.01 * atoms.get_volume() ** (-1 / 3)
             logger.info(
-                "Automatically set max residual for solving position "
+                "Automatically set max fractional residual for solving position "
                 f"equations to {max_resid}"
             )
 
