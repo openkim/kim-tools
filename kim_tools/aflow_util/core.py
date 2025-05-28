@@ -3,7 +3,6 @@
 import json
 import logging
 import os
-import re
 import subprocess
 import sys
 from curses.ascii import isalpha, isdigit
@@ -892,6 +891,7 @@ class AFLOW:
         species: List[str],
         parameter_values: Optional[List[float]] = None,
         proto_file: Optional[str] = None,
+        addtl_args: str = "",
         verbose: bool = True,
     ) -> Atoms:
         """
@@ -910,6 +910,9 @@ class AFLOW:
             proto_file:
                 Write the POSCAR to this permanent file for debugging
                 instead of a temporary file
+            addtl_args:
+                additional arguments to pass, e.g. ``--webpage`` to get deactivate
+                higher symmetry check
             verbose:
                 Print details in the log file
 
@@ -926,6 +929,7 @@ class AFLOW:
                 prototype_label=prototype_label,
                 species=species,
                 parameter_values=parameter_values,
+                addtl_args=addtl_args,
                 verbose=verbose,
             )
         except self.ChangedSymmetryException as e:
@@ -1248,16 +1252,10 @@ class AFLOW:
         """
         Get the parameter names by parsing the error message from AFLOW
         """
-        try:
-            self.write_poscar_from_prototype(prototype_label, parameter_values=[1.0])
-            # if no exception, it's a cubic crystal with no internal free params
-            return ["a"]
-        except subprocess.CalledProcessError as exc:
-            re_match = re.search(r"parameter_list=(.*) - \[dir", str(exc.stderr))
-            if re_match is not None:
-                return re_match.groups()[0].split(",")
-            # if we got here, the exception didn't have the format we expected, re-raise
-            raise exc
+        symbol_string = self.write_poscar_from_prototype(
+            prototype_label=prototype_label, addtl_args="--parameter_symbols_only"
+        )
+        return symbol_string.strip().split(",")
 
     def get_equation_sets_from_prototype(
         self, prototype_label: str
@@ -1504,6 +1502,7 @@ class AFLOW:
                 parameter_values=detected_prototype_designation[
                     "aflow_prototype_params_values"
                 ],
+                addtl_args="--webpage",
             )
         except self.ChangedSymmetryException as e:
             # re-raise, just indicating that this function knows about this exception
@@ -1819,6 +1818,7 @@ class AFLOW:
             prototype_label=prototype_label,
             species=species,
             parameter_values=parameter_values,
+            addtl_args="--webpage",
         )
 
         return self.confirm_atoms_unrotated_when_cells_aligned(

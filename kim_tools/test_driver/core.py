@@ -960,6 +960,7 @@ def get_poscar_from_crystal_structure(
     crystal_structure: Dict,
     output_file: Optional[str] = None,
     flat: bool = False,
+    addtl_args: str = "--webpage ",
     aflow_executable: str = AFLOW_EXECUTABLE,
 ) -> Optional[str]:
     """
@@ -986,6 +987,8 @@ def get_poscar_from_crystal_structure(
             Name of the output file. If not provided, the output is returned as a string
         flat:
             whether the input dictionary is flattened
+        addtl_args:
+            additional arguments to --proto
         aflow_executable:
             path to AFLOW executable
     Returns:
@@ -1048,6 +1051,7 @@ def get_poscar_from_crystal_structure(
             species=stoichiometric_species,
             parameter_values=aflow_parameter_values,
             output_file=output_file,
+            addtl_args=addtl_args,
         )
     except AFLOW.ChangedSymmetryException as e:
         # re-raise, just indicating that this function knows about this exception
