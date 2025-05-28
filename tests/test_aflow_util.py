@@ -32,6 +32,7 @@ logging.basicConfig(filename="kim-tools.log", level=logging.INFO, force=True)
 
 TEST_CASES = [572, 365, 1729, 1194, 1473, 166, 1205, 1357, 915, 212, 641, 22]
 MATERIALS_FILE = "test_structures.json"
+QUERY_DUMP = "output/query_result.json"
 
 
 def shuffle_atoms(atoms: Atoms) -> Atoms:
@@ -204,6 +205,9 @@ def get_test_crystal_structures(
         else:
             indices_to_test = [0]
         test_crystal_structures += [query_result[i] for i in indices_to_test]
+
+    with open(QUERY_DUMP, "w") as f:
+        json.dump(test_crystal_structures, f)
 
     return test_crystal_structures
 
@@ -441,4 +445,6 @@ def test_solve_for_params_of_known_prototype(input_crystal_structures):
 
 
 if __name__ == "__main__":
-    pass
+    test_solve_for_params_of_known_prototype(
+        get_test_crystal_structures(test_cases=None)
+    )
