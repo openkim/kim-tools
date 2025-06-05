@@ -75,7 +75,7 @@ the usage of the following functions. Click the links below for more information
   Use this to initialize an Instance of the KIM Property(s) you defined in :doc:`tutorial_property`. It will automatically be populated with the keys
   describing the nominal state of the crystal.
 
-- ``self.``:func:`~kim_tools.SingleCrystalTestDriver._add_key_to_current_property_instance`:
+- ``self.``:func:`~kim_tools.TestDriver._add_key_to_current_property_instance`:
   Use this to add additional keys to the last Property Instance you created.
 
 - ``self.``:func:`~kim_tools.SingleCrystalTestDriver._get_temperature`

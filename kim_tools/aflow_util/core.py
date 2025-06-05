@@ -143,7 +143,7 @@ def check_number_of_atoms(
     has the correct number of atoms according to prototype_label
 
     Raises:
-    IncorrectNumAtomsException
+        IncorrectNumAtomsException
     """
     prototype_label_list = prototype_label.split("_")
     pearson = prototype_label_list[1]

@@ -722,15 +722,15 @@ def _add_common_crystal_genome_keys_to_current_property_instance(
     prototype_label: str,
     stoichiometric_species: List[str],
     a: float,
+    a_unit: str,
     parameter_values: Optional[List[float]] = None,
     library_prototype_label: Optional[Union[List[str], str]] = None,
     short_name: Optional[Union[List[str], str]] = None,
     cell_cauchy_stress: Optional[List[float]] = None,
+    cell_cauchy_stress_unit: Optional[str] = None,
     temperature: Optional[float] = None,
+    temperature_unit: Optional[str] = "K",
     crystal_genome_source_structure_id: Optional[List[List[str]]] = None,
-    a_unit: str = "angstrom",
-    cell_cauchy_stress_unit: str = "eV/angstrom^3",
-    temperature_unit: str = "K",
     aflow_executable: str = AFLOW_EXECUTABLE,
 ) -> str:
     """
@@ -799,6 +799,8 @@ def _add_common_crystal_genome_keys_to_current_property_instance(
                 "Please specify the Cauchy stress as a 6-dimensional vector in Voigt "
                 "order [xx, yy, zz, yz, xz, xy]"
             )
+        if cell_cauchy_stress_unit is None:
+            raise KIMTestDriver("Please provide a `cell_cauchy_stress_unit`")
         property_instances = _add_key_to_current_property_instance(
             property_instances,
             "cell-cauchy-stress",
@@ -807,6 +809,8 @@ def _add_common_crystal_genome_keys_to_current_property_instance(
         )
 
     if temperature is not None:
+        if temperature_unit is None:
+            raise KIMTestDriver("Please provide a `temperature_unit`")
         property_instances = _add_key_to_current_property_instance(
             property_instances, "temperature", temperature, temperature_unit
         )
@@ -826,15 +830,15 @@ def _add_property_instance_and_common_crystal_genome_keys(
     prototype_label: str,
     stoichiometric_species: List[str],
     a: float,
+    a_unit: str,
     parameter_values: Optional[List[float]] = None,
     library_prototype_label: Optional[Union[List[str], str]] = None,
     short_name: Optional[Union[List[str], str]] = None,
     cell_cauchy_stress: Optional[List[float]] = None,
+    cell_cauchy_stress_unit: Optional[str] = None,
     temperature: Optional[float] = None,
+    temperature_unit: Optional[str] = "K",
     crystal_genome_source_structure_id: Optional[List[List[str]]] = None,
-    a_unit: str = "angstrom",
-    cell_cauchy_stress_unit: str = "eV/angstrom^3",
-    temperature_unit: str = "K",
     disclaimer: Optional[str] = None,
     property_instances: Optional[str] = None,
     aflow_executable: str = AFLOW_EXECUTABLE,
@@ -872,15 +876,15 @@ def _add_property_instance_and_common_crystal_genome_keys(
         prototype_label=prototype_label,
         stoichiometric_species=stoichiometric_species,
         a=a,
+        a_unit=a_unit,
         parameter_values=parameter_values,
         library_prototype_label=library_prototype_label,
         short_name=short_name,
-        cell_cauchy_stress=cell_cauchy_stress,
         temperature=temperature,
-        crystal_genome_source_structure_id=crystal_genome_source_structure_id,
-        a_unit=a_unit,
-        cell_cauchy_stress_unit=cell_cauchy_stress_unit,
         temperature_unit=temperature_unit,
+        crystal_genome_source_structure_id=crystal_genome_source_structure_id,
+        cell_cauchy_stress_unit=cell_cauchy_stress_unit,
+        cell_cauchy_stress=cell_cauchy_stress,
         aflow_executable=aflow_executable,
     )
 
@@ -947,6 +951,7 @@ def get_crystal_structure_from_atoms(
         prototype_label=proto_des["aflow_prototype_label"],
         stoichiometric_species=sorted(list(set(atoms.get_chemical_symbols()))),
         a=a,
+        a_unit="angstrom",
         parameter_values=parameter_values,
         library_prototype_label=library_prototype_label,
         short_name=short_name,
@@ -1405,8 +1410,10 @@ class SingleCrystalTestDriver(KIMTestDriver):
     def _add_property_instance_and_common_crystal_genome_keys(
         self,
         property_name: str,
-        write_stress: bool = False,
-        write_temp: bool = False,
+        write_stress: Union[bool, List[float]] = False,
+        write_temp: Union[bool, float] = False,
+        stress_unit: Optional[str] = None,
+        temp_unit: str = "K",
         disclaimer: Optional[str] = None,
     ) -> None:
         """
@@ -1421,9 +1428,20 @@ class SingleCrystalTestDriver(KIMTestDriver):
                 "tag:staff@noreply.openkim.org,2023-02-21:property/binding-energy-crystal"
                 or "binding-energy-crystal"
             write_stress:
-                Write the "cell-cauchy-stress" key
+                What (if any) to write to the "cell-cauchy-stress" key.
+                If True, write the nominal stress the Test Driver was initialized with.
+                If a list of floats is given, write that value (it must be a length 6
+                list representing a stress tensor in Voigt order xx,yy,zz,yz,xz,xy).
+                If a list is specified, you must also specify `stress_unit`.
             write_temp:
-                Write the "temperature" key
+                What (if any) to write to the "temperature" key.
+                If True, write the nominal temperature the Test Driver was initialized
+                with. If float is given, write that value.
+            stress_unit:
+                Unit of stress. Required if a stress tensor is specified in
+                `write_stress`.
+            temp_unit:
+                Unit of temperature. Defaults to K.
             disclaimer:
                 An optional disclaimer commenting on the applicability of this result,
                 e.g. "This relaxation did not reach the desired tolerance."
@@ -1450,20 +1468,37 @@ class SingleCrystalTestDriver(KIMTestDriver):
 
         short_name = _get_optional_source_value(crystal_structure, "short-name")
 
-        # stress and temperature are always there (default 0), but we don't always write
-        if write_stress:
-            cell_cauchy_stress = crystal_structure["cell-cauchy-stress"]["source-value"]
-        else:
+        if write_stress is False:
             cell_cauchy_stress = None
-
-        cell_cauchy_stress_unit = crystal_structure["cell-cauchy-stress"]["source-unit"]
-
-        if write_temp:
-            temperature = crystal_structure["temperature"]["source-value"]
+            cell_cauchy_stress_unit = None
+        elif write_stress is True:
+            if stress_unit is not None:
+                raise KIMTestDriverError(
+                    "Setting write_stress=True indicates that you wish to use the "
+                    "nominal stress and stress unit stored in this object. Do not "
+                    "specify a stress_unit in this case"
+                )
+            cell_cauchy_stress = crystal_structure["cell-cauchy-stress"]["source-value"]
+            cell_cauchy_stress_unit = crystal_structure["cell-cauchy-stress"][
+                "source-unit"
+            ]
         else:
-            temperature = None
+            if len(write_stress) != 6:
+                raise KIMTestDriverError(
+                    "`write_stress` must be a boolean or an array of length 6"
+                )
+            cell_cauchy_stress = write_stress
+            cell_cauchy_stress_unit = stress_unit
 
-        temperature_unit = crystal_structure["temperature"]["source-unit"]
+        if write_temp is False:
+            temperature = None
+            temperature_unit = None
+        elif write_temp is True:
+            temperature = crystal_structure["temperature"]["source-value"]
+            temperature_unit = crystal_structure["temperature"]["source-unit"]
+        else:
+            temperature = write_temp
+            temperature_unit = temp_unit
 
         crystal_genome_source_structure_id = _get_optional_source_value(
             crystal_structure, "crystal-genome-source-structure-id"
@@ -1475,15 +1510,15 @@ class SingleCrystalTestDriver(KIMTestDriver):
                 prototype_label=prototype_label,
                 stoichiometric_species=stoichiometric_species,
                 a=a,
+                a_unit=a_unit,
                 parameter_values=parameter_values,
                 library_prototype_label=library_prototype_label,
                 short_name=short_name,
                 cell_cauchy_stress=cell_cauchy_stress,
-                temperature=temperature,
-                crystal_genome_source_structure_id=crystal_genome_source_structure_id,
-                a_unit=a_unit,
                 cell_cauchy_stress_unit=cell_cauchy_stress_unit,
+                temperature=temperature,
                 temperature_unit=temperature_unit,
+                crystal_genome_source_structure_id=crystal_genome_source_structure_id,
                 disclaimer=disclaimer,
                 property_instances=super()._get_serialized_property_instances(),
                 aflow_executable=self.aflow_executable,
