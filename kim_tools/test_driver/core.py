@@ -465,7 +465,7 @@ class KIMTestDriver(ABC):
     to be useful to for most KIM tests
 
     Attributes:
-        __kim_model_name (str, optional):
+        __kim_model_name (Optional[str]):
             KIM model name, absent if a non-KIM ASE calculator was provided
         __calc (:obj:`~ase.calculators.calculator.Calculator`):
             ASE calculator
@@ -564,7 +564,8 @@ class KIMTestDriver(ABC):
     ) -> None:
         """
         Add a key to the most recent property instance added with
-        :func:`~kim_tools.KIMTestDriver._add_property_instance`. If the value is an
+        :func:`~kim_tools.test_driver.core.KIMTestDriver._add_property_instance`.
+        If the value is an
         array, this function will assume you want to write to the beginning of the array
         in every dimension. This function is intended to write entire keys in one go,
         and should not be used for modifying existing keys.
@@ -998,8 +999,8 @@ def get_poscar_from_crystal_structure(
         primitive unit cell of the crystal as defined in
         http://doi.org/10.1016/j.commatsci.2017.01.017. Lengths are always in angstrom.
     Raises:
-        AFLOW.ChangedSymmetryException: if the symmetry of the atoms object is different
-        from ``prototype_label``
+        AFLOW.ChangedSymmetryException:
+            if the symmetry of the atoms object is different from ``prototype_label``
     """
     if flat:
         prototype_label = crystal_structure["prototype-label.source-value"]
@@ -1292,7 +1293,7 @@ class SingleCrystalTestDriver(KIMTestDriver):
         In practical terms, this means that this function is designed to take as input a
         relaxed or time-averaged from MD (and folded back into the original primitive
         cell) copy of the :class:`~ase.Atoms` object originally obtained from
-        :func:`~kim_tools.SingleCrystalTestDriver._get_atoms()`.
+        :func:`~kim_tools.test_driver.core.SingleCrystalTestDriver._get_atoms()`.
 
         If finding the parameter fails, this function will raise an exception. This
         probably indicates a phase transition to a different symmetry, which is a normal
@@ -1391,7 +1392,8 @@ class SingleCrystalTestDriver(KIMTestDriver):
 
         Args:
             change_of_basis:
-                Passed to :meth:`kim_tools.SingleCrystalTestDriver._get_atoms`
+                Passed to
+                :meth:`kim_tools.test_driver.core.SingleCrystalTestDriver._get_atoms`
             filename:
                 File to save to. Will be automatically moved and renamed,
                 e.g. 'instance.poscar' -> 'output/instance-1.poscar'
@@ -1539,8 +1541,9 @@ class SingleCrystalTestDriver(KIMTestDriver):
         Get the nominal temperature
 
         Args:
-            unit: The requested unit for the output. Must be understood by the GNU
-            ``units`` utility
+            unit:
+                The requested unit for the output. Must be understood by the GNU
+                ``units`` utility
         """
         source_value = self.__nominal_crystal_structure_npt["temperature"][
             "source-value"
@@ -1557,8 +1560,9 @@ class SingleCrystalTestDriver(KIMTestDriver):
         Get the nominal stress
 
         Args:
-            unit: The requested unit for the output. Must be understood by the GNU
-            ``units`` utility
+            unit:
+                The requested unit for the output. Must be understood by the GNU
+                ``units`` utility
         """
         source_value = self.__nominal_crystal_structure_npt["cell-cauchy-stress"][
             "source-value"
@@ -1719,7 +1723,8 @@ class SingleCrystalTestDriver(KIMTestDriver):
                 corresponding to the "old basis" and the returned ``Atoms`` object being
                 in the "new basis".
 
-                See the docstring for :func:`kim_tools.change_of_basis_atoms` for
+                See the docstring for
+                :func:`kim_tools.symmetry_util.core.change_of_basis_atoms` for
                 more information on how to define the change of basis.
 
         Returns:
@@ -1784,7 +1789,8 @@ def query_crystal_structures(
             The list of possible shortnames is taken by postprocessing README_PROTO.TXT
             from the AFLOW software and packaged with kim-tools for reproducibility. To
             see the exact list of possible short names, call
-            :func:`kim_tools.read_shortnames` and inspect the values of the returned
+            :func:`kim_tools.aflow_util.core.read_shortnames` and inspect the values of
+            the returned
             dictionary. Note that a given short name corresponds to an exact set of
             parameters (with some tolerance), except the overall scale of the crystal.
             For example, "Hexagonal Close Packed" will return only structures with a

@@ -7,13 +7,17 @@ import logging
 import os
 from itertools import product
 from math import ceil
-from typing import Dict, List, Union
+from typing import Dict, List, Optional, Tuple, Union
 
+import matplotlib.pyplot as plt
 import numpy as np
+import numpy.typing as npt
 from ase import Atoms
 from ase.cell import Cell
-from ase.geometry import get_duplicate_atoms
-from numpy.typing import ArrayLike
+from ase.geometry import get_distances, get_duplicate_atoms
+from matplotlib.backends.backend_pdf import PdfPages
+from scipy.stats import kstest
+from sklearn.decomposition import PCA
 from sympy import Matrix, cos, matrix2numpy, sin, sqrt, symbols
 
 logger = logging.getLogger(__name__)
@@ -85,6 +89,12 @@ class IncorrectNumAtomsException(Exception):
     """
 
 
+class PeriodExtensionException(Exception):
+    """
+    Raised when a period-extending phase transition is detected.
+    """
+
+
 def _check_space_group(sgnum: Union[int, str]):
     try:
         assert 1 <= int(sgnum) <= 230
@@ -96,8 +106,8 @@ def _check_space_group(sgnum: Union[int, str]):
 
 
 def cartesian_to_fractional_itc_rotation_from_ase_cell(
-    cart_rot: ArrayLike, cell: ArrayLike
-) -> ArrayLike:
+    cart_rot: npt.ArrayLike, cell: npt.ArrayLike
+) -> npt.ArrayLike:
     """
     Convert Cartesian to fractional rotation. Read the arguments and returns carefully,
     as there is some unfortunate mixing of row and columns because of the different
@@ -132,8 +142,8 @@ def cartesian_to_fractional_itc_rotation_from_ase_cell(
 
 
 def fractional_to_cartesian_itc_rotation_from_ase_cell(
-    frac_rot: ArrayLike, cell: ArrayLike
-) -> ArrayLike:
+    frac_rot: npt.ArrayLike, cell: npt.ArrayLike
+) -> npt.ArrayLike:
     """
     Convert fractional to Cartesian rotation. Read the arguments and returns carefully,
     as there is some unfortunate mixing of row and columns because of the different
@@ -168,9 +178,9 @@ def fractional_to_cartesian_itc_rotation_from_ase_cell(
 
 
 def cartesian_rotation_is_in_point_group(
-    cart_rot: ArrayLike,
+    cart_rot: npt.ArrayLike,
     sgnum: Union[int, str],
-    cell: ArrayLike,
+    cell: npt.ArrayLike,
     rtol: float = 1e-2,
     atol: float = 1e-2,
 ) -> bool:
@@ -215,7 +225,7 @@ def cartesian_rotation_is_in_point_group(
     return False
 
 
-def get_cell_from_poscar(poscar: os.PathLike) -> ArrayLike:
+def get_cell_from_poscar(poscar: os.PathLike) -> npt.ArrayLike:
     """
     Extract the unit cell from a POSCAR file, including the specified scaling
     """
@@ -437,7 +447,7 @@ def get_symbolic_cell_from_formal_bravais_lattice(
 
 def get_change_of_basis_matrix_to_conventional_cell_from_formal_bravais_lattice(
     formal_bravais_lattice: str,
-) -> ArrayLike:
+) -> npt.ArrayLike:
     """
     Get a change of basis matrix **P** as defined in ITA 1.5.1.2, with "old basis"
     being the primitive cell of the provided Bravais lattice, and the "new basis" being
@@ -498,7 +508,7 @@ def get_change_of_basis_matrix_to_conventional_cell_from_formal_bravais_lattice(
     return np.round(change_of_basis_matrix)
 
 
-def change_of_basis_atoms(atoms: Atoms, change_of_basis: ArrayLike) -> Atoms:
+def change_of_basis_atoms(atoms: Atoms, change_of_basis: npt.ArrayLike) -> Atoms:
     """
     Perform an arbitrary basis change on an ``Atoms`` object, duplicating or cropping
     atoms as needed. A basic check is made that the determinant of ``change_of_basis``
@@ -506,7 +516,7 @@ def change_of_basis_atoms(atoms: Atoms, change_of_basis: ArrayLike) -> Atoms:
     that ``change_of_basis`` is appropriate for the particuar crystal described by
     ``atoms``, which is up to the user.
 
-    NOTE: This requires ASE >= 3.25 to delete atoms that are close across PBCs
+    TODO: Incorporate :func:`kstest_reduced_distances` into this function
 
     Args:
         atoms:
@@ -600,3 +610,176 @@ def get_primitive_genpos_ops(sgnum: Union[int, str]) -> List[Dict]:
     _check_space_group(sgnum)
     with open(os.path.join(DATA_DIR, "primitive_GENPOS_ops.json")) as f:
         return np.asarray(json.load(f)[str(sgnum)])
+
+
+def reduce_and_avg(
+    atoms: Atoms, repeat: Tuple[int, int, int]
+) -> Tuple[Atoms, npt.NDArray]:
+    """
+    TODO: Upgrade :func:`change_of_basis_atoms` to provide the distances
+    array, obviating this function
+
+    Function to reduce all atoms to the original unit cell position.
+
+    Args:
+        atoms:
+            The supercell to reduce
+        repeat:
+            The number of repeats of each unit cell vector in the
+            provided supercell
+
+    Returns:
+        * The reduced unit cell
+        * An array of displacement vectors. First dimension: index of reference atom
+          in reduced cell. Second dimension: index of atom in provided supercell.
+          Third dimension: x, y, z
+    """
+    new_atoms = atoms.copy()
+
+    cell = new_atoms.get_cell()
+
+    # Divide each unit vector by its number of repeats.
+    # See
+    # https://stackoverflow.com/questions/19602187/numpy-divide-each-row-by-a-vector-element.
+    cell = cell / np.array(repeat)[:, None]
+
+    # Decrease size of cell in the atoms object.
+    new_atoms.set_cell(cell)
+    new_atoms.set_pbc((True, True, True))
+
+    # Set averaging factor
+    M = np.prod(repeat)
+
+    # Wrap back the repeated atoms on top of
+    # the reference atoms in the original unit cell.
+    positions = new_atoms.get_positions(wrap=True)
+
+    number_atoms = len(new_atoms)
+    original_number_atoms = number_atoms // M
+    assert number_atoms == original_number_atoms * M
+    avg_positions_in_prim_cell = np.zeros((original_number_atoms, 3))
+    positions_in_prim_cell = np.zeros((number_atoms, 3))
+
+    # Start from end of the atoms
+    # because we will remove all atoms except the reference ones.
+    for i in reversed(range(number_atoms)):
+        if i >= original_number_atoms:
+            # Get the distance to the reference atom in the original unit cell with the
+            # minimum image convention.
+            distance = new_atoms.get_distance(
+                i % original_number_atoms, i, mic=True, vector=True
+            )
+            # Get the position that has the closest distance to
+            # the reference atom in the original unit cell.
+            position_i = positions[i % original_number_atoms] + distance
+            # Remove atom from atoms object.
+            new_atoms.pop()
+        else:
+            # Atom was part of the original unit cell.
+            position_i = positions[i]
+        # Average
+        avg_positions_in_prim_cell[i % original_number_atoms] += position_i / M
+        positions_in_prim_cell[i] = position_i
+
+    new_atoms.set_positions(avg_positions_in_prim_cell)
+
+    # Calculate the distances.
+    distances = np.empty((original_number_atoms, M, 3))
+    for i in range(number_atoms):
+        dr, _ = get_distances(
+            positions_in_prim_cell[i],
+            avg_positions_in_prim_cell[i % original_number_atoms],
+            cell=new_atoms.get_cell(),
+            pbc=True,
+        )
+        # dr is a distance matrix, here we only have one distance
+        assert dr.shape == (1, 1, 3)
+        distances[i % original_number_atoms, i // original_number_atoms] = dr[0][0]
+
+    return new_atoms, distances
+
+
+def kstest_reduced_distances(
+    reduced_distances: npt.NDArray,
+    significance_level: float = 0.05,
+    plot_filename: Optional[str] = None,
+    number_bins: Optional[int] = None,
+) -> None:
+    """
+    TODO: Incorporate this into :func:`change_of_basis_atoms`
+
+    Function to test whether the reduced atom positions are normally distributed
+    around their average.
+
+    Args:
+        reduced_distances:
+            Distance array provided by :func:`reduce_and_avg`
+        significance_level:
+            Significance level for Kolmogorov-Smirnov
+        plot_filename:
+        number_bins:
+            Number of bins for plot
+
+    Raises:
+        PeriodExtensionException:
+            If a non-normal distribution is detected
+    """
+    assert len(reduced_distances.shape) == 3
+    assert reduced_distances.shape[2] == 3
+
+    if plot_filename is not None:
+        if number_bins is None:
+            raise ValueError(
+                "number_bins must be specified if plot_filename is specified"
+            )
+        if not plot_filename.endswith(".pdf"):
+            raise ValueError(f"{plot_filename} is not a PDF file")
+        with PdfPages(plot_filename) as pdf:
+            for i in range(reduced_distances.shape[0]):
+                fig, axs = plt.subplots(1, 3, figsize=(10.0, 4.0))
+                for j in range(reduced_distances.shape[2]):
+                    axs[j].hist(reduced_distances[i, :, j], bins=number_bins)
+                    axs[j].set_xlabel(f"$x_{j}$")
+                axs[0].set_ylabel("Counts")
+                fig.suptitle(f"Atom {i}")
+                pdf.savefig()
+    else:
+        if number_bins is not None:
+            raise ValueError(
+                "number_bins must not be specified if plot_filename is not specified"
+            )
+
+    p_values = np.empty((reduced_distances.shape[0], reduced_distances.shape[2]))
+    for i in range(reduced_distances.shape[0]):
+        atom_distances = reduced_distances[i]
+
+        # Perform PCA on the xyz distribution.
+        pca = PCA(n_components=atom_distances.shape[1])
+        pca_components = pca.fit_transform(atom_distances)
+        assert (
+            pca_components.shape == atom_distances.shape == reduced_distances.shape[1:]
+        )
+
+        # Test each component with a KS test.
+        for j in range(pca_components.shape[1]):
+            component = pca_components[:, j]
+            component_mean = np.mean(component)
+            assert abs(component_mean) < 1.0e-7
+            component_std = np.std(component)
+            # Normalize component
+            normalized_component = (component - component_mean) / component_std
+            assert abs(np.mean(normalized_component)) < 1.0e-7
+            assert abs(np.std(normalized_component) - 1.0) < 1.0e-7
+            res = kstest(normalized_component, "norm")
+            p_values[i, j] = res.pvalue
+
+    if np.any(p_values <= significance_level):
+        raise PeriodExtensionException(
+            "Detected non-normal distribution of reduced atom positions around their "
+            f"average (smallest p value {np.min(p_values)})."
+        )
+    else:
+        print(
+            "Detected normal distribution or reduced atom positions around their "
+            f"average (smallest p value {np.min(p_values)})."
+        )

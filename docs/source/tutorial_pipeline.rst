@@ -41,7 +41,7 @@ to include all of these structures.
 
 .. todo::
 
-    Currently the temperature and stress inputs only set the internal values of those variables in the :class:`~kim_tools.test_driver.CrystalGenomeTestDriver` class, and do not affect querying. The structure queried for is always the zero temperature, zero pressure structure
+    Currently the temperature and stress inputs only set the internal values of those variables in the :class:`~kim_tools.test_driver.core.SingleCrystalTestDriver` class, and do not affect querying. The structure queried for is always the zero temperature, zero pressure structure
 
 Generating and Running Tests
 ============================

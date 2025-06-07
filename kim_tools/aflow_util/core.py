@@ -12,7 +12,7 @@ from math import acos, cos, degrees, radians, sin, sqrt
 from os import PathLike
 from random import random
 from tempfile import NamedTemporaryFile
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import ase
 import numpy as np
@@ -115,7 +115,7 @@ class EquivalentAtomSet:
 
 
 def write_tmp_poscar_from_atoms_and_run_function(
-    atoms: Atoms, function: callable, *args, **kwargs
+    atoms: Atoms, function: Callable, *args, **kwargs
 ) -> Any:
     """
     Write the Atoms file to a NamedTemporaryFile and run 'function' on it.
@@ -269,8 +269,9 @@ def get_equivalent_atom_sets_from_prototype_and_atom_map(
     `atoms`, and `prototype_label` is the detected prototype label
 
     Args:
-        sort_atoms: If `atom_map` was obtained by sorting `atoms` before writing it to
-        POSCAR, set this to True
+        sort_atoms:
+            If `atom_map` was obtained by sorting `atoms` before writing it to
+            POSCAR, set this to True
     """
 
     if sort_atoms:
@@ -1214,9 +1215,10 @@ class AFLOW:
             sort_atoms2: Whether to sort atoms2 before comparing.
 
         Returns:
-            Tuple of arrays in the order:
-            basis transformation, rotation, origin shift, atom_map
-            atom_map[index_in_structure_1] = index_in_structure_2
+            * basis transformation
+            * rotation
+            * origin shift
+            * atom_map (atom_map[index_in_structure_1] = index_in_structure_2)
 
         Raises:
             AFLOW.FailedToMatchException: if AFLOW fails to match the crystals
