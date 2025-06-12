@@ -8,10 +8,10 @@ from random import random
 from typing import Dict, List, Optional
 
 import numpy as np
+import numpy.typing as npt
 import pytest
 from ase import Atoms
 from ase.calculators.kim.kim import KIM
-from numpy.typing import ArrayLike
 
 from kim_tools import (
     AFLOW,
@@ -48,8 +48,8 @@ def shuffle_atoms(atoms: Atoms) -> Atoms:
 
 
 def _frac_pos_match_sanity_checks(
-    reference_positions: ArrayLike,
-    test_positions: ArrayLike,
+    reference_positions: npt.ArrayLike,
+    test_positions: npt.ArrayLike,
     reference_species: Optional[List] = None,
     test_species: Optional[List] = None,
 ) -> bool:
@@ -84,8 +84,8 @@ def _frac_pos_match_sanity_checks(
 
 
 def frac_pos_match_allow_permute_wrap(
-    reference_positions: ArrayLike,
-    test_positions: ArrayLike,
+    reference_positions: npt.ArrayLike,
+    test_positions: npt.ArrayLike,
     reference_species: Optional[List] = None,
     test_species: Optional[List] = None,
 ) -> bool:
@@ -127,8 +127,8 @@ def frac_pos_match_allow_permute_wrap(
 
 
 def frac_pos_match_allow_wrap(
-    reference_positions: ArrayLike,
-    test_positions: ArrayLike,
+    reference_positions: npt.ArrayLike,
+    test_positions: npt.ArrayLike,
     reference_species: Optional[List] = None,
     test_species: Optional[List] = None,
 ) -> bool:
@@ -438,6 +438,5 @@ def test_solve_for_params_of_known_prototype(input_crystal_structures):
 
 
 if __name__ == "__main__":
-    test_solve_for_params_of_known_prototype(
-        get_test_crystal_structures(test_cases=None)
-    )
+    with open("output.3/query_result.json") as f:
+        test_solve_for_params_of_known_prototype(json.load(f))

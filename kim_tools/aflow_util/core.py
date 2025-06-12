@@ -10,14 +10,14 @@ from dataclasses import dataclass
 from math import acos, cos, degrees, radians, sqrt
 from os import PathLike
 from tempfile import NamedTemporaryFile
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import ase
 import numpy as np
+import numpy.typing as npt
 from ase import Atoms
 from ase.cell import Cell
 from ase.neighborlist import natural_cutoffs, neighbor_list
-from numpy.typing import ArrayLike
 from sympy import Symbol, linear_eq_to_matrix, matrix2numpy, parse_expr
 
 from ..symmetry_util import (
@@ -95,10 +95,10 @@ class EquivalentEqnSet:
     param_names: List[str]
     # m x 3 x n matrices of coefficients, where m is the multiplicity of the Wyckoff
     # position
-    coeff_matrix_list: List[ArrayLike]
+    coeff_matrix_list: List[npt.ArrayLike]
     # m x 3 x 1 columns of constant terms in the coordinates. This gets subtracted from
     # the RHS when solving
-    const_terms_list: List[ArrayLike]
+    const_terms_list: List[npt.ArrayLike]
 
 
 @dataclass
@@ -109,11 +109,11 @@ class EquivalentAtomSet:
 
     species: str
     wyckoff_letter: str
-    frac_position_list: List[ArrayLike]  # m x 3 x 1 columns
+    frac_position_list: List[npt.ArrayLike]  # m x 3 x 1 columns
 
 
 def write_tmp_poscar_from_atoms_and_run_function(
-    atoms: Atoms, function: callable, *args, **kwargs
+    atoms: Atoms, function: Callable, *args, **kwargs
 ) -> Any:
     """
     Write the Atoms file to a NamedTemporaryFile and run 'function' on it.
@@ -141,7 +141,7 @@ def check_number_of_atoms(
     has the correct number of atoms according to prototype_label
 
     Raises:
-    IncorrectNumAtomsException
+        IncorrectNumAtomsException
     """
     prototype_label_list = prototype_label.split("_")
     pearson = prototype_label_list[1]
@@ -267,8 +267,9 @@ def get_equivalent_atom_sets_from_prototype_and_atom_map(
     `atoms`, and `prototype_label` is the detected prototype label
 
     Args:
-        sort_atoms: If `atom_map` was obtained by sorting `atoms` before writing it to
-        POSCAR, set this to True
+        sort_atoms:
+            If `atom_map` was obtained by sorting `atoms` before writing it to
+            POSCAR, set this to True
     """
 
     if sort_atoms:
@@ -597,7 +598,7 @@ def get_real_to_virtual_species_map(input: Union[List[str], Atoms]) -> Dict:
 
 
 def solve_for_aflow_cell_params_from_primitive_ase_cell_params(
-    cellpar_prim: ArrayLike, prototype_label: str
+    cellpar_prim: npt.ArrayLike, prototype_label: str
 ) -> List[float]:
     """
     Get conventional cell parameters from primitive cell parameters. It is assumed that
@@ -1201,9 +1202,9 @@ class AFLOW:
         sort_atoms1: bool = True,
         sort_atoms2: bool = True,
     ) -> Tuple[
-        Optional[ArrayLike],
-        Optional[ArrayLike],
-        Optional[ArrayLike],
+        Optional[npt.ArrayLike],
+        Optional[npt.ArrayLike],
+        Optional[npt.ArrayLike],
         Optional[List[int]],
     ]:
         """
@@ -1217,9 +1218,10 @@ class AFLOW:
             sort_atoms2: Whether to sort atoms2 before comparing.
 
         Returns:
-            Tuple of arrays in the order:
-            basis transformation, rotation, origin shift, atom_map
-            atom_map[index_in_structure_1] = index_in_structure_2
+            * basis transformation
+            * rotation
+            * origin shift
+            * atom_map (atom_map[index_in_structure_1] = index_in_structure_2)
 
         Raises:
             AFLOW.FailedToMatchException: if AFLOW fails to match the crystals

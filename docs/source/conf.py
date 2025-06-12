@@ -29,6 +29,8 @@ release = __version__
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
+nitpicky = True
+
 extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.napoleon",
@@ -48,6 +50,7 @@ intersphinx_mapping = {
     "ase": ("https://wiki.fysik.dtu.dk/ase/", None),
     "python": ("https://docs.python.org/3", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
+    "pymatgen": ("https://pymatgen.org/", None),
 }
 
 autoclass_content = "both"
@@ -59,6 +62,7 @@ autodoc_default_options = {
     "inherited-members": False,
     "show-inheritance": False,
     "private-members": True,
+    "ignore-module-all": True,
 }
 
 templates_path = ["_templates"]

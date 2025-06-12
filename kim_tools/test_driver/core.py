@@ -42,6 +42,7 @@ from typing import IO, Any, Dict, List, Optional, Union
 import ase
 import kim_edn
 import numpy as np
+import numpy.typing as npt
 from ase import Atoms
 from ase.calculators.calculator import Calculator
 from ase.constraints import FixSymmetry
@@ -58,7 +59,6 @@ from kim_property import (
 )
 from kim_property.modify import STANDARD_KEYS_SCLAR_OR_WITH_EXTENT
 from kim_query import raw_query
-from numpy.typing import ArrayLike
 
 from ..aflow_util import (
     AFLOW,
@@ -336,7 +336,7 @@ def _add_property_instance(
 def _add_key_to_current_property_instance(
     property_instances: str,
     name: str,
-    value: ArrayLike,
+    value: npt.ArrayLike,
     unit: Optional[str] = None,
     uncertainty_info: Optional[dict] = None,
 ) -> str:
@@ -386,7 +386,7 @@ def _add_key_to_current_property_instance(
 
     def recur_dimensions(
         prev_indices: List[int],
-        sub_value: np.ndarray,
+        sub_value: npt.ArrayLike,
         modify_args: list,
         key_name: str = "source-value",
     ):
@@ -465,7 +465,7 @@ class KIMTestDriver(ABC):
     to be useful to for most KIM tests
 
     Attributes:
-        __kim_model_name (str, optional):
+        __kim_model_name (Optional[str]):
             KIM model name, absent if a non-KIM ASE calculator was provided
         __calc (:obj:`~ase.calculators.calculator.Calculator`):
             ASE calculator
@@ -558,13 +558,14 @@ class KIMTestDriver(ABC):
     def _add_key_to_current_property_instance(
         self,
         name: str,
-        value: ArrayLike,
+        value: npt.ArrayLike,
         unit: Optional[str] = None,
         uncertainty_info: Optional[dict] = None,
     ) -> None:
         """
         Add a key to the most recent property instance added with
-        :func:`~kim_tools.KIMTestDriver._add_property_instance`. If the value is an
+        :func:`~kim_tools.test_driver.core.KIMTestDriver._add_property_instance`.
+        If the value is an
         array, this function will assume you want to write to the beginning of the array
         in every dimension. This function is intended to write entire keys in one go,
         and should not be used for modifying existing keys.
@@ -722,15 +723,15 @@ def _add_common_crystal_genome_keys_to_current_property_instance(
     prototype_label: str,
     stoichiometric_species: List[str],
     a: float,
+    a_unit: str,
     parameter_values: Optional[List[float]] = None,
     library_prototype_label: Optional[Union[List[str], str]] = None,
     short_name: Optional[Union[List[str], str]] = None,
     cell_cauchy_stress: Optional[List[float]] = None,
+    cell_cauchy_stress_unit: Optional[str] = None,
     temperature: Optional[float] = None,
+    temperature_unit: Optional[str] = "K",
     crystal_genome_source_structure_id: Optional[List[List[str]]] = None,
-    a_unit: str = "angstrom",
-    cell_cauchy_stress_unit: str = "eV/angstrom^3",
-    temperature_unit: str = "K",
     aflow_executable: str = AFLOW_EXECUTABLE,
 ) -> str:
     """
@@ -799,6 +800,8 @@ def _add_common_crystal_genome_keys_to_current_property_instance(
                 "Please specify the Cauchy stress as a 6-dimensional vector in Voigt "
                 "order [xx, yy, zz, yz, xz, xy]"
             )
+        if cell_cauchy_stress_unit is None:
+            raise KIMTestDriver("Please provide a `cell_cauchy_stress_unit`")
         property_instances = _add_key_to_current_property_instance(
             property_instances,
             "cell-cauchy-stress",
@@ -807,6 +810,8 @@ def _add_common_crystal_genome_keys_to_current_property_instance(
         )
 
     if temperature is not None:
+        if temperature_unit is None:
+            raise KIMTestDriver("Please provide a `temperature_unit`")
         property_instances = _add_key_to_current_property_instance(
             property_instances, "temperature", temperature, temperature_unit
         )
@@ -826,15 +831,15 @@ def _add_property_instance_and_common_crystal_genome_keys(
     prototype_label: str,
     stoichiometric_species: List[str],
     a: float,
+    a_unit: str,
     parameter_values: Optional[List[float]] = None,
     library_prototype_label: Optional[Union[List[str], str]] = None,
     short_name: Optional[Union[List[str], str]] = None,
     cell_cauchy_stress: Optional[List[float]] = None,
+    cell_cauchy_stress_unit: Optional[str] = None,
     temperature: Optional[float] = None,
+    temperature_unit: Optional[str] = "K",
     crystal_genome_source_structure_id: Optional[List[List[str]]] = None,
-    a_unit: str = "angstrom",
-    cell_cauchy_stress_unit: str = "eV/angstrom^3",
-    temperature_unit: str = "K",
     disclaimer: Optional[str] = None,
     property_instances: Optional[str] = None,
     aflow_executable: str = AFLOW_EXECUTABLE,
@@ -872,15 +877,15 @@ def _add_property_instance_and_common_crystal_genome_keys(
         prototype_label=prototype_label,
         stoichiometric_species=stoichiometric_species,
         a=a,
+        a_unit=a_unit,
         parameter_values=parameter_values,
         library_prototype_label=library_prototype_label,
         short_name=short_name,
-        cell_cauchy_stress=cell_cauchy_stress,
         temperature=temperature,
-        crystal_genome_source_structure_id=crystal_genome_source_structure_id,
-        a_unit=a_unit,
-        cell_cauchy_stress_unit=cell_cauchy_stress_unit,
         temperature_unit=temperature_unit,
+        crystal_genome_source_structure_id=crystal_genome_source_structure_id,
+        cell_cauchy_stress_unit=cell_cauchy_stress_unit,
+        cell_cauchy_stress=cell_cauchy_stress,
         aflow_executable=aflow_executable,
     )
 
@@ -947,6 +952,7 @@ def get_crystal_structure_from_atoms(
         prototype_label=proto_des["aflow_prototype_label"],
         stoichiometric_species=sorted(list(set(atoms.get_chemical_symbols()))),
         a=a,
+        a_unit="angstrom",
         parameter_values=parameter_values,
         library_prototype_label=library_prototype_label,
         short_name=short_name,
@@ -996,8 +1002,8 @@ def get_poscar_from_crystal_structure(
         primitive unit cell of the crystal as defined in
         http://doi.org/10.1016/j.commatsci.2017.01.017. Lengths are always in angstrom.
     Raises:
-        AFLOW.ChangedSymmetryException: if the symmetry of the atoms object is different
-        from ``prototype_label``
+        AFLOW.ChangedSymmetryException:
+            if the symmetry of the atoms object is different from ``prototype_label``
     """
     if flat:
         prototype_label = crystal_structure["prototype-label.source-value"]
@@ -1291,7 +1297,7 @@ class SingleCrystalTestDriver(KIMTestDriver):
         In practical terms, this means that this function is designed to take as input a
         relaxed or time-averaged from MD (and folded back into the original primitive
         cell) copy of the :class:`~ase.Atoms` object originally obtained from
-        :func:`~kim_tools.SingleCrystalTestDriver._get_atoms()`.
+        :func:`~kim_tools.test_driver.core.SingleCrystalTestDriver._get_atoms()`.
 
         If finding the parameter fails, this function will raise an exception. This
         probably indicates a phase transition to a different symmetry, which is a normal
@@ -1380,7 +1386,7 @@ class SingleCrystalTestDriver(KIMTestDriver):
 
     def __add_poscar_to_curr_prop_inst(
         self,
-        change_of_basis: Union[str, ArrayLike],
+        change_of_basis: Union[str, npt.ArrayLike],
         filename: os.PathLike,
         key_name: str,
     ) -> None:
@@ -1390,7 +1396,8 @@ class SingleCrystalTestDriver(KIMTestDriver):
 
         Args:
             change_of_basis:
-                Passed to :meth:`kim_tools.SingleCrystalTestDriver._get_atoms`
+                Passed to
+                :meth:`kim_tools.test_driver.core.SingleCrystalTestDriver._get_atoms`
             filename:
                 File to save to. Will be automatically moved and renamed,
                 e.g. 'instance.poscar' -> 'output/instance-1.poscar'
@@ -1409,8 +1416,10 @@ class SingleCrystalTestDriver(KIMTestDriver):
     def _add_property_instance_and_common_crystal_genome_keys(
         self,
         property_name: str,
-        write_stress: bool = False,
-        write_temp: bool = False,
+        write_stress: Union[bool, List[float]] = False,
+        write_temp: Union[bool, float] = False,
+        stress_unit: Optional[str] = None,
+        temp_unit: str = "K",
         disclaimer: Optional[str] = None,
     ) -> None:
         """
@@ -1425,9 +1434,20 @@ class SingleCrystalTestDriver(KIMTestDriver):
                 "tag:staff@noreply.openkim.org,2023-02-21:property/binding-energy-crystal"
                 or "binding-energy-crystal"
             write_stress:
-                Write the "cell-cauchy-stress" key
+                What (if any) to write to the "cell-cauchy-stress" key.
+                If True, write the nominal stress the Test Driver was initialized with.
+                If a list of floats is given, write that value (it must be a length 6
+                list representing a stress tensor in Voigt order xx,yy,zz,yz,xz,xy).
+                If a list is specified, you must also specify `stress_unit`.
             write_temp:
-                Write the "temperature" key
+                What (if any) to write to the "temperature" key.
+                If True, write the nominal temperature the Test Driver was initialized
+                with. If float is given, write that value.
+            stress_unit:
+                Unit of stress. Required if a stress tensor is specified in
+                `write_stress`.
+            temp_unit:
+                Unit of temperature. Defaults to K.
             disclaimer:
                 An optional disclaimer commenting on the applicability of this result,
                 e.g. "This relaxation did not reach the desired tolerance."
@@ -1454,20 +1474,58 @@ class SingleCrystalTestDriver(KIMTestDriver):
 
         short_name = _get_optional_source_value(crystal_structure, "short-name")
 
-        # stress and temperature are always there (default 0), but we don't always write
-        if write_stress:
-            cell_cauchy_stress = crystal_structure["cell-cauchy-stress"]["source-value"]
-        else:
+        if write_stress is False:
             cell_cauchy_stress = None
-
-        cell_cauchy_stress_unit = crystal_structure["cell-cauchy-stress"]["source-unit"]
-
-        if write_temp:
-            temperature = crystal_structure["temperature"]["source-value"]
+            cell_cauchy_stress_unit = None
+        elif write_stress is True:
+            cell_cauchy_stress_stored = crystal_structure["cell-cauchy-stress"][
+                "source-value"
+            ]
+            cell_cauchy_stress_unit_stored = crystal_structure["cell-cauchy-stress"][
+                "source-unit"
+            ]
+            if (
+                stress_unit is not None
+                and stress_unit != cell_cauchy_stress_unit_stored
+            ):
+                cell_cauchy_stress_unit = stress_unit
+                cell_cauchy_stress = convert_units(
+                    cell_cauchy_stress_stored,
+                    cell_cauchy_stress_unit_stored,
+                    cell_cauchy_stress_unit,
+                    True,
+                )
+            else:
+                cell_cauchy_stress = cell_cauchy_stress_stored
+                cell_cauchy_stress_unit = cell_cauchy_stress_unit_stored
         else:
-            temperature = None
+            if len(write_stress) != 6:
+                raise KIMTestDriverError(
+                    "`write_stress` must be a boolean or an array of length 6"
+                )
+            cell_cauchy_stress = write_stress
+            cell_cauchy_stress_unit = stress_unit
 
-        temperature_unit = crystal_structure["temperature"]["source-unit"]
+        if write_temp is False:
+            temperature = None
+            temperature_unit = None
+        elif write_temp is True:
+            temperature_stored = crystal_structure["temperature"]["source-value"]
+            temperature_unit_stored = crystal_structure["temperature"]["source-unit"]
+            if temp_unit != temperature_unit_stored:
+                temperature_unit = temp_unit
+                temperature = convert_units(
+                    temperature_stored,
+                    temperature_unit_stored,
+                    temperature_unit,
+                    True,
+                )
+            else:
+                temperature = temperature_stored
+                temperature_unit = temperature_unit_stored
+        else:
+            temperature = write_temp
+            temperature_unit = temp_unit
 
         crystal_genome_source_structure_id = _get_optional_source_value(
             crystal_structure, "crystal-genome-source-structure-id"
@@ -1479,15 +1537,15 @@ class SingleCrystalTestDriver(KIMTestDriver):
                 prototype_label=prototype_label,
                 stoichiometric_species=stoichiometric_species,
                 a=a,
+                a_unit=a_unit,
                 parameter_values=parameter_values,
                 library_prototype_label=library_prototype_label,
                 short_name=short_name,
                 cell_cauchy_stress=cell_cauchy_stress,
-                temperature=temperature,
-                crystal_genome_source_structure_id=crystal_genome_source_structure_id,
-                a_unit=a_unit,
                 cell_cauchy_stress_unit=cell_cauchy_stress_unit,
+                temperature=temperature,
                 temperature_unit=temperature_unit,
+                crystal_genome_source_structure_id=crystal_genome_source_structure_id,
                 disclaimer=disclaimer,
                 property_instances=super()._get_serialized_property_instances(),
                 aflow_executable=self.aflow_executable,
@@ -1508,8 +1566,9 @@ class SingleCrystalTestDriver(KIMTestDriver):
         Get the nominal temperature
 
         Args:
-            unit: The requested unit for the output. Must be understood by the GNU
-            ``units`` utility
+            unit:
+                The requested unit for the output. Must be understood by the GNU
+                ``units`` utility
         """
         source_value = self.__nominal_crystal_structure_npt["temperature"][
             "source-value"
@@ -1526,8 +1585,9 @@ class SingleCrystalTestDriver(KIMTestDriver):
         Get the nominal stress
 
         Args:
-            unit: The requested unit for the output. Must be understood by the GNU
-            ``units`` utility
+            unit:
+                The requested unit for the output. Must be understood by the GNU
+                ``units`` utility
         """
         source_value = self.__nominal_crystal_structure_npt["cell-cauchy-stress"][
             "source-value"
@@ -1671,7 +1731,9 @@ class SingleCrystalTestDriver(KIMTestDriver):
             "in Crystal Genome Test Drivers"
         )
 
-    def _get_atoms(self, change_of_basis: Union[str, ArrayLike] = "primitive") -> Atoms:
+    def _get_atoms(
+        self, change_of_basis: Union[str, npt.ArrayLike] = "primitive"
+    ) -> Atoms:
         """
         Get the atomic configuration representing the nominal crystal,
         with a calculator already attached.
@@ -1688,7 +1750,8 @@ class SingleCrystalTestDriver(KIMTestDriver):
                 corresponding to the "old basis" and the returned ``Atoms`` object being
                 in the "new basis".
 
-                See the docstring for :func:`kim_tools.change_of_basis_atoms` for
+                See the docstring for
+                :func:`kim_tools.symmetry_util.core.change_of_basis_atoms` for
                 more information on how to define the change of basis.
 
         Returns:
@@ -1753,7 +1816,8 @@ def query_crystal_structures(
             The list of possible shortnames is taken by postprocessing README_PROTO.TXT
             from the AFLOW software and packaged with kim-tools for reproducibility. To
             see the exact list of possible short names, call
-            :func:`kim_tools.read_shortnames` and inspect the values of the returned
+            :func:`kim_tools.aflow_util.core.read_shortnames` and inspect the values of
+            the returned
             dictionary. Note that a given short name corresponds to an exact set of
             parameters (with some tolerance), except the overall scale of the crystal.
             For example, "Hexagonal Close Packed" will return only structures with a
