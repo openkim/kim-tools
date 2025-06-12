@@ -1474,16 +1474,26 @@ class SingleCrystalTestDriver(KIMTestDriver):
             cell_cauchy_stress = None
             cell_cauchy_stress_unit = None
         elif write_stress is True:
-            if stress_unit is not None:
-                raise KIMTestDriverError(
-                    "Setting write_stress=True indicates that you wish to use the "
-                    "nominal stress and stress unit stored in this object. Do not "
-                    "specify a stress_unit in this case"
-                )
-            cell_cauchy_stress = crystal_structure["cell-cauchy-stress"]["source-value"]
-            cell_cauchy_stress_unit = crystal_structure["cell-cauchy-stress"][
+            cell_cauchy_stress_stored = crystal_structure["cell-cauchy-stress"][
+                "source-value"
+            ]
+            cell_cauchy_stress_unit_stored = crystal_structure["cell-cauchy-stress"][
                 "source-unit"
             ]
+            if (
+                stress_unit is not None
+                and stress_unit != cell_cauchy_stress_unit_stored
+            ):
+                cell_cauchy_stress_unit = stress_unit
+                cell_cauchy_stress = convert_units(
+                    cell_cauchy_stress_stored,
+                    cell_cauchy_stress_unit_stored,
+                    cell_cauchy_stress_unit,
+                    True,
+                )
+            else:
+                cell_cauchy_stress = cell_cauchy_stress_stored
+                cell_cauchy_stress_unit = cell_cauchy_stress_unit_stored
         else:
             if len(write_stress) != 6:
                 raise KIMTestDriverError(
@@ -1496,8 +1506,19 @@ class SingleCrystalTestDriver(KIMTestDriver):
             temperature = None
             temperature_unit = None
         elif write_temp is True:
-            temperature = crystal_structure["temperature"]["source-value"]
-            temperature_unit = crystal_structure["temperature"]["source-unit"]
+            temperature_stored = crystal_structure["temperature"]["source-value"]
+            temperature_unit_stored = crystal_structure["temperature"]["source-unit"]
+            if temp_unit != temperature_unit_stored:
+                temperature_unit = temp_unit
+                temperature = convert_units(
+                    temperature_stored,
+                    temperature_unit_stored,
+                    temperature_unit,
+                    True,
+                )
+            else:
+                temperature = temperature_stored
+                temperature_unit = temperature_unit_stored
         else:
             temperature = write_temp
             temperature_unit = temp_unit
