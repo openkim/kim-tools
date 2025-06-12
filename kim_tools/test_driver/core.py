@@ -42,6 +42,7 @@ from typing import IO, Any, Dict, List, Optional, Union
 import ase
 import kim_edn
 import numpy as np
+import numpy.typing as npt
 from ase import Atoms
 from ase.calculators.calculator import Calculator
 from ase.constraints import FixSymmetry
@@ -58,7 +59,6 @@ from kim_property import (
 )
 from kim_property.modify import STANDARD_KEYS_SCLAR_OR_WITH_EXTENT
 from kim_query import raw_query
-from numpy.typing import ArrayLike
 
 from ..aflow_util import (
     AFLOW,
@@ -336,7 +336,7 @@ def _add_property_instance(
 def _add_key_to_current_property_instance(
     property_instances: str,
     name: str,
-    value: ArrayLike,
+    value: npt.ArrayLike,
     unit: Optional[str] = None,
     uncertainty_info: Optional[dict] = None,
 ) -> str:
@@ -386,7 +386,7 @@ def _add_key_to_current_property_instance(
 
     def recur_dimensions(
         prev_indices: List[int],
-        sub_value: np.ndarray,
+        sub_value: npt.ArrayLike,
         modify_args: list,
         key_name: str = "source-value",
     ):
@@ -558,7 +558,7 @@ class KIMTestDriver(ABC):
     def _add_key_to_current_property_instance(
         self,
         name: str,
-        value: ArrayLike,
+        value: npt.ArrayLike,
         unit: Optional[str] = None,
         uncertainty_info: Optional[dict] = None,
     ) -> None:
@@ -1382,7 +1382,7 @@ class SingleCrystalTestDriver(KIMTestDriver):
 
     def __add_poscar_to_curr_prop_inst(
         self,
-        change_of_basis: Union[str, ArrayLike],
+        change_of_basis: Union[str, npt.ArrayLike],
         filename: os.PathLike,
         key_name: str,
     ) -> None:
@@ -1706,7 +1706,9 @@ class SingleCrystalTestDriver(KIMTestDriver):
             "in Crystal Genome Test Drivers"
         )
 
-    def _get_atoms(self, change_of_basis: Union[str, ArrayLike] = "primitive") -> Atoms:
+    def _get_atoms(
+        self, change_of_basis: Union[str, npt.ArrayLike] = "primitive"
+    ) -> Atoms:
         """
         Get the atomic configuration representing the nominal crystal,
         with a calculator already attached.

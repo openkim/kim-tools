@@ -1,9 +1,13 @@
 #!/usr/bin/python
 
+import math
+
 import numpy as np
 from ase.build import bulk
 from ase.calculators.kim.kim import KIM
 from ase.io import read
+from elastic_excerpt import get_unique_components_and_reconstruct_matrix
+from sympy import matrix2numpy, symbols
 
 from kim_tools import (
     CENTERING_DIVISORS,
@@ -12,9 +16,11 @@ from kim_tools import (
     get_crystal_structure_from_atoms,
     get_formal_bravais_lattice_from_space_group,
     get_space_group_number_from_prototype,
+    get_symbolic_cell_from_formal_bravais_lattice,
 )
 from kim_tools.symmetry_util.core import (
     PeriodExtensionException,
+    fit_voigt_tensor_to_cell_and_space_group,
     kstest_reduced_distances,
     reduce_and_avg,
 )
@@ -74,5 +80,45 @@ def test_test_reduced_distances():
             assert has_period_extension
 
 
+def test_fit_voigt_tensor_to_cell_and_space_group():
+    a, b, c, alpha, beta, gamma = symbols("a b c alpha beta gamma")
+    # taken from A5B11CD8E_aP26_1_5a_11a_a_8a_a-001
+    test_substitutions = [
+        (a, 1.0),
+        (b, 1.20466246551),
+        (c, 1.81123604761),
+        (alpha, math.radians(76.515)),
+        (beta, math.radians(81.528)),
+        (gamma, math.radians(71.392)),
+    ]
+    # Generate a random symmetric matrix
+    c = np.random.random((6, 6))
+    c = c + c.T
+    for sgnum in range(1, 231):
+        lattice = get_formal_bravais_lattice_from_space_group(sgnum)
+        symbolic_cell = get_symbolic_cell_from_formal_bravais_lattice(lattice)
+        cell = matrix2numpy(symbolic_cell.subs(test_substitutions), dtype=float)
+        # This takes any matrix, picks out the unique constants based on the
+        # algebraic diagrams, and returns a matrix conforming to the material symmetry
+
+        # Test 1: fit_voigt_tensor_to_cell_and_space_group should not change
+        # a matrix that is already symmetrized
+        _, _, c_sym_alg = get_unique_components_and_reconstruct_matrix(c, sgnum)
+        c_sym_alg_tens = fit_voigt_tensor_to_cell_and_space_group(
+            c_sym_alg, cell, sgnum
+        )
+        assert np.allclose(c_sym_alg, c_sym_alg_tens)
+
+        # Test 2: fit_voigt_tensor_to_cell_and_space_group should produce
+        # a matrix that is already symmetrized
+        c_sym_tens = fit_voigt_tensor_to_cell_and_space_group(c, cell, sgnum)
+        if lattice == "aP":
+            assert np.allclose(c, c_sym_tens)
+        _, _, c_sym_tens_alg = get_unique_components_and_reconstruct_matrix(
+            c_sym_tens, sgnum
+        )
+        assert np.allclose(c_sym_tens, c_sym_tens_alg)
+
+
 if __name__ == "__main__":
-    test_change_of_basis_atoms()
+    test_fit_voigt_tensor_to_cell_and_space_group()

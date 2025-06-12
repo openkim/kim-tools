@@ -16,10 +16,10 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import ase
 import numpy as np
+import numpy.typing as npt
 from ase import Atoms
 from ase.cell import Cell
 from ase.neighborlist import natural_cutoffs, neighbor_list
-from numpy.typing import ArrayLike
 from sympy import Symbol, linear_eq_to_matrix, matrix2numpy, parse_expr
 
 from ..symmetry_util import (
@@ -97,10 +97,10 @@ class EquivalentEqnSet:
     param_names: List[str]
     # m x 3 x n matrices of coefficients, where m is the multiplicity of the Wyckoff
     # position
-    coeff_matrix_list: List[ArrayLike]
+    coeff_matrix_list: List[npt.ArrayLike]
     # m x 3 x 1 columns of constant terms in the coordinates. This gets subtracted from
     # the RHS when solving
-    const_terms_list: List[ArrayLike]
+    const_terms_list: List[npt.ArrayLike]
 
 
 @dataclass
@@ -111,7 +111,7 @@ class EquivalentAtomSet:
 
     species: str
     wyckoff_letter: str
-    frac_position_list: List[ArrayLike]  # m x 3 x 1 columns
+    frac_position_list: List[npt.ArrayLike]  # m x 3 x 1 columns
 
 
 def write_tmp_poscar_from_atoms_and_run_function(
@@ -600,7 +600,7 @@ def get_real_to_virtual_species_map(input: Union[List[str], Atoms]) -> Dict:
 
 
 def solve_for_aflow_cell_params_from_primitive_ase_cell_params(
-    cellpar_prim: ArrayLike, prototype_label: str
+    cellpar_prim: npt.ArrayLike, prototype_label: str
 ) -> List[float]:
     """
     Get conventional cell parameters from primitive cell parameters. It is assumed that
@@ -1199,9 +1199,9 @@ class AFLOW:
         sort_atoms1: bool = True,
         sort_atoms2: bool = True,
     ) -> Tuple[
-        Optional[ArrayLike],
-        Optional[ArrayLike],
-        Optional[ArrayLike],
+        Optional[npt.ArrayLike],
+        Optional[npt.ArrayLike],
+        Optional[npt.ArrayLike],
         Optional[List[int]],
     ]:
         """
