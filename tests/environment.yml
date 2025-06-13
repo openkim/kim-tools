@@ -4,6 +4,14 @@ channels:
 dependencies:
   - kimpy
   - ase
+  - kim-property
+  - kim-edn
   - spglib
   - kim-query
-  - kim-edn
+  - sympy
+  - numpy
+  - scipy
+  - jinja2
+  - matplotlib
+  - scikit-learn
+  - pymatgen
