@@ -37,10 +37,14 @@ jobs:
       - name: Install AFLOW
         shell: bash -el {0}
         run: |
-          wget https://materials.duke.edu/AFLOW/aflow.3.2.14.tar.xz
-          tar xf aflow.3.2.14.tar.xz
-          cd aflow.3.2.14
-          make -j4
+          git clone https://github.com/microsoft/vcpkg.git
+          cd vcpkg && ./bootstrap-vcpkg.sh && cd ..
+          export VCPKG_ROOT=$PWD/vcpkg
+          wget https://github.com/aflow-org/aflow/releases/download/v4.0.4/aflow_4.0.4.orig.tar.gz
+          tar xf aflow_4.0.4.orig.tar.gz
+          cd aflow-4.0.4/src
+          cmake --preset release_vcpkg
+          cmake --build --preset release_vcpkg -j 4
 
       - name: Install KIM model
         shell: bash -el {0}
@@ -55,7 +59,7 @@ jobs:
       - name: Run tests
         shell: bash -el {0}
         run: |
-          export PATH=$PATH:$PWD/aflow.3.2.14
+          export PATH=$PATH:$PWD/aflow-4.0.4/build/release_vcpkg
           cd tests
           pytest
 
@@ -64,7 +68,7 @@ jobs:
         run: |
           git submodule init
           git submodule update
-          export PATH=$PATH:$PWD/aflow.3.2.14
+          export PATH=$PATH:$PWD/aflow-4.0.4/build/release_vcpkg
           kim-api-collections-management install user SW_ZhouWardMartin_2013_CdTeZnSeHgS__MO_503261197030_003
           cd examples/CrystalGenomeASEExample__TD_000000654321_000
           python run.py

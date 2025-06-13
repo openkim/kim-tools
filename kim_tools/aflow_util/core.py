@@ -61,7 +61,7 @@ __all__ = [
     "AFLOW",
 ]
 
-AFLOW_EXECUTABLE = "/home/openkim/aflow-v4.0.4.2/build/release_vcpkg/aflow"
+AFLOW_EXECUTABLE = "aflow"
 
 
 class IncorrectSpaceGroupException(Exception):
