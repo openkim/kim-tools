@@ -4,7 +4,6 @@ import json
 import logging
 import os
 import subprocess
-import sys
 from curses.ascii import isalpha, isdigit
 from dataclasses import dataclass
 from math import acos, cos, degrees, radians, sqrt
@@ -18,6 +17,7 @@ import numpy.typing as npt
 from ase import Atoms
 from ase.cell import Cell
 from ase.neighborlist import natural_cutoffs, neighbor_list
+from semver import Version
 from sympy import Symbol, linear_eq_to_matrix, matrix2numpy, parse_expr
 
 from ..symmetry_util import (
@@ -62,6 +62,10 @@ __all__ = [
 ]
 
 AFLOW_EXECUTABLE = "aflow"
+REQUIRED_AFLOW = "4.0.4"
+AFLOW_PROTOTYPE_ENCYCLOPEDIA_PATH = os.path.join(
+    os.path.dirname(os.path.realpath(__file__)), "aflow_prototype_encyclopedia"
+)
 
 
 class IncorrectSpaceGroupException(Exception):
@@ -502,81 +506,27 @@ def get_bravais_lattice_from_prototype(prototype_label: str) -> str:
     return get_pearson_symbol_from_prototype(prototype_label)[:2]
 
 
-def read_shortnames() -> Dict:
+def read_shortnames(
+    aflow_prototype_encyclopedia_path: PathLike = AFLOW_PROTOTYPE_ENCYCLOPEDIA_PATH,
+) -> Dict:
     """
-    This function parses "README_PROTO.TXT". It finds each line that (after stripping
-    whitespace) starts with "ANRL Label". These are headers of sections of prototype
-    listings. It finds the column of the word "notes". This will be the column that the
-    shortnames are in. Skipping various non-prototype lines, the first column in each
-    prototype line (before the ".") is the prototype, while the end of the line
-    starting from the "notes" column, cleaned up to remove whitespace and
-    end-of-shortname comments (i.e. "(part 3)"), is the shortname.
+    Read the aflow prototype encyclopedia submodule
+
+    Args:
+        aflow_prototype_encyclopedia_path:
+            Path to aflow_prototype_encyclopedia_repo
 
     Returns:
         A dictionary where the keys are the prototype strings, and the values are the
         shortnames found in the corresponding lines.
     """
+    aflow_data_path = os.path.join(aflow_prototype_encyclopedia_path, "data")
     shortnames = {}
-    shortname_file = "data/README_PROTO.TXT"
-    notes_index = None
-    with open(
-        os.path.join(os.path.dirname(os.path.realpath(__file__)), shortname_file),
-        encoding="utf-8",
-    ) as f:
-        for line in f:
-            line = line.strip()
-            if line.startswith("ANRL Label"):
-                try:
-                    notes_index = line.index("notes")
-                    continue
-                except Exception:
-                    print("ERROR: ANRL Label line without notes header")
-                    print(line)
-                    sys.exit()
-            # Skip this line if it's before the first ANRL label
-            if notes_index is None:
-                continue
-            # Skip this line if it's empty, a comment, or a divider
-            if (
-                line == ""
-                or line == "\n"
-                or line.startswith("*")
-                or line.startswith("-")
-                or line.startswith("ANRL")
-            ):
-                continue
-            # Skip this line if it only has content in the first column
-            # (prototype runover from previous line)
-            try:
-                _ = line.split(" ")[1]
-            except Exception:
-                continue
-            # Clean up prototype (remove decorations suffix)
-            prototype = line.split(" ")[0]
-            if "." in prototype:
-                idx = prototype.index(".")
-                prototype = prototype[:idx]
-            # Clean up short name
-            sname = line[notes_index:]
-            if "(part " in sname:
-                idx = sname.index("(part")
-                sname = sname[:idx]
-            sname = sname.replace(", part 3", "")
-            if "ICSD" in sname:
-                idx = sname.index("ICSD")
-                tmp = sname[idx:].split(" ")[1]
-                if tmp.endswith(","):
-                    sname = sname[:idx] + "ICSD " + tmp[:-1]
-            if " similar to" in sname:
-                idx = sname.index(" similar to")
-                sname = sname[:idx]
-            if " equivalent to" in sname:
-                idx = sname.index(" equivalent to")
-                sname = sname[:idx]
-            if sname.endswith(","):
-                sname = sname[:-1]
-            # add prototype to shortnames dictionary
-            shortnames[prototype] = sname.rstrip()
+    for libproto in os.listdir(aflow_data_path):
+        info_file = os.path.join(aflow_data_path, libproto, "info.json")
+        with open(info_file) as f:
+            info = json.load(f)
+        shortnames[libproto] = info["title"]
     return shortnames
 
 
@@ -718,7 +668,6 @@ class AFLOW:
         np (int):
             Number of processors to use, passed to the AFLOW executable using the
             ``--np=...`` argument
-
     """
 
     class AFLOWNotFoundException(Exception):
@@ -754,16 +703,19 @@ class AFLOW:
             np: Sets :attr:`np`
         """
         self.aflow_executable = aflow_executable
-
+        self.np = np
         try:
-            subprocess.check_output([aflow_executable, "--proto=A_cF4_225_a"])
+            ver_str = self.get_aflow_version()
         except Exception:
             raise self.AFLOWNotFoundException(
                 "Failed to run an AFLOW test command. It is likely "
                 "that the AFLOW executable was not found."
             )
-
-        self.np = np
+        if Version.parse(ver_str) < Version.parse(REQUIRED_AFLOW):
+            raise self.AFLOWNotFoundException(
+                f"Your AFLOW version {ver_str} is less "
+                f"than the required {REQUIRED_AFLOW}"
+            )
         if aflow_work_dir != "" and not aflow_work_dir.endswith("/"):
             self.aflow_work_dir = aflow_work_dir + "/"
         else:
@@ -1138,6 +1090,10 @@ class AFLOW:
         else:
             matching_library_prototype_label = None
 
+        logger.info(
+            "Detected encyclopedia entry "
+            f"{matching_library_prototype_label}: {shortname}"
+        )
         return matching_library_prototype_label, shortname
 
     def get_library_prototype_label_and_shortname_from_atoms(

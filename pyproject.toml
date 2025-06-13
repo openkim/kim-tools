@@ -17,7 +17,8 @@ dependencies = [
     "jinja2 >= 2.7.2",
     "matplotlib",
     "scikit-learn",
-    "pymatgen"
+    "pymatgen",
+    "semver",
     ]
 authors = [
     { name = "ilia Nikiforov", email = "nikif002@umn.edu" },

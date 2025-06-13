@@ -1,3 +1,6 @@
 [submodule "examples/CrystalGenomeASEExample__TD_000000654321_000"]
 	path = examples/CrystalGenomeASEExample__TD_000000654321_000
 	url = https://github.com/openkim-hackathons/CrystalGenomeASEExample__TD_000000654321_000.git
+[submodule "kim_tools/aflow_util/aflow_prototype_encyclopedia"]
+	path = kim_tools/aflow_util/aflow_prototype_encyclopedia
+	url = https://github.com/aflow-org/aflow_prototype_encyclopedia.git
