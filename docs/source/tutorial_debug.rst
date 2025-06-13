@@ -43,10 +43,6 @@ will have results or a compatible interatomic potential
 Every time you use a new model, you will need to install the model and re-instantiate
 your ``TestDriver`` class.
 
-.. todo::
-
-   Rhombohedral crystals are currently not supported. Skip the AB_hR26_148_a2f_b2f structure below.
-
 .. csv-table::
    :header-rows: 1
    :file: structure_table.csv

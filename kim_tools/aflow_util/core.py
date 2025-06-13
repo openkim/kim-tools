@@ -711,7 +711,10 @@ class AFLOW:
                 "Failed to run an AFLOW test command. It is likely "
                 "that the AFLOW executable was not found."
             )
-        if Version.parse(ver_str) < Version.parse(REQUIRED_AFLOW):
+        # I am fine with allowing 4.0.4 prereleases
+        aflow_ver_no_prerelease = Version.parse(ver_str)
+        aflow_ver_no_prerelease.replace(prerelease=None)
+        if aflow_ver_no_prerelease < Version.parse(REQUIRED_AFLOW):
             raise self.AFLOWNotFoundException(
                 f"Your AFLOW version {ver_str} is less "
                 f"than the required {REQUIRED_AFLOW}"
