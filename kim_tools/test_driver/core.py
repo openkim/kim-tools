@@ -105,13 +105,29 @@ PROP_SEARCH_PATHS_INFO = (
 
 def _get_optional_source_value(property_instance: Dict, key: str) -> Any:
     """
-    Function for getting an optional property key's source-value, or None if the key
-    doesn't exist
+    Function for getting an optional key's source-value, or None if the key
+    doesn't exist, from a Property Instance that is a Dict
     """
     if key in property_instance:
         return property_instance[key]["source-value"]
     else:
         return None
+
+
+def _update_optional_key_in_property_dict(
+    property_instance: Dict, key: str, value: Any, unit: Optional[str] = None
+) -> None:
+    """
+    In a Property Instance that's a Dict, update a key or erase it if
+    None is provided
+    """
+    if value is None:
+        if key in property_instance:
+            property_instance.pop(key)
+    else:
+        property_instance[key] = {"source-value": value}
+        if unit is not None:
+            property_instance[key]["source-unit"] = unit
 
 
 def minimize_wrapper(
@@ -1335,15 +1351,17 @@ class SingleCrystalTestDriver(KIMTestDriver):
         """
         aflow = AFLOW(aflow_executable=self.aflow_executable)
         try:
-            aflow_parameter_values = aflow.solve_for_params_of_known_prototype(
-                atoms=atoms,
-                prototype_label=self.__nominal_crystal_structure_npt["prototype-label"][
-                    "source-value"
-                ],
-                max_resid=max_resid,
-                cell_rtol=cell_rtol,
-                rot_rtol=rot_rtol,
-                rot_atol=rot_atol,
+            (aflow_parameter_values, library_prototype_label, short_name) = (
+                aflow.solve_for_params_of_known_prototype(
+                    atoms=atoms,
+                    prototype_label=self.__nominal_crystal_structure_npt[
+                        "prototype-label"
+                    ]["source-value"],
+                    max_resid=max_resid,
+                    cell_rtol=cell_rtol,
+                    rot_rtol=rot_rtol,
+                    rot_atol=rot_atol,
+                )
             )
         except (AFLOW.FailedToMatchException, AFLOW.ChangedSymmetryException) as e:
             raise type(e)(
@@ -1358,9 +1376,26 @@ class SingleCrystalTestDriver(KIMTestDriver):
             "source-unit": "angstrom",
         }
         if len(aflow_parameter_values) > 1:
+            # If we detected new prototype values, old must have been
+            # there and the same length as well
+            old_param_values = self.__nominal_crystal_structure_npt["parameter-values"][
+                "source-value"
+            ]
+            new_param_values = aflow_parameter_values[1:]
+            assert len(old_param_values) == len(new_param_values)
             self.__nominal_crystal_structure_npt["parameter-values"] = {
-                "source-value": aflow_parameter_values[1:]
+                "source-value": new_param_values
             }
+        _update_optional_key_in_property_dict(
+            property_instance=self.__nominal_crystal_structure_npt,
+            key="library-prototype-label",
+            value=library_prototype_label,
+        )
+        _update_optional_key_in_property_dict(
+            property_instance=self.__nominal_crystal_structure_npt,
+            key="short-name",
+            value=short_name,
+        )
 
     def _verify_unchanged_symmetry(self, atoms: Atoms) -> bool:
         """

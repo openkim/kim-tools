@@ -3,14 +3,19 @@
 import os
 
 import kim_edn
+import numpy as np
+import numpy.typing as npt
 from ase.atoms import Atoms
+from ase.build import bulk
 from ase.calculators.lj import LennardJones
 
 from kim_tools import (
     KIMTestDriver,
+    SingleCrystalTestDriver,
     detect_unique_crystal_structures,
     get_deduplicated_property_instances,
 )
+from kim_tools.test_driver.core import _get_optional_source_value
 
 
 class TestTestDriver(KIMTestDriver):
@@ -29,6 +34,22 @@ class TestTestDriver(KIMTestDriver):
         )
         self._add_key_to_current_property_instance(
             "mass", atoms.get_masses()[0], "amu", {"source-std-uncert-value": 1}
+        )
+
+
+class TestSingleCrystalTestDriver(SingleCrystalTestDriver):
+    def _calculate(self, deform_matrix: npt.NDArray = np.eye(3), **kwargs):
+        """
+        strain the crystal and write a crystal-structure-npt.
+        For testing various crystal detection things
+        """
+        atoms = self._get_atoms()
+        original_cell = atoms.cell
+        new_cell = original_cell @ deform_matrix
+        atoms.set_cell(new_cell, scale_atoms=True)
+        self._update_nominal_parameter_values(atoms)
+        self._add_property_instance_and_common_crystal_genome_keys(
+            "crystal-structure-npt"
         )
 
 
@@ -134,5 +155,27 @@ def test_get_deduplicated_property_instances():
     assert inst_with_2_source == 1
 
 
+def test_structure_detection():
+    test = TestSingleCrystalTestDriver(LennardJones())
+    atoms = bulk("Mg")
+    hcp_prototype = "A_hP2_194_c"
+    hcp_library_prototype = "A_hP2_194_c-001"
+    hcp_shortname = ["Hexagonal Close Packed (Mg, $A3$, hcp) Structure"]
+    stretch = np.diag([1, 1, 10])
+    for deform, prototype, library_prototype, shortname in zip(
+        [np.eye(3), stretch],
+        [hcp_prototype, hcp_prototype],
+        [hcp_library_prototype, None],
+        [hcp_shortname, None],
+    ):
+        property_instance = test(atoms, deform_matrix=deform)[0]
+        assert property_instance["prototype-label"]["source-value"] == prototype
+        assert (
+            _get_optional_source_value(property_instance, "library-prototype-label")
+            == library_prototype
+        )
+        assert _get_optional_source_value(property_instance, "short-name") == shortname
+
+
 if __name__ == "__main__":
-    test_get_deduplicated_property_instances()
+    test_structure_detection()

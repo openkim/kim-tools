@@ -1211,7 +1211,7 @@ class AFLOW:
 
     def get_param_names_from_prototype(self, prototype_label: str) -> List[str]:
         """
-        Get the parameter names by parsing the error message from AFLOW
+        Get the parameter names
         """
         symbol_string = self.write_poscar_from_prototype(
             prototype_label=prototype_label, addtl_args="--parameter_symbols_only"
@@ -1358,7 +1358,7 @@ class AFLOW:
         cell_rtol: float = 0.01,
         rot_rtol: float = 0.01,
         rot_atol: float = 0.01,
-    ) -> List[float]:
+    ) -> Tuple[List[float], Optional[str]]:
         """
         Given an Atoms object that is a primitive cell of its Bravais lattice as
         defined in doi.org/10.1016/j.commatsci.2017.01.017, and its presumed prototype
@@ -1397,8 +1397,10 @@ class AFLOW:
                 default distance tolerance of 0.01*(NN distance)
 
         Returns:
-            List of free parameters that will regenerate `atoms` (up to permutations,
-            rotations, and translations) when paired with `prototype_label`
+            * List of free parameters that will regenerate `atoms` (up to permutations,
+              rotations, and translations) when paired with `prototype_label`
+            * Library prototype label from the AFLOW prototype encyclopedia, if any
+            * Title of library prototype from the AFLOW prototype encyclopedia, if any
 
         Raises:
             AFLOW.ChangedSymmetryException:
@@ -1444,6 +1446,10 @@ class AFLOW:
         prototype_label_detected = detected_prototype_designation[
             "aflow_prototype_label"
         ]
+
+        library_prototype_label, short_name = (
+            self.get_library_prototype_label_and_shortname_from_atoms(atoms)
+        )
 
         if not prototype_labels_are_equivalent(
             prototype_label, prototype_label_detected
@@ -1627,7 +1633,11 @@ class AFLOW:
                         f"Found set of parameters for prototype {prototype_label} "
                         "that is unrotated"
                     )
-                    return candidate_prototype_param_values
+                    return (
+                        candidate_prototype_param_values,
+                        library_prototype_label,
+                        short_name,
+                    )
                 else:
                     logger.info(
                         f"Found set of parameters for prototype {prototype_label}, "
