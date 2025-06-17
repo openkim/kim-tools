@@ -7,6 +7,10 @@
 Welcome to kim-tools's documentation!
 ==========================================
 
+.. note::
+
+   kim-tools 0.3 requires AFLOW 4.0.4 or greater. See :ref:`doc.standalone_installation` if you are using or developing Test Drivers outside the KIM Developer Platform
+
 .. figure:: underconstruction.gif
 
    :sub:`image source: http://textfiles.com/underconstruction/`
@@ -62,11 +66,17 @@ Standalone usage of ``kim-tools`` is possible and makes sense if you wish to use
 -------------
 Prerequisites
 -------------
-Before installing the package using ``pip``, you will need to install AFLOW. The KIM API is required to run any Test Drivers that use LAMMPS, or to use KIM Models with ASE-only Test Drivers (recommeded). `GNU Units <https://www.gnu.org/software/units/>`_ is also required. You may have to do some configuration for your specific machine for things like Conda installation directories, ``pip`` installation directories, etc.
+Before installing the package using ``pip``, you will need to install AFLOW 4.0.4 or greater. The KIM API is required to run any Test Drivers that use LAMMPS, or to use KIM Models with ASE-only Test Drivers (recommeded). `GNU Units <https://www.gnu.org/software/units/>`_ is also required. You may have to do some configuration for your specific machine for things like Conda installation directories, ``pip`` installation directories, etc.
 
 AFLOW
 -----
-The installation script for ``kim-tools`` will check that the ``aflow`` executable is in your ``PATH`` and working correctly. Installation instructions are here: http://aflow.org/install-aflow/. If the automatic installers/downloaders do not work for you, I have found building from source manually to be straightforward and well-behaved. Simply download the source code, issue ``make``, and copy the resulting executable into your ``PATH`` manually or using ``make install``. An executable file named ``aflow_data`` must also be present in your ``PATH``. For the purposes of ``kim-tools``, this may be an empty file with execute permissions, it does not need to be the actual ``aflow_data`` file built from the AFLOW source.
+The installation script for ``kim-tools`` will check that the ``aflow`` executable is in your ``PATH`` and is version 4.0.4 or greater. At the time of writing, AFLOW 4 is in prerelease
+at https://github.com/aflow-org/aflow, so the installation options may change, but the following options appear to work well so far:
+   - Ubuntu precompiled binary
+   - Ubuntu ``.deb`` package
+   - Homebrew
+   - snap
+   - Build from source using the ``release_vcpkg`` preset (read the README carefully for requirements)
 
 KIM API and kimpy
 -----------------
@@ -88,9 +98,7 @@ Once the above prerequisites are satisfiied, you can install using ``pip``:
 
 .. code-block:: bash
 
-   pip install --user git+https://github.com/openkim/kim-tools.git
-
-If you are installing on an HPC cluster, you may need to use different options to achieve the desired result.
+   pip install kim-tools
 
 API Documentation, Indices and tables
 =====================================

@@ -1,3 +1,14 @@
+This file contains information about major releases. For features and bugfixes added in individual releases, see https://github.com/openkim/kim-tools/releases
+
+Summary of changes from v0.2.5 to v0.3.0
+---------------------------------------------------------
+
+- kim-tools now requires AFLOW 4.0.4 or greater. There are no changes to the `SingleCrystalTestDriver` class API related to this, but it does mean that rhombohedral crystals are now supported. KIM Developer Platform 1.7.0+ will incorporate `kim-tools` 0.3 and all requirements. For updates to the standalone installation process, see https://kim-tools.readthedocs.io/en/latest/#standalone-installation
+- Added `fit_voigt_tensor_to_cell_and_space_group` function
+- Fixed a bug where `_update_nominal_parameter_values` wasn't updating the library prototype label and short name
+- The example Test Driver `test_generator.json` and `kimspec.edn.genie` now include variable version numbers
+- Expanded example Test Driver to demonstrate more varied usage
+
 Summary of changes from v0.1 to v0.2b
 ---------------------------------------------------------
 
