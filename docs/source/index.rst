@@ -9,7 +9,7 @@ Welcome to kim-tools's documentation!
 
 .. note::
 
-   kim-tools 0.3 requires AFLOW 4.0.4 or greater. See :ref:`doc.standalone_installation` if you are using or developing Test Drivers outside the KIM Developer Platform
+   kim-tools 0.3 requires AFLOW 4.0.5 or greater. See :ref:`doc.standalone_installation` if you are using or developing Test Drivers outside the KIM Developer Platform
 
 .. figure:: underconstruction.gif
 
@@ -66,17 +66,18 @@ Standalone usage of ``kim-tools`` is possible and makes sense if you wish to use
 -------------
 Prerequisites
 -------------
-Before installing the package using ``pip``, you will need to install AFLOW 4.0.4 or greater. The KIM API is required to run any Test Drivers that use LAMMPS, or to use KIM Models with ASE-only Test Drivers (recommeded). `GNU Units <https://www.gnu.org/software/units/>`_ is also required. You may have to do some configuration for your specific machine for things like Conda installation directories, ``pip`` installation directories, etc.
+Before installing the package using ``pip``, you will need to install AFLOW 4.0.5 or greater. The KIM API is required to run any Test Drivers that use LAMMPS, or to use KIM Models with ASE-only Test Drivers (recommeded). `GNU Units <https://www.gnu.org/software/units/>`_ is also required. You may have to do some configuration for your specific machine for things like Conda installation directories, ``pip`` installation directories, etc.
 
 AFLOW
 -----
-The installation script for ``kim-tools`` will check that the ``aflow`` executable is in your ``PATH`` and is version 4.0.4 or greater. At the time of writing, AFLOW 4 is in prerelease
+The installation script for ``kim-tools`` will check that the ``aflow`` executable is in your ``PATH`` and is version 4.0.5 or greater. At the time of writing, AFLOW 4 is in prerelease
 at https://github.com/aflow-org/aflow, so the installation options may change, but the following options appear to work well so far:
    - Ubuntu precompiled binary
    - Ubuntu ``.deb`` package
    - Homebrew
-   - snap
-   - Build from source using the ``release_vcpkg`` preset (read the README carefully for requirements)
+   - Build from source using the ``release_vcpkg`` preset (read their README carefully for requirements)
+
+Installing AFLOW using ``snap`` does NOT work, as it does not have access to the files saved by the Python ``tempfile`` library (e.g. ``/tmp``), at least using default settings.
 
 KIM API and kimpy
 -----------------

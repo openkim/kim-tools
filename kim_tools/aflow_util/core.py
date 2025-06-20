@@ -62,7 +62,7 @@ __all__ = [
 ]
 
 AFLOW_EXECUTABLE = "aflow"
-REQUIRED_AFLOW = "4.0.4"
+REQUIRED_AFLOW = "4.0.5"
 AFLOW_PROTOTYPE_ENCYCLOPEDIA_PATH = os.path.join(
     os.path.dirname(os.path.realpath(__file__)), "aflow_prototype_encyclopedia"
 )
@@ -711,7 +711,7 @@ class AFLOW:
                 "Failed to run an AFLOW test command. It is likely "
                 "that the AFLOW executable was not found."
             )
-        # I am fine with allowing 4.0.4 prereleases
+        # I am fine with allowing prereleases
         aflow_ver_no_prerelease = Version.parse(ver_str)
         aflow_ver_no_prerelease.replace(prerelease=None)
         if aflow_ver_no_prerelease < Version.parse(REQUIRED_AFLOW):
