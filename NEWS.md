@@ -8,7 +8,6 @@ Summary of changes from v0.2.5 to v0.3.0
 - Fixed a bug where `_update_nominal_parameter_values` wasn't updating the library prototype label and short name
 - The example Test Driver `test_generator.json` and `kimspec.edn.genie` now include variable version numbers
 - Expanded example Test Driver to demonstrate more varied usage
-- Added version numbers to Test Driver generator and templates
 
 Summary of changes from v0.1 to v0.2b
 ---------------------------------------------------------
