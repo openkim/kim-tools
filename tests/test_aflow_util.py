@@ -26,6 +26,10 @@ from kim_tools import (
     query_crystal_structures,
     split_parameter_array,
 )
+from kim_tools.aflow_util.core import (
+    build_abstract_formula_from_stoich_reduced_list,
+    find_species_permutation_between_prototype_labels,
+)
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(filename="kim-tools.log", level=logging.INFO, force=True)
@@ -221,6 +225,20 @@ def test_prototype_labels_are_equivalent():
     assert not (prototype_labels_are_equivalent("AB_oC8_65_j_g", "AB_oC8_65_i_i"))
     assert prototype_labels_are_equivalent("AB2C_oP8_17_a_bc_d", "AB2C_oP8_17_a_bd_c")
     assert prototype_labels_are_equivalent("AB_mP8_14_ad_e", "AB_mP8_14_ab_e")
+    assert prototype_labels_are_equivalent("AB_mP8_14_ad_e", "AB_mP8_14_ab_e-001")
+    assert find_species_permutation_between_prototype_labels(
+        "AB2C_oP8_17_a_bc_d", "ABC2_oP8_17_a_c_bd"
+    ) == (0, 2, 1)
+    assert (
+        find_species_permutation_between_prototype_labels(
+            "AB2C_oP8_17_a_bc_d", "AB2C_oP8_17_a_c_bd"
+        )
+        is None
+    )
+
+
+def test_build_abstract_formula_from_stoich_reduced_list():
+    assert build_abstract_formula_from_stoich_reduced_list([1, 2, 3]) == "AB2C3"
 
 
 def test_get_wyckoff_lists_from_prototype():

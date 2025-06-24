@@ -6,6 +6,7 @@ import os
 import subprocess
 from curses.ascii import isalpha, isdigit
 from dataclasses import dataclass
+from itertools import permutations
 from math import acos, cos, degrees, radians, sqrt
 from os import PathLike
 from tempfile import NamedTemporaryFile
@@ -343,6 +344,30 @@ def get_stoich_reduced_list_from_prototype(prototype_label: str) -> List[int]:
     return stoich_reduced_list
 
 
+def build_abstract_formula_from_stoich_reduced_list(
+    stoich_reduced_list: List[int],
+) -> str:
+    """
+    Get abstract chemical formula from numerical list of stoichiometry
+    i.e. [1,3] -> "AB3"
+
+    Args:
+        stoich_reduced_list:
+            List of reduced stoichiometric numbers
+
+    Returns:
+        Abstract chemical formula
+    """
+    formula = ""
+    for spec_num, stoich_num in enumerate(stoich_reduced_list):
+        assert isinstance(stoich_num, int)
+        assert stoich_num > 0
+        formula += chr(65 + spec_num)
+        if stoich_num > 1:
+            formula += str(stoich_num)
+    return formula
+
+
 def get_wyckoff_lists_from_prototype(prototype_label: str) -> List[str]:
     """
     Expand the list of Wyckoff letters in the prototype to account for each individual
@@ -350,7 +375,7 @@ def get_wyckoff_lists_from_prototype(prototype_label: str) -> List[str]:
     e.g. A2B3C_mC48_15_aef_3f_2e -> ['aef','fff','ee']
     """
     expanded_wyckoff_letters = []
-    prototype_label_split = prototype_label.split("_")
+    prototype_label_split = prototype_label.split("-")[0].split("_")
     for species_wyckoff_string in prototype_label_split[3:]:
         expanded_wyckoff_letters.append("")
         curr_wyckoff_count = 0
@@ -371,14 +396,14 @@ def prototype_labels_are_equivalent(
     prototype_label_1: str,
     prototype_label_2: str,
     allow_enantiomorph: bool = False,
-    allow_species_permutation: bool = False,
 ) -> bool:
     """
-    Checks if two prototype labels are equivalent
+    Checks if two prototype labels are equivalent (species permutations not allowed)
+
+    Args:
+        allow_enantiomorph:
+            Whether to consider enantiomorphic pairs of space groups to be equivalent
     """
-    if allow_species_permutation:
-        # TODO: Possibly add this (for checking library prototype labels)
-        raise NotImplementedError("Species permutations not implemented")
 
     if prototype_label_1 == prototype_label_2:
         return True
@@ -492,6 +517,58 @@ def prototype_labels_are_equivalent(
             "triclinic and monoclinic space groups such as this."
         )
         return True
+
+
+def find_species_permutation_between_prototype_labels(
+    prototype_label_1: str,
+    prototype_label_2: str,
+    allow_enantiomorph: bool = False,
+) -> Optional[Tuple[int]]:
+    """
+    Find the permutation of species required to match two prototype labels
+
+    Args:
+        allow_enantiomorph:
+            Whether to consider enantiomorphic pairs of space groups to be equivalent
+
+    Returns:
+        The permutation of species of ``prototype_label_1`` required to match
+        ``prototype_label_2``, or None if no match is found
+    """
+    # Disassemble prototype_label_1
+    stoich_reduced_list_1 = get_stoich_reduced_list_from_prototype(prototype_label_1)
+    pearson_1 = get_pearson_symbol_from_prototype(prototype_label_1)
+    space_group_1 = str(get_space_group_number_from_prototype(prototype_label_1))
+    species_wyckoff_sections_1 = prototype_label_1.split("-")[0].split("_")[3:]
+
+    nspecies = len(stoich_reduced_list_1)
+    assert nspecies == len(species_wyckoff_sections_1)
+
+    permutation_candidates = permutations(tuple(range(nspecies)))
+    for permutation in permutation_candidates:
+        # Permute the species
+        stoich_reduced_list_1_permuted = [stoich_reduced_list_1[i] for i in permutation]
+        species_wyckoff_sections_1_permuted = [
+            species_wyckoff_sections_1[i] for i in permutation
+        ]
+
+        # Reassemble prototype_label_1_permuted
+        abstract_formula_1_permuted = build_abstract_formula_from_stoich_reduced_list(
+            stoich_reduced_list_1_permuted
+        )
+        prototype_label_1_permuted_list = [
+            abstract_formula_1_permuted,
+            pearson_1,
+            space_group_1,
+        ] + species_wyckoff_sections_1_permuted
+        prototype_label_1_permuted = "_".join(prototype_label_1_permuted_list)
+        if prototype_labels_are_equivalent(
+            prototype_label_1=prototype_label_1_permuted,
+            prototype_label_2=prototype_label_2,
+            allow_enantiomorph=allow_enantiomorph,
+        ):
+            return permutation
+    return None
 
 
 def get_space_group_number_from_prototype(prototype_label: str) -> int:
