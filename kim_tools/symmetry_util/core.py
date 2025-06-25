@@ -289,8 +289,11 @@ def space_group_numbers_are_enantiomorphic(sg_1: int, sg_2: int) -> bool:
         }
         enantiomorph_conversion_2 = {v: k for k, v in enantiomorph_conversion.items()}
         enantiomorph_conversion.update(enantiomorph_conversion_2)
-        if enantiomorph_conversion[sg_1] == sg_2:
-            return True
+        if sg_1 in enantiomorph_conversion:
+            if enantiomorph_conversion[sg_1] == sg_2:
+                return True
+            else:
+                return False
         else:
             return False
 

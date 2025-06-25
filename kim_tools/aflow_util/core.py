@@ -396,6 +396,7 @@ def prototype_labels_are_equivalent(
     prototype_label_1: str,
     prototype_label_2: str,
     allow_enantiomorph: bool = False,
+    log: bool = True,
 ) -> bool:
     """
     Checks if two prototype labels are equivalent (species permutations not allowed)
@@ -403,6 +404,8 @@ def prototype_labels_are_equivalent(
     Args:
         allow_enantiomorph:
             Whether to consider enantiomorphic pairs of space groups to be equivalent
+        log:
+            Whether to log results
     """
 
     if prototype_label_1 == prototype_label_2:
@@ -414,20 +417,22 @@ def prototype_labels_are_equivalent(
     if not stoich_reduced_list_1 == get_stoich_reduced_list_from_prototype(
         prototype_label_2
     ):
-        logger.info(
-            "Found non-matching stoichiometry in labels "
-            f"{prototype_label_1} and {prototype_label_2}"
-        )
+        if log:
+            logger.info(
+                "Found non-matching stoichiometry in labels "
+                f"{prototype_label_1} and {prototype_label_2}"
+            )
         return False
 
     # Check Pearson symbol
     if not get_pearson_symbol_from_prototype(
         prototype_label_1
     ) == get_pearson_symbol_from_prototype(prototype_label_2):
-        logger.info(
-            "Found non-matching Pearson symbol in labels "
-            f"{prototype_label_1} and {prototype_label_2}"
-        )
+        if log:
+            logger.info(
+                "Found non-matching Pearson symbol in labels "
+                f"{prototype_label_1} and {prototype_label_2}"
+            )
         return False
 
     # Check space group number
@@ -436,16 +441,18 @@ def prototype_labels_are_equivalent(
     if allow_enantiomorph and not space_group_numbers_are_enantiomorphic(
         sg_num_2, sg_num_1
     ):
-        logger.info(
-            "Found non-matching Space group in labels "
-            f"{prototype_label_1} and {prototype_label_2}"
-        )
+        if log:
+            logger.info(
+                "Found non-matching Space group in labels "
+                f"{prototype_label_1} and {prototype_label_2}"
+            )
         return False
     elif sg_num_2 != sg_num_1:
-        logger.info(
-            "Found non-matching Space group in labels "
-            f"{prototype_label_1} and {prototype_label_2}"
-        )
+        if log:
+            logger.info(
+                "Found non-matching Space group in labels "
+                f"{prototype_label_1} and {prototype_label_2}"
+            )
         return False
 
     # OK, so far everything matches, now check the Wyckoff letters
@@ -487,16 +494,18 @@ def prototype_labels_are_equivalent(
                     wyckoff_lists_match_for_each_species = False
                     break
             if wyckoff_lists_match_for_each_species:
-                logger.warning(
-                    f"Labels {prototype_label_1} and {prototype_label_2} were found to "
-                    "be equivalent despite being non-identical. "
-                    "This indicates a failure to find the lowest Wyckoff enumeration."
-                )
+                if log:
+                    logger.warning(
+                        f"Labels {prototype_label_1} and {prototype_label_2} were found"
+                        " to be equivalent despite being non-identical. This indicates "
+                        "a failure to find the lowest Wyckoff enumeration."
+                    )
                 return True
-        logger.info(
-            f"Labels {prototype_label_1} and {prototype_label_2} were not found to be "
-            "equivalent under any permutations allowable by the normalizer."
-        )
+        if log:
+            logger.info(
+                f"Labels {prototype_label_1} and {prototype_label_2} were not found to "
+                "be equivalent under any permutations allowable by the normalizer."
+            )
         return False
     else:
         for wyckoff_list_1, wyckoff_list_2 in zip(wyckoff_lists_1, wyckoff_lists_2):
@@ -505,17 +514,19 @@ def prototype_labels_are_equivalent(
                 # need to re-sort anything.
                 # This is NOT true for all SGs (e.g. #200, Wyckoff set eh )
                 if not are_in_same_wyckoff_set(letter_1, letter_2, sg_num_1):
-                    logger.info(
-                        f"Labels {prototype_label_1} and {prototype_label_2} have "
-                        f"corresponding letters {letter_1} and {letter_2} that are not "
-                        "in the same Wyckoff set"
-                    )
+                    if log:
+                        logger.info(
+                            f"Labels {prototype_label_1} and {prototype_label_2} have "
+                            f"corresponding letters {letter_1} and {letter_2} that are "
+                            "not in the same Wyckoff set"
+                        )
                     return False
-        logger.info(
-            f"Labels {prototype_label_1} and {prototype_label_2} were found to be "
-            "equivalent despite being non-identical. This is a normal occurrence for "
-            "triclinic and monoclinic space groups such as this."
-        )
+        if log:
+            logger.info(
+                f"Labels {prototype_label_1} and {prototype_label_2} were found to be "
+                "equivalent despite being non-identical. This is a normal occurrence "
+                "for triclinic and monoclinic space groups such as this."
+            )
         return True
 
 
@@ -523,6 +534,7 @@ def find_species_permutation_between_prototype_labels(
     prototype_label_1: str,
     prototype_label_2: str,
     allow_enantiomorph: bool = False,
+    log: bool = True,
 ) -> Optional[Tuple[int]]:
     """
     Find the permutation of species required to match two prototype labels
@@ -530,6 +542,8 @@ def find_species_permutation_between_prototype_labels(
     Args:
         allow_enantiomorph:
             Whether to consider enantiomorphic pairs of space groups to be equivalent
+        log:
+            Whether to log results
 
     Returns:
         The permutation of species of ``prototype_label_1`` required to match
