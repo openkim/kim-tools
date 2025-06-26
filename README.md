@@ -1,6 +1,6 @@
 # kim-tools
 
-![testing](https://github.com/openkim/kim-tools/actions/workflows/testing.yml/badge.svg)
+[![Testing](https://github.com/openkim/kim-tools/actions/workflows/testing.yml/badge.svg)](https://github.com/openkim/kim-tools/actions/workflows/testing.yml)
 [![docs](https://app.readthedocs.org/projects/kim-tools/badge/?version=latest)](https://kim-tools.readthedocs.io/en/latest/)
 [![PyPI](https://img.shields.io/pypi/v/kim-tools.svg)](https://pypi.org/project/kim-tools/)
 
