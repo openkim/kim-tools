@@ -32,12 +32,19 @@ Helper routines for KIM Tests and Verification Checks
 """
 
 import itertools
+import logging
 import random
+from typing import Union
 
 import numpy as np
 from ase import Atoms
+from ase.calculators.calculator import Calculator
 from ase.calculators.kim.kim import KIM
 from ase.data import chemical_symbols
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(filename="kim-tools.log", level=logging.INFO, force=True)
+
 
 __all__ = [
     "KIMASEError",
@@ -201,9 +208,18 @@ def randomize_positions(atoms, pert_amp, seed=None):
 
 
 ################################################################################
-def get_isolated_energy_per_atom(model, symbol):
+def get_isolated_energy_per_atom(model: Union[str, Calculator], symbol):
     """
     Construct a non-periodic cell containing a single atom and compute its energy.
+
+    Args:
+        model:
+            A KIM model ID or an ASE calculator for computing the energy
+        symbol:
+            The chemical species
+
+    Returns:
+        The isolated energy of a single atom
     """
     single_atom = Atoms(
         symbol,
@@ -211,15 +227,33 @@ def get_isolated_energy_per_atom(model, symbol):
         cell=(20, 20, 20),
         pbc=(False, False, False),
     )
-    calc = KIM(model)
+    if isinstance(model, str):
+        calc = KIM(model)
+    elif isinstance(model, Calculator):
+        calc = model
+    else:
+        raise KIMASEError(
+            "`model` argument must be a string indicating a KIM model "
+            f"or an ASE Calculator. Instead got an object of type {type(model)}."
+        )
     single_atom.calc = calc
-    energy_per_atom = single_atom.get_potential_energy()
-    if hasattr(calc, "clean"):
-        calc.clean()
-    if hasattr(calc, "__del__"):
-        calc.__del__()
-    del single_atom
-    return energy_per_atom
+    try:
+        energy_per_atom = single_atom.get_potential_energy()
+    except Exception as e:
+        msg = (
+            "Energy evaluation for isolated atom raised the following error:\n"
+            f"{repr(e)}\nAssuming zero isolated atom energy."
+        )
+        logger.warning(msg)
+        print(msg)
+        energy_per_atom = 0.0
+    finally:
+        if hasattr(calc, "clean"):
+            calc.clean()
+        if hasattr(calc, "__del__"):
+            calc.__del__()
+        del single_atom
+        return energy_per_atom
 
 
 ################################################################################
