@@ -552,11 +552,31 @@ def find_species_permutation_between_prototype_labels(
     # Disassemble prototype_label_1
     stoich_reduced_list_1 = get_stoich_reduced_list_from_prototype(prototype_label_1)
     pearson_1 = get_pearson_symbol_from_prototype(prototype_label_1)
-    space_group_1 = str(get_space_group_number_from_prototype(prototype_label_1))
+    space_group_1 = get_space_group_number_from_prototype(prototype_label_1)
+    space_group_1_str = str(space_group_1)
     species_wyckoff_sections_1 = prototype_label_1.split("-")[0].split("_")[3:]
 
     nspecies = len(stoich_reduced_list_1)
     assert nspecies == len(species_wyckoff_sections_1)
+
+    # For crystals with many species, it takes forever to loop through all permutations,
+    # so do some basic checks first to reject
+    stoich_reduced_list_2 = get_stoich_reduced_list_from_prototype(prototype_label_2)
+    pearson_2 = get_pearson_symbol_from_prototype(prototype_label_2)
+    space_group_2 = get_space_group_number_from_prototype(prototype_label_2)
+    if (
+        len(stoich_reduced_list_1) != len(stoich_reduced_list_2)
+        or sum(stoich_reduced_list_1) != sum(stoich_reduced_list_2)
+        or pearson_1 != pearson_2
+    ):
+        return None
+
+    if allow_enantiomorph:
+        if not space_group_numbers_are_enantiomorphic(space_group_1, space_group_2):
+            return None
+    else:
+        if space_group_1 != space_group_2:
+            return None
 
     permutation_candidates = permutations(tuple(range(nspecies)))
     for permutation in permutation_candidates:
@@ -573,13 +593,14 @@ def find_species_permutation_between_prototype_labels(
         prototype_label_1_permuted_list = [
             abstract_formula_1_permuted,
             pearson_1,
-            space_group_1,
+            space_group_1_str,
         ] + species_wyckoff_sections_1_permuted
         prototype_label_1_permuted = "_".join(prototype_label_1_permuted_list)
         if prototype_labels_are_equivalent(
             prototype_label_1=prototype_label_1_permuted,
             prototype_label_2=prototype_label_2,
             allow_enantiomorph=allow_enantiomorph,
+            log=log,
         ):
             return permutation
     return None
@@ -618,6 +639,23 @@ def read_shortnames(
         with open(info_file) as f:
             info = json.load(f)
         shortnames[libproto] = info["title"]
+
+    ##################################################
+    # CUSTOM MODIFICATIONS TO SHORTNAME DICT
+    ##################################################
+    # For some reason, CsCl is AB_cP2_221_a_b-002,
+    # while AB_cP2_221_a_b-001 is Ammonium Nitrate,
+    # where the atoms represent molecular ions
+    shortnames.pop("AB_cP2_221_a_b-001")
+
+    # I am making an executive decision to include
+    # only one identical cubic prototype with no
+    # free parameters. Here I am choosing to keep
+    # 'A7B_cF32_225_ad_b-001': 'Ca₇Ge Structure'
+    # and remove
+    # 'AB7_cF32_225_a_bd-001': '𝐿1ₐ (disputed CuPt₃ Structure)'
+    shortnames.pop("AB7_cF32_225_a_bd-001")
+
     return shortnames
 
 
