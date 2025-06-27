@@ -14,7 +14,11 @@ jobs:
         run: pre-commit run --show-diff-on-failure --all-files
 
   test:
-    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, macos-latest]
+
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Check out repo
@@ -32,16 +36,25 @@ jobs:
             -f tests/environment.yml
 
       - name: Install units
+        if: runner.os == 'Linux'
         shell: bash -el {0}
         run: |
           sudo apt-get update
           sudo apt-get -y install units
 
-      - name: Install AFLOW
+      - name: Install AFLOW on Linux
+        if: runner.os == 'Linux'
         shell: bash -el {0}
         run: |
           wget https://github.com/aflow-org/aflow/releases/download/v4.0.5/aflow-4.0.5-ubuntu22-amd64.tar.gz
           tar -xf aflow-4.0.5-ubuntu22-amd64.tar.gz
+
+      - name: Install AFLOW on macOS
+        if: runner.os == 'macOS'
+        shell: bash -el {0}
+        run: |
+          brew tap aflow-org/aflow
+          brew install aflow
 
       - name: Install
         shell: bash -el {0}
