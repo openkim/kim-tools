@@ -7,16 +7,16 @@ from kim_tools import get_isolated_energy_per_atom
 
 
 def test_get_isolated_energy_per_atom():
-    assert np.isclose(
-        get_isolated_energy_per_atom(
-            "LJ_ElliottAkerson_2015_Universal__MO_959249795837_003", "H"
-        ),
-        0,
-    )
-    assert np.isclose(
-        get_isolated_energy_per_atom(LennardJones(), "H"),
-        0,
-    )
+    for model in [
+        LennardJones(),
+        "LennardJones612_UniversalShifted__MO_959249795837_003",
+        "Sim_LAMMPS_LJcut_AkersonElliott_Alchemy_PbAu",
+    ]:
+        for species in ["Pb", "Au"]:
+            assert np.isclose(
+                get_isolated_energy_per_atom(model=model, symbol=species),
+                0,
+            )
     # assert np.isclose(
     #     get_isolated_energy_per_atom(LennardJonesFailNoNeighbors(), "H"),
     #    0,

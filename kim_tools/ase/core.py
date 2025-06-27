@@ -208,7 +208,7 @@ def randomize_positions(atoms, pert_amp, seed=None):
 
 
 ################################################################################
-def get_isolated_energy_per_atom(model: Union[str, Calculator], symbol):
+def get_isolated_energy_per_atom(model: Union[str, Calculator], symbol: str) -> float:
     """
     Construct a non-periodic cell containing a single atom and compute its energy.
 
@@ -238,10 +238,13 @@ def get_isolated_energy_per_atom(model: Union[str, Calculator], symbol):
         )
     single_atom.calc = calc
     energy_per_atom = single_atom.get_potential_energy()
-    if hasattr(calc, "clean"):
-        calc.clean()
-    if hasattr(calc, "__del__"):
-        calc.__del__()
+    # if we are attaching an existing LAMMPS calculator to an atoms object,
+    # we can't delete it. Only do so if we are making a new one from a KIM ID.
+    if isinstance(model, str):
+        if hasattr(calc, "clean"):
+            calc.clean()
+        if hasattr(calc, "__del__"):
+            calc.__del__()
     del single_atom
     return energy_per_atom
 

@@ -29,7 +29,7 @@ from kim_tools.symmetry_util.core import (
 def test_change_of_basis_atoms(
     atoms_conventional=bulk("SiC", "zincblende", 4.3596, cubic=True)
 ):
-    calc = KIM("LJ_ElliottAkerson_2015_Universal__MO_959249795837_003")
+    calc = KIM("LennardJones612_UniversalShifted__MO_959249795837_003")
     atoms_conventional.calc = calc
     crystal_structure = get_crystal_structure_from_atoms(atoms_conventional)
     prototype_label = crystal_structure["prototype-label"]["source-value"]

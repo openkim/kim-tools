@@ -43,11 +43,6 @@ jobs:
           wget https://github.com/aflow-org/aflow/releases/download/v4.0.5/aflow-4.0.5-ubuntu22-amd64.tar.gz
           tar -xf aflow-4.0.5-ubuntu22-amd64.tar.gz
 
-      - name: Install KIM model
-        shell: bash -el {0}
-        run: |
-          kim-api-collections-management install system LJ_ElliottAkerson_2015_Universal__MO_959249795837_003
-
       - name: Install
         shell: bash -el {0}
         run: |

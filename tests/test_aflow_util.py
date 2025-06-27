@@ -406,7 +406,7 @@ def test_solve_for_params_of_known_prototype(input_crystal_structures):
 
         atoms.wrap()
 
-        atoms.calc = KIM("LJ_ElliottAkerson_2015_Universal__MO_959249795837_003")
+        atoms.calc = KIM("LennardJones612_UniversalShifted__MO_959249795837_003")
         minimize_wrapper(
             atoms,
             fix_symmetry=True,

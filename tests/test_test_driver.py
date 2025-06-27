@@ -18,6 +18,14 @@ from kim_tools import (
 from kim_tools.test_driver.core import _get_optional_source_value
 
 
+class TestIsolatedEnergyDriver(KIMTestDriver):
+    def _calculate(self, species):
+        """
+        Example calculate method for testing isolated energy getter
+        """
+        assert np.isclose(self.get_isolated_energy_per_atom(species), 0.0)
+
+
 class TestTestDriver(KIMTestDriver):
     def _calculate(self, property_name, species):
         """
@@ -175,6 +183,17 @@ def test_structure_detection():
             == library_prototype
         )
         assert _get_optional_source_value(property_instance, "short-name") == shortname
+
+
+def test_get_isolated_energy_per_atom():
+    for model in [
+        LennardJones(),
+        "LennardJones612_UniversalShifted__MO_959249795837_003",
+        "Sim_LAMMPS_LJcut_AkersonElliott_Alchemy_PbAu",
+    ]:
+        td = TestIsolatedEnergyDriver(model)
+        for species in ["Pb", "Au"]:
+            td(species=species)
 
 
 if __name__ == "__main__":

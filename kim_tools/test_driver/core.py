@@ -66,6 +66,7 @@ from ..aflow_util import (
     prototype_labels_are_equivalent,
 )
 from ..aflow_util.core import AFLOW_EXECUTABLE
+from ..ase import get_isolated_energy_per_atom
 from ..kimunits import convert_list, convert_units
 from ..symmetry_util import (
     cartesian_rotation_is_in_point_group,
@@ -745,6 +746,23 @@ class KIMTestDriver(ABC):
             kim_property_dump(
                 self.__output_property_instances, f
             )  # serialize the dictionary to string first
+
+    def get_isolated_energy_per_atom(self, symbol: str) -> float:
+        """
+        Construct a non-periodic cell containing a single atom and compute its energy.
+
+        Args
+            symbol:
+                The chemical species
+
+        Returns:
+            The isolated energy of a single atom
+        """
+        try:
+            model = self.kim_model_name
+        except self.NonKIMModelError:
+            model = self._calc
+        return get_isolated_energy_per_atom(model=model, symbol=symbol)
 
 
 def _add_common_crystal_genome_keys_to_current_property_instance(
