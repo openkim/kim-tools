@@ -237,23 +237,13 @@ def get_isolated_energy_per_atom(model: Union[str, Calculator], symbol):
             f"or an ASE Calculator. Instead got an object of type {type(model)}."
         )
     single_atom.calc = calc
-    try:
-        energy_per_atom = single_atom.get_potential_energy()
-    except Exception as e:
-        msg = (
-            "Energy evaluation for isolated atom raised the following error:\n"
-            f"{repr(e)}\nAssuming zero isolated atom energy."
-        )
-        logger.warning(msg)
-        print(msg)
-        energy_per_atom = 0.0
-    finally:
-        if hasattr(calc, "clean"):
-            calc.clean()
-        if hasattr(calc, "__del__"):
-            calc.__del__()
-        del single_atom
-        return energy_per_atom
+    energy_per_atom = single_atom.get_potential_energy()
+    if hasattr(calc, "clean"):
+        calc.clean()
+    if hasattr(calc, "__del__"):
+        calc.__del__()
+    del single_atom
+    return energy_per_atom
 
 
 ################################################################################
