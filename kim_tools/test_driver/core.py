@@ -490,6 +490,13 @@ class KIMTestDriver(ABC):
             the Test Driver
     """
 
+    class NonKIMModelError(Exception):
+        """
+        Raised when a KIM model name is requested but is absent. This is important
+        to handle to inform users that they are trying to run a Test Driver that
+        requires a KIM model (e.g. a LAMMPS TD) with a non-KIM Calculator
+        """
+
     def __init__(self, model: Union[str, Calculator]) -> None:
         """
         Args:
@@ -690,7 +697,13 @@ class KIMTestDriver(ABC):
         """
         Get the KIM model name, if present
         """
-        return self.__kim_model_name
+        if self.__kim_model_name is not None:
+            return self.__kim_model_name
+        else:
+            raise self.NonKIMModelError(
+                "A KIM model name is being requested, but the Test Driver "
+                "is being run with a non-KIM calculator."
+            )
 
     @property
     def property_instances(self) -> Dict:
