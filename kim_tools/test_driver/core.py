@@ -139,7 +139,7 @@ def minimize_wrapper(
     logfile: Optional[Union[str, IO]] = "kim-tools.log",
     algorithm: Optimizer = LBFGSLineSearch,
     cell_filter: UnitCellFilter = FrechetCellFilter,
-    fix_symmetry: bool = False,
+    fix_symmetry: Union[bool, FixSymmetry] = False,
     opt_kwargs: Dict = {},
     flt_kwargs: Dict = {},
 ) -> bool:
@@ -179,7 +179,8 @@ def minimize_wrapper(
         CellFilter:
             Filter to use if variable_cell is requested
         fix_symmetry:
-            Whether to fix the crystallographic symmetry
+            Whether to fix the crystallographic symmetry. Can provide
+            a FixSymmetry class here instead of detecting it on the fly
         opt_kwargs:
             Dictionary of kwargs to pass to optimizer
         flt_kwargs:
@@ -188,8 +189,11 @@ def minimize_wrapper(
     Returns:
         Whether the minimization succeeded
     """
-    if fix_symmetry:
-        symmetry = FixSymmetry(atoms)
+    if fix_symmetry is not False:
+        if fix_symmetry is True:
+            symmetry = FixSymmetry(atoms)
+        else:
+            symmetry = fix_symmetry
         atoms.set_constraint(symmetry)
     if variable_cell:
         supercell_wrapped = cell_filter(atoms, **flt_kwargs)
@@ -225,11 +229,18 @@ def minimize_wrapper(
     del atoms.constraints
 
     if minimization_stalled or iteration_limits_reached:
-        logger.info("Final forces:")
-        logger.info(atoms.get_forces())
-        logger.info("Final stress:")
-        logger.info(atoms.get_stress())
-        return False
+        try:
+            logger.info("Final forces:")
+            logger.info(atoms.get_forces())
+            logger.info("Final stress:")
+            logger.info(atoms.get_stress())
+        except Exception as e:
+            logger.info(
+                "The following exception was caught "
+                "trying to evaluate final forces and stress:"
+            )
+            logger.info(repr(e))
+            return False
     else:
         return True
 
@@ -2208,8 +2219,3 @@ def get_deduplicated_property_instances(
     property_instances_deduplicated.sort(key=lambda a: a["instance-id"])
 
     return property_instances_deduplicated
-
-
-# If called directly, do nothing
-if __name__ == "__main__":
-    pass

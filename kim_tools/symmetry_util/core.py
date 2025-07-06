@@ -14,6 +14,7 @@ import numpy as np
 import numpy.typing as npt
 from ase import Atoms
 from ase.cell import Cell
+from ase.constraints import FixSymmetry
 from ase.geometry import get_distances, get_duplicate_atoms
 from matplotlib.backends.backend_pdf import PdfPages
 from pymatgen.core.operations import SymmOp
@@ -832,3 +833,78 @@ def fit_voigt_tensor_to_cell_and_space_group(
     t_symmetrized = sum(t_rotated_list) / len(t_rotated_list)
 
     return t_symmetrized.voigt
+
+
+class FixProvidedSymmetry(FixSymmetry):
+    """
+    A modification of :obj:`~ase.constraints.FixSymmetry` that takes
+    a prescribed symmetry instead of analyzing the atoms object on the fly
+    """
+
+    def __init__(
+        self,
+        atoms: Atoms,
+        symmetry: Union[str, int, List[Dict]],
+        adjust_positions=True,
+        adjust_cell=True,
+    ):
+        """
+        Args:
+            symmetry:
+                Either the space group number, or a list of operations
+                as dictionaries with keys "W": (fractional rotation matrix),
+                "w": (fractional translation). The space group number input
+                will not work correctly unless this contraint is applied to
+                a primitive unit cell as defined in
+                http://doi.org/10.1016/j.commatsci.2017.01.017
+        """
+        self.atoms = atoms.copy()
+        self.symmetry = symmetry
+
+        if isinstance(symmetry, str) or isinstance(symmetry, int):
+            primitive_genpos_ops = get_primitive_genpos_ops(symmetry)
+        else:
+            try:
+                for op in symmetry:
+                    assert np.asarray(op["W"]).shape == (3, 3)
+                    assert np.asarray(op["w"]).shape == (3,)
+                primitive_genpos_ops = symmetry
+            except Exception:
+                raise RuntimeError("Incorrect input provided to FixProvidedSymmetry")
+
+        self.rotations = []
+        self.translations = []
+        for op in primitive_genpos_ops:
+            self.rotations.append(np.asarray(op["W"]))
+            self.translations.append(np.asarray(op["w"]))
+        self.prep_symm_map()
+
+        self.do_adjust_positions = adjust_positions
+        self.do_adjust_cell = adjust_cell
+
+    def prep_symm_map(self) -> None:
+        """
+        Prepare self.symm_map using provided symmetries
+        """
+        self.symm_map = []
+        scaled_pos = self.atoms.get_scaled_positions()
+        for rot, trans in zip(self.rotations, self.translations):
+            this_op_map = [-1] * len(self.atoms)
+            for i_at in range(len(self.atoms)):
+                new_p = rot @ scaled_pos[i_at, :] + trans
+                dp = scaled_pos - new_p
+                dp -= np.round(dp)
+                i_at_map = np.argmin(np.linalg.norm(dp, axis=1))
+                this_op_map[i_at] = i_at_map
+            self.symm_map.append(this_op_map)
+
+    def todict(self):
+        return {
+            "name": "FixProvidedSymmetry",
+            "kwargs": {
+                "atoms": self.atoms,
+                "symmetry": self.symmetry,
+                "adjust_positions": self.do_adjust_positions,
+                "adjust_cell": self.do_adjust_cell,
+            },
+        }

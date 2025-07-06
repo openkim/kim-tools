@@ -15,10 +15,12 @@ from kim_tools import (
     get_change_of_basis_matrix_to_conventional_cell_from_formal_bravais_lattice,
     get_crystal_structure_from_atoms,
     get_formal_bravais_lattice_from_space_group,
+    get_primitive_genpos_ops,
     get_space_group_number_from_prototype,
     get_symbolic_cell_from_formal_bravais_lattice,
 )
 from kim_tools.symmetry_util.core import (
+    FixProvidedSymmetry,
     PeriodExtensionException,
     fit_voigt_tensor_to_cell_and_space_group,
     kstest_reduced_distances,
@@ -118,5 +120,45 @@ def test_fit_voigt_tensor_to_cell_and_space_group():
         assert np.allclose(c_sym_tens, c_sym_tens_alg)
 
 
+def test_FixProvidedSymmetry():
+    test_cases = [
+        {
+            "symm": 1,
+            "deform_allowed": True,
+        },
+        {
+            "symm": get_primitive_genpos_ops(1),
+            "deform_allowed": True,
+        },
+        {
+            "symm": 221,
+            "deform_allowed": False,
+        },
+        {
+            "symm": get_primitive_genpos_ops(221),
+            "deform_allowed": False,
+        },
+    ]
+    for case in test_cases:
+        atoms = bulk("CsCl", "cesiumchloride", 1.0)
+        constraint = FixProvidedSymmetry(atoms, case["symm"])
+        atoms.set_constraint(constraint)
+        atoms.set_positions(
+            [
+                [
+                    0,
+                    0,
+                    0,
+                ],
+                [0.6, 0.5, 0.5],
+            ]
+        )
+        deform_allowed = case["deform_allowed"]
+        assert np.allclose(atoms[1].position, [0.6, 0.5, 0.5]) == deform_allowed
+        new_cell = [[1.1, 0, 0], [0, 1, 0], [0, 0, 1]]
+        atoms.set_cell(new_cell, scale_atoms=True)
+        assert np.allclose(atoms.cell, new_cell) == deform_allowed
+
+
 if __name__ == "__main__":
-    test_fit_voigt_tensor_to_cell_and_space_group()
+    test_FixProvidedSymmetry()
