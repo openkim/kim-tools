@@ -1318,7 +1318,7 @@ class SingleCrystalTestDriver(KIMTestDriver):
             )
             print(f"\nNOTE: {msg}\n")
             logger.info(msg)
-        if cell_cauchy_stress_eV_angstrom3 != [0, 0, 0, 0, 0, 0]:
+        if cell_cauchy_stress_eV_angstrom3 == [0, 0, 0, 0, 0, 0]:
             stress_max = np.max(atoms_tmp.get_stress())
             if stress_max > FMAX_INITIAL:
                 msg = (
@@ -1966,7 +1966,7 @@ def query_crystal_structures(
     logger.info(len_msg)
     logger.debug(f"Query result (length={len(query_result)}):\n{query_result}")
 
-    print(f"!!! {len_msg} !!!")
+    print(f"\n!!! {len_msg} !!!\n")
 
     return query_result
 
