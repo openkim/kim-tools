@@ -1682,7 +1682,7 @@ class AFLOW:
         )
 
         position_set_list = get_equivalent_atom_sets_from_prototype_and_atom_map(
-            atoms, prototype_label_detected, atom_map, sort_atoms=True
+            atoms, prototype_label, atom_map, sort_atoms=True
         )
 
         # get equation sets
