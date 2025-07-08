@@ -392,6 +392,45 @@ def get_wyckoff_lists_from_prototype(prototype_label: str) -> List[str]:
     return expanded_wyckoff_letters
 
 
+def get_all_equivalent_labels(prototype_label: str) -> List[str]:
+    """
+    Return all possible permutations of the Wyckoff letters in a prototype
+    label under the operations of the affine normalizer.
+
+    NOTE: For now this function will not completely enumerate the possibilities
+    for triclinic and monoclinic space groups
+    """
+    sgnum = get_space_group_number_from_prototype(prototype_label)
+    prototype_label_split = prototype_label.split("_")
+    equivalent_labels = []
+    for wyck_pos_xform in get_wyck_pos_xform_under_normalizer(sgnum):
+        prototype_label_split_permuted = prototype_label_split[:3]
+        for wycksec in prototype_label_split[3:]:
+            # list of letters joined with their nums, e.g. ["a", "2i"]
+            wycksec_permuted_list = []
+            prev_lett_ind = -1
+            for i, num_or_lett in enumerate(wycksec):
+                if isalpha(num_or_lett):
+                    if num_or_lett == "A":
+                        # Wyckoff position A comes after z in sg 47
+                        lett_index = ord("z") + 1 - ord("a")
+                    else:
+                        lett_index = ord(num_or_lett) - ord("a")
+                    # The start position of the (optional) numbers +
+                    # letter describing this position
+                    this_pos_start_ind = prev_lett_ind + 1
+                    permuted_lett_and_num = wycksec[this_pos_start_ind:i]
+                    permuted_lett_and_num += wyck_pos_xform[lett_index]
+                    wycksec_permuted_list.append(permuted_lett_and_num)
+                    prev_lett_ind = i
+            wycksec_permuted_list_sorted = sorted(
+                wycksec_permuted_list, key=lambda x: x[-1]
+            )
+            prototype_label_split_permuted.append("".join(wycksec_permuted_list_sorted))
+        equivalent_labels.append("_".join(prototype_label_split_permuted))
+    return list(set(equivalent_labels))
+
+
 def prototype_labels_are_equivalent(
     prototype_label_1: str,
     prototype_label_2: str,
@@ -1579,6 +1618,8 @@ class AFLOW:
             self.get_library_prototype_label_and_shortname_from_atoms(atoms)
         )
 
+        # NOTE: Because of below, this only works if the provided prototype label is
+        # correctly alphabetized. Change this?
         if not prototype_labels_are_equivalent(
             prototype_label, prototype_label_detected
         ):
@@ -1641,7 +1682,7 @@ class AFLOW:
         )
 
         position_set_list = get_equivalent_atom_sets_from_prototype_and_atom_map(
-            atoms, prototype_label, atom_map, sort_atoms=True
+            atoms, prototype_label_detected, atom_map, sort_atoms=True
         )
 
         # get equation sets

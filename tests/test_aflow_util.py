@@ -29,6 +29,7 @@ from kim_tools import (
 from kim_tools.aflow_util.core import (
     build_abstract_formula_from_stoich_reduced_list,
     find_species_permutation_between_prototype_labels,
+    get_all_equivalent_labels,
 )
 
 logger = logging.getLogger(__name__)
@@ -235,6 +236,10 @@ def test_prototype_labels_are_equivalent():
         )
         is None
     )
+    for label in get_all_equivalent_labels("AB_hP52_156_10a8b8c_10a9b7c"):
+        assert prototype_labels_are_equivalent(label, "AB_hP52_156_10a8b8c_10a9b7c")
+    for label in get_all_equivalent_labels("A2B11_cP39_200_f_aghij"):
+        assert prototype_labels_are_equivalent(label, "A2B11_cP39_200_f_aghij")
 
 
 def test_build_abstract_formula_from_stoich_reduced_list():
@@ -384,12 +389,43 @@ def test_solve_for_params_of_known_prototype(input_crystal_structures):
 
     failed_to_solve_at_least_one = False
 
-    for material in input_crystal_structures:
+    test_materials = input_crystal_structures
+
+    # This is an adversarial example, because the Wyckoff set eh is
+    # non-contiguous, and the alphabetically minimal label for this
+    # structure becomes A2B11_cP39_200_f_begik, so the position of
+    # the equivalent Wyckoff position moves in the string. This
+    # tests the bugfix to the call to
+    # get_equivalent_atom_sets_from_prototype_and_atom_map()
+    # in AFLOW.solve_for_params_of_known_prototype(), where
+    # formerly the ASSUMED prototype label was being given
+    # instead of the PROVIDED one.
+    test_materials.append(
+        {
+            "prototype-label": {"source-value": "A2B11_cP39_200_f_aghij"},
+            "stoichiometric-species": {"source-value": ["Mg", "Zn"]},
+            "a": {
+                "source-value": 8.4478,
+                "source-unit": "angstrom",
+            },
+            "parameter-values": {
+                "source-value": [
+                    0.22975038,
+                    0.30174117,
+                    0.162039,
+                    0.21801342,
+                    0.23768174,
+                    0.34199675,
+                ]
+            },
+        }
+    )
+
+    for material in test_materials:
         prototype_label = material["prototype-label"]["source-value"]
 
         bravais_lattice = get_bravais_lattice_from_prototype(prototype_label)
 
-        bravais_lattice = get_bravais_lattice_from_prototype(prototype_label)
         spacegroup = get_space_group_number_from_prototype(prototype_label)
 
         atoms = get_atoms_from_crystal_structure(material)
@@ -456,5 +492,4 @@ def test_solve_for_params_of_known_prototype(input_crystal_structures):
 
 
 if __name__ == "__main__":
-    with open("output.3/query_result.json") as f:
-        test_solve_for_params_of_known_prototype(json.load(f))
+    test_prototype_labels_are_equivalent()
