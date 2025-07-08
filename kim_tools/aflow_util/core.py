@@ -843,6 +843,7 @@ class AFLOW:
         # I am fine with allowing prereleases
         aflow_ver_no_prerelease = Version.parse(ver_str)
         aflow_ver_no_prerelease.replace(prerelease=None)
+        aflow_ver_no_prerelease.replace(build=None)
         if aflow_ver_no_prerelease < Version.parse(REQUIRED_AFLOW):
             raise self.AFLOWNotFoundException(
                 f"Your AFLOW version {ver_str} is less "
