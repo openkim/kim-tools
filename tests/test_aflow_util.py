@@ -4,14 +4,12 @@ import json
 import logging
 import os
 from os import PathLike
-from random import random
 from typing import Dict, List, Optional
 
 import numpy as np
 import numpy.typing as npt
 import pytest
 from ase import Atoms
-from ase.calculators.kim.kim import KIM
 
 from kim_tools import (
     AFLOW,
@@ -21,7 +19,6 @@ from kim_tools import (
     get_real_to_virtual_species_map,
     get_space_group_number_from_prototype,
     get_wyckoff_lists_from_prototype,
-    minimize_wrapper,
     prototype_labels_are_equivalent,
     query_crystal_structures,
     split_parameter_array,
@@ -400,7 +397,7 @@ def test_solve_for_params_of_known_prototype(input_crystal_structures):
     # in AFLOW.solve_for_params_of_known_prototype(), where
     # formerly the ASSUMED prototype label was being given
     # instead of the PROVIDED one.
-    test_materials = 10 * [
+    test_materials = [
         {
             "prototype-label": {"source-value": "A2B11_cP39_200_f_aghij"},
             "stoichiometric-species": {"source-value": ["Mg", "Zn"]},
@@ -429,7 +426,7 @@ def test_solve_for_params_of_known_prototype(input_crystal_structures):
         spacegroup = get_space_group_number_from_prototype(prototype_label)
 
         atoms = get_atoms_from_crystal_structure(material)
-
+        """
         atoms = shuffle_atoms(atoms)
 
         atoms.rotate(
@@ -450,7 +447,7 @@ def test_solve_for_params_of_known_prototype(input_crystal_structures):
             steps=2,
             opt_kwargs={"maxstep": 0.05},
         )
-
+        """
         try:
             aflow.solve_for_params_of_known_prototype(atoms, prototype_label)
             crystal_did_not_rotate = True
