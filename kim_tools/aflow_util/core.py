@@ -841,10 +841,8 @@ class AFLOW:
                 "that the AFLOW executable was not found."
             )
         # I am fine with allowing prereleases
-        aflow_ver_no_prerelease = Version.parse(ver_str)
-        aflow_ver_no_prerelease.replace(prerelease=None)
-        aflow_ver_no_prerelease.replace(build=None)
-        if aflow_ver_no_prerelease < Version.parse(REQUIRED_AFLOW):
+        aflow_ver = Version.parse(ver_str)
+        if aflow_ver.replace(prerelease=None) < Version.parse(REQUIRED_AFLOW):
             raise self.AFLOWNotFoundException(
                 f"Your AFLOW version {ver_str} is less "
                 f"than the required {REQUIRED_AFLOW}"
