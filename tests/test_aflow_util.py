@@ -400,7 +400,7 @@ def test_solve_for_params_of_known_prototype(input_crystal_structures):
     # in AFLOW.solve_for_params_of_known_prototype(), where
     # formerly the ASSUMED prototype label was being given
     # instead of the PROVIDED one.
-    test_materials.append(
+    test_materials = 10 * [
         {
             "prototype-label": {"source-value": "A2B11_cP39_200_f_aghij"},
             "stoichiometric-species": {"source-value": ["Mg", "Zn"]},
@@ -419,7 +419,7 @@ def test_solve_for_params_of_known_prototype(input_crystal_structures):
                 ]
             },
         }
-    )
+    ]
 
     for material in test_materials:
         prototype_label = material["prototype-label"]["source-value"]
@@ -476,6 +476,8 @@ def test_solve_for_params_of_known_prototype(input_crystal_structures):
                     suffix += 1
             print(f"Dumping atoms to {filename}")
             atoms.write(filename, format="vasp", sort=True)
+            with open(filename) as f:
+                logger.info(f.read())
         else:
             print(
                 "Successfully confirmed unrotated prototype designation for "
