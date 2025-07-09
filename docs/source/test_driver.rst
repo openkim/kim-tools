@@ -48,7 +48,7 @@ curve for isotropic expansion and compression of a crystal at zero temperature. 
 Additional documentation about functionality not demonstrated in the example can be found at the bottom of this page.
 
 Once ``test_driver.py`` is written, you will have to make some small modifications to the auxiliary files provided in the example
-Test Driver in order for your Driver to work in the OpenKIM pipeline: :doc:`tutorial_pipeline`. Before this, you will likely wish
+Test Driver in order for your Driver to work in the OpenKIM pipeline and the kimvv package: :doc:`tutorial_pipeline`, :doc:`tutorial_package`. Before this, you will likely wish
 to debug your code by invoking it directly in Python. See how to do that here: :doc:`tutorial_debug`
 
 **Please read the code and the comments carefully, as they explain many important aspects of writing your own Test Driver.** You should understand
@@ -85,6 +85,9 @@ the usage of the following functions. Click the links below for more information
 - ``self.``:func:`~kim_tools.test_driver.core.SingleCrystalTestDriver._get_nominal_crystal_structure_npt`:
   If you need fine-grained access to the symmetry-reduced AFLOW prototype designation of the crystal
 
+- ``self.``:func:`~kim_tools.test_driver.core.KIMTestDriver._add_file_to_current_property_instance`:
+  For adding keys with the "file" type to your Property Instance, e.g. restart files or images
+
 
 .. _doc.example_test_driver:
 
@@ -102,11 +105,6 @@ Functionality not covered in the above example
 
 - ``self.``:attr:`~kim_tools.test_driver.core.KIMTestDriver.kim_model_name`:
   The KIM Model Name (if present). You should only use this if exporting data to a non-ASE simulator (see below).
-
-- ``self.``:func:`~kim_tools.test_driver.core.KIMTestDriver._add_file_to_current_property_instance`:
-  This adds a "file" type key to the current Property Instance, for example the "restart-file" key mentioned in the note below. It will automatically
-  be numbered according to the current Property Instance and moved to the ``output`` directory if it is not already there (e.g. ``restart.dump``
-  will be automatically moved to the path ``output/restart-1.dump`` and reported in the property accordingly.)
 
 .. note::
 
