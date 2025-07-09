@@ -398,7 +398,7 @@ def get_atom_indices_for_each_wyckoff_orb(prototype_label: str) -> List[Dict]:
     orbit.
 
     Returns:
-        The information is in this format -- [{"letter":"a", "indices":[0,1]}, ... ]
+        The information is in this format -- ``[{"letter":"a", "indices":[0,1]}, ... ]``
     """
     return_list = []
     wyck_lists = get_wyckoff_lists_from_prototype(prototype_label)
