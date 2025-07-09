@@ -1878,7 +1878,7 @@ class SingleCrystalTestDriver(KIMTestDriver):
         orbit.
 
         Returns:
-            The information is in this format: [{"letter":"a", "indices":[0,1]}, ... ]
+            The information is in this format -- [{"letter":"a", "indices":[0,1]}, ... ]
         """
         return get_atom_indices_for_each_wyckoff_orb(self.get_nominal_prototype_label())
 
