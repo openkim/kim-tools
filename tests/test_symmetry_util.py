@@ -5,6 +5,7 @@ import math
 import numpy as np
 from ase.build import bulk
 from ase.calculators.kim.kim import KIM
+from ase.geometry import get_duplicate_atoms
 from ase.io import read
 from elastic_excerpt import get_unique_components_and_reconstruct_matrix
 from sympy import matrix2numpy, symbols
@@ -12,6 +13,7 @@ from sympy import matrix2numpy, symbols
 from kim_tools import (
     CENTERING_DIVISORS,
     change_of_basis_atoms,
+    get_atoms_from_crystal_structure,
     get_change_of_basis_matrix_to_conventional_cell_from_formal_bravais_lattice,
     get_crystal_structure_from_atoms,
     get_formal_bravais_lattice_from_space_group,
@@ -19,12 +21,17 @@ from kim_tools import (
     get_space_group_number_from_prototype,
     get_symbolic_cell_from_formal_bravais_lattice,
 )
+
+# Disorganized to test it here, but the operations are really redundant
+# with testing transform_atoms
+from kim_tools.aflow_util.core import get_atom_indices_for_each_wyckoff_orb
 from kim_tools.symmetry_util.core import (
     FixProvidedSymmetry,
     PeriodExtensionException,
     fit_voigt_tensor_to_cell_and_space_group,
     kstest_reduced_distances,
     reduce_and_avg,
+    transform_atoms,
 )
 
 
@@ -160,5 +167,29 @@ def test_FixProvidedSymmetry():
         assert np.allclose(atoms.cell, new_cell) == deform_allowed
 
 
+def test_transform_atoms_and_symmetry_and_wyckoff_indices(input_crystal_structures):
+    for material in input_crystal_structures:
+        atoms = get_atoms_from_crystal_structure(material)
+        prototype_label = material["prototype-label"]["source-value"]
+        wyckoff_atom_indices = get_atom_indices_for_each_wyckoff_orb(prototype_label)
+        sgnum = get_space_group_number_from_prototype(prototype_label)
+        genpos_ops = get_primitive_genpos_ops(sgnum)
+        # Check that transforming by a symmetry op always gets an identical
+        # atoms object
+        for op in genpos_ops:
+            atoms_transformed = transform_atoms(atoms, op)
+            atoms_combined = atoms_transformed + atoms
+            dupes = get_duplicate_atoms(atoms_combined, delete=True)
+            assert len(atoms_combined) == len(atoms)
+            # Check that any duplicates correspond to the same Wyckoff orbit
+            for dupe in dupes:
+                for position in wyckoff_atom_indices:
+                    if dupe[0] in position["indices"]:
+                        assert dupe[1] - len(atoms) in position["indices"]
+
+
 if __name__ == "__main__":
-    test_FixProvidedSymmetry()
+    import json
+
+    with open("query_result.json") as f:
+        test_transform_atoms_and_symmetry_and_wyckoff_indices(json.load(f))

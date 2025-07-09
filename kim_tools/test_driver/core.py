@@ -65,7 +65,7 @@ from ..aflow_util import (
     get_space_group_number_from_prototype,
     prototype_labels_are_equivalent,
 )
-from ..aflow_util.core import AFLOW_EXECUTABLE
+from ..aflow_util.core import AFLOW_EXECUTABLE, get_atom_indices_for_each_wyckoff_orb
 from ..ase import get_isolated_energy_per_atom
 from ..kimunits import convert_list, convert_units
 from ..symmetry_util import (
@@ -1866,6 +1866,14 @@ class SingleCrystalTestDriver(KIMTestDriver):
 
         atoms_tmp.calc = self._calc
         return atoms_tmp
+
+    def get_nominal_prototype_label(self) -> str:
+        return self._get_nominal_crystal_structure_npt()["prototype-label"][
+            "source-value"
+        ]
+
+    def get_atom_indices_for_each_wyckoff_orb(self) -> List[Dict]:
+        return get_atom_indices_for_each_wyckoff_orb(self.get_nominal_prototype_label())
 
 
 def query_crystal_structures(
