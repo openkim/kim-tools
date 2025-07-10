@@ -4,7 +4,7 @@ Metadata and KIM Processing Pipeline Integration
 
 .. contents:: Table of Contents
 
-The final step in creating your Test Driver is to set up the auxiliary files needed for the KIM Processing Pipeline to use it.
+The penultimate step in creating your Test Driver is to set up the auxiliary files needed for the KIM Processing Pipeline to use it.
 As with the rest of this documentation, this page follows the example test driver from |example_url|. Most of the files are
 pre-configured to work as-is for most Test Drivers, and only a few changes are needed.
 
@@ -49,6 +49,7 @@ Generating and Running Tests
 There is one more file that you will need to change from the example Test Driver, but it will be easier to contextualize if we first demonstrate how Tests are generated and run in the KIM Developer Platform using the example Test Driver.
 
 To generate tests from the example Test Driver you've placed in ``~/test-drivers/CrystalGenomeASEExample__TD_000000654321_000`` of your KDP, run the following command.
+
 .. code-block:: bash
 
     kimgenie tests --add-random-kimnums --test-driver CrystalGenomeASEExample__TD_000000654321_000
@@ -91,15 +92,14 @@ In most cases, this should be all you need to change. Use ``kimgenie`` to genera
 Other files
 ===========
 
-These are the other required files in a Test Driver. In most cases, other than the readme and ``requirements.txt`` you can copy them from the example Test Driver as-is.
+These are the other required files in a Test Driver. In most cases, you can copy them from the example Test Driver as-is.
 
-    * ``README.rst``: Your Test Driver should include some kind of documentation, but the format is up to you.
-    * ``requirements.txt``: This is the requirements file for Python dependencies. It should include ``kim-tools`` at the minimum, as well as any other packages
-      your Python code imports directly (i.e. you don't need to add ``ase`` or any other requirements of ``kim-tools``)
     * ``kimspec.edn``: This is the metadata for the Test Driver itself. You may leave this in the minimal form provided in the example Test Driver, or you can fill in some of the fields following https://openkim.org/doc/schema/kimspec/. Any missing fields will be populated by the Web form when you :ref:`submit your Driver <doc.submit>`.
     * ``Makefile``: Unless your Test Driver requires compilation, leave this dummy Makefile untouched.
     * ``runner``: This is the executable that invokes the ``TestDriver`` class when running in the KIM Pipeline.
     * ``test_template/runner``: This is a wrapper executable in each Test that invokes the Test Driver's ``runner``. You should never have to change this file.
     * ``test_template/pipeline.stdin.tpl.genie``: This is the Jinja2 template file for passing inputs to the ``runner``.
     * ``test_template/dependencies.edn.genie``: This Jinja2 template file specifies the Tests that the generated Tests are dependent on.
-    * ``test_template/Makefile``, ``test_template/LICENSE``: Always leave these as-is.
+    * ``test_template/LICENSE``: By default, this is LGPL2. Change it if you want a different license. You will be able to choose
+      the license for your Test Driver during submission
+    * ``test_template/Makefile``: Always leave this as-is.

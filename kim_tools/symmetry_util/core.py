@@ -618,6 +618,20 @@ def get_primitive_genpos_ops(sgnum: Union[int, str]) -> List[Dict]:
         return np.asarray(json.load(f)[str(sgnum)])
 
 
+def transform_atoms(atoms: Atoms, op: Dict) -> Atoms:
+    """
+    Transform atoms by an operation defined by a dictionary containing a matrix 'W' and
+    translation 'w' defined as fractional operations in the unit cell. 'W' should be
+    oriented to operate on column vectors
+    """
+    frac_pos_columns = atoms.get_scaled_positions().T
+    frac_pos_cols_xform = op["W"] @ frac_pos_columns + np.reshape(op["w"], (3, 1))
+    atoms_transformed = atoms.copy()
+    atoms_transformed.set_scaled_positions(frac_pos_cols_xform.T)
+    atoms_transformed.wrap()
+    return atoms_transformed
+
+
 def reduce_and_avg(
     atoms: Atoms, repeat: Tuple[int, int, int]
 ) -> Tuple[Atoms, npt.ArrayLike]:

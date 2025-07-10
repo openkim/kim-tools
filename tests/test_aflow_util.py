@@ -3,24 +3,22 @@
 import json
 import logging
 import os
-from os import PathLike
-from typing import Dict, List, Optional
+
+# from random import random
+from typing import List, Optional
 
 import numpy as np
 import numpy.typing as npt
-import pytest
 from ase import Atoms
 
 from kim_tools import (
     AFLOW,
-    detect_unique_crystal_structures,
     get_atoms_from_crystal_structure,
     get_bravais_lattice_from_prototype,
     get_real_to_virtual_species_map,
     get_space_group_number_from_prototype,
     get_wyckoff_lists_from_prototype,
     prototype_labels_are_equivalent,
-    query_crystal_structures,
     split_parameter_array,
 )
 from kim_tools.aflow_util.core import (
@@ -31,10 +29,6 @@ from kim_tools.aflow_util.core import (
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(filename="kim-tools.log", level=logging.INFO, force=True)
-
-TEST_CASES = [572, 365, 1729, 1194, 1473, 166, 1205, 1357, 915, 212, 641, 22]
-MATERIALS_FILE = "test_structures.json"
-QUERY_DUMP = "output/query_result.json"
 
 
 def shuffle_atoms(atoms: Atoms) -> Atoms:
@@ -178,45 +172,6 @@ def atoms_frac_pos_match_allow_wrap(reference_atoms: Atoms, test_atoms: Atoms):
         reference_atoms.get_chemical_symbols(),
         test_atoms.get_chemical_symbols(),
     )
-
-
-def get_test_crystal_structures(
-    materials_file: PathLike = MATERIALS_FILE,
-    test_cases: Optional[List[int]] = TEST_CASES,
-    deduplicate: bool = False,
-) -> List[Dict]:
-    """
-    Query OpenKIM reference data for materials (prototype label + species) from
-    `materials_file`. Deduplicate the structures if asked, otherwise just return the
-    first index of each (you don't want to be testing 25 identical copies of FCC
-    Aluminum)
-
-    Returns a list of `crystal-structure-npt` property instances
-    """
-    with open(materials_file) as f:
-        query_inputs = json.load(f)
-
-    if test_cases is not None:
-        query_inputs = [query_inputs[i] for i in test_cases]
-
-    test_crystal_structures = []
-    for query_input in query_inputs:
-        query_result = query_crystal_structures(**query_input)
-        if deduplicate:
-            indices_to_test = detect_unique_crystal_structures(query_result)
-        else:
-            indices_to_test = [0]
-        test_crystal_structures += [query_result[i] for i in indices_to_test]
-
-    with open(QUERY_DUMP, "w") as f:
-        json.dump(test_crystal_structures, f)
-
-    return test_crystal_structures
-
-
-@pytest.fixture(scope="module")
-def input_crystal_structures():
-    return get_test_crystal_structures()
 
 
 def test_prototype_labels_are_equivalent():
