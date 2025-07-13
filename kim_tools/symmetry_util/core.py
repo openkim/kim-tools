@@ -12,6 +12,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
+import sympy as sp
 from ase import Atoms
 from ase.cell import Cell
 from ase.constraints import FixSymmetry
@@ -847,6 +848,48 @@ def fit_voigt_tensor_to_cell_and_space_group(
     t_symmetrized = sum(t_rotated_list) / len(t_rotated_list)
 
     return t_symmetrized.voigt
+
+
+def voigt_to_full(voigt_input: sp.Array) -> sp.MutableDenseNDimArray:
+    rank = sum(voigt_input.shape) // 3
+    this_voigt_map = Tensor.get_voigt_dict(rank)
+    t = sp.MutableDenseNDimArray(np.zeros([3] * rank))
+    for ind, v in this_voigt_map.items():
+        t[ind] = voigt_input[v]
+    return t
+
+
+def full_to_voigt(full: sp.Array) -> sp.MutableDenseNDimArray:
+    rank = len(full.shape)
+    vshape = tuple([3] * (rank % 2) + [6] * (rank // 2))
+    v_matrix = sp.MutableDenseNDimArray(np.zeros(vshape))
+    this_voigt_map = Tensor.get_voigt_dict(rank)
+    for ind, v in this_voigt_map.items():
+        v_matrix[v] = full[ind]
+    return v_matrix
+
+
+def rotate_tensor(t: sp.Array, r: sp.Array) -> sp.Array:
+    rank = len(t.shape)
+    args = [sp.Array(r)] * rank + [t]
+    fullproduct = sp.tensorproduct(*args)
+    print(fullproduct.shape)
+    for i in range(rank):
+        current_rank = len(fullproduct.shape)
+        # Count back from end: one component of tensor,
+        # plus two components for each rotation matrix.
+        # Then, step forward by 2*i + 1 to land on the second
+        # component of the correct rotation matrix.
+        # but, step forward by i more, because we've knocked out
+        # that many components of the tensor already
+        # (the knocked out components of the rotation matrices
+        # are lower than the current component we are summing)
+        rotation_component = current_rank - rank * 3 + 3 * i + 1
+        tensor_component = current_rank - rank + i  # Count back from end
+        fullproduct = sp.tensorcontraction(
+            fullproduct, (rotation_component, tensor_component)
+        )
+    return fullproduct
 
 
 class FixProvidedSymmetry(FixSymmetry):
