@@ -208,45 +208,127 @@ def randomize_positions(atoms, pert_amp, seed=None):
 
 
 ################################################################################
-def get_isolated_energy_per_atom(model: Union[str, Calculator], symbol: str) -> float:
+def get_isolated_energy_per_atom(model, symbol, initial_separation=1.0, max_separation=15.0, separation_neg_exponent=4, quit_early_after_convergence=True, energy_tolerance=1e-12):
     """
     Construct a non-periodic cell containing a single atom and compute its energy.
+    It tries to iteratively finetune the atomic separation for a dimer up to a specified precision (separation_neg_exponent). If between two successive phases the energy difference is less than energy_tolerance, it stops early, i.e. if
+    4.0x and 4.00x are within energy_tolerance, it stops at 4.00x.
+    All separations are in Angstroms.
 
     Args:
-        model:
-            A KIM model ID or an ASE calculator for computing the energy
-        symbol:
-            The chemical species
-
-    Returns:
-        The isolated energy of a single atom
+        model: KIM model to use for calculations
+        symbol: Chemical symbol
+        initial_separation: Initial separation for dimer calculations
+        max_separation: maximum separation for dimer calculations
+        separation_neg_exponent: Number of decimal places to refine the separation
+        quit_early_after_convergence: Whether to stop early if energy converges
+        energy_tolerance: Energy difference tolerance for convergence check
     """
-    single_atom = Atoms(
-        symbol,
-        positions=[(0.1, 0.1, 0.1)],
-        cell=(20, 20, 20),
-        pbc=(False, False, False),
-    )
-    if isinstance(model, str):
-        calc = KIM(model)
-    elif isinstance(model, Calculator):
-        calc = model
-    else:
-        raise KIMASEError(
-            "`model` argument must be a string indicating a KIM model "
-            f"or an ASE Calculator. Instead got an object of type {type(model)}."
+    try:
+        single_atom = Atoms(
+            symbol,
+            positions=[(0.1, 0.1, 0.1)],
+            cell=(20, 20, 20),
+            pbc=(False, False, False),
         )
-    single_atom.calc = calc
-    energy_per_atom = single_atom.get_potential_energy()
-    # if we are attaching an existing LAMMPS calculator to an atoms object,
-    # we can't delete it. Only do so if we are making a new one from a KIM ID.
-    if isinstance(model, str):
+        if isinstance(model, str):
+            calc = KIM(model)
+        elif isinstance(model, Calculator):
+            calc = model
+
+        single_atom.calc = calc
+        energy_per_atom = single_atom.get_potential_energy()
+
+        # Clean up
         if hasattr(calc, "clean"):
             calc.clean()
         if hasattr(calc, "__del__"):
             calc.__del__()
-    del single_atom
-    return energy_per_atom
+        del single_atom
+
+        return energy_per_atom
+
+    except Exception as e:
+
+        def _try_dimer_energy(separation):
+            try:
+                dimer = Atoms(
+                    [symbol, symbol],
+                    positions=[(0.1, 0.1, 0.1), (0.1 + separation, 0.1, 0.1)],
+                    cell=(max(20, separation + 10), 20, 20),
+                    pbc=(False, False, False),
+                )
+                calc = KIM(model)
+                dimer.calc = calc
+
+                total_energy = dimer.get_potential_energy()
+                energy_per_atom = total_energy / 2.0
+
+                if hasattr(calc, "clean"):
+                    calc.clean()
+                if hasattr(calc, "__del__"):
+                    calc.__del__()
+                del dimer
+
+                return energy_per_atom
+
+            except Exception:
+                try:
+                    if hasattr(calc, "clean"):
+                        calc.clean()
+                    if hasattr(calc, "__del__"):
+                        calc.__del__()
+                    if 'dimer' in locals():
+                        del dimer
+                except:
+                    pass
+                return None
+
+        # Start with integer separations: 1.0, 2.0, 3.0, 4.0, ...
+        last_successful_separation = None
+        last_successful_energy = None
+
+        separation = initial_separation
+        while separation <= max_separation:
+            energy = _try_dimer_energy(separation)
+            if energy is not None:
+                last_successful_separation = separation
+                last_successful_energy = energy
+                separation += 1.0
+            else:
+                break
+
+        if last_successful_separation is None:
+            raise RuntimeError(f"Failed to obtain isolated energy for {symbol} - no separations worked")
+
+        # refine
+        current_separation = last_successful_separation
+        previous_phase_energy = last_successful_energy
+
+        for decimal_place in range(1, separation_neg_exponent + 1):
+
+            step_size = 10 ** (-decimal_place)
+            phase_start_separation = current_separation
+            phase_start_energy = last_successful_energy
+
+            for i in range(1, 10):
+                test_sep = current_separation + step_size
+                energy = _try_dimer_energy(test_sep)
+
+                if energy is not None:
+                    current_separation = test_sep
+                    last_successful_energy = energy
+                else:
+                    break
+
+            if quit_early_after_convergence:
+                energy_diff = abs(last_successful_energy - previous_phase_energy)
+                if energy_diff <= energy_tolerance:
+                    return last_successful_energy
+
+            previous_phase_energy = last_successful_energy
+
+        return last_successful_energy
 
 
 ################################################################################
