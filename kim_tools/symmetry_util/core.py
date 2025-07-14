@@ -18,11 +18,11 @@ from ase.cell import Cell
 from ase.constraints import FixSymmetry
 from ase.geometry import get_distances, get_duplicate_atoms
 from matplotlib.backends.backend_pdf import PdfPages
-from pymatgen.core.operations import SymmOp
 from pymatgen.core.tensors import Tensor
 from scipy.stats import kstest
 from sklearn.decomposition import PCA
 from sympy import Matrix, cos, matrix2numpy, sin, sqrt, symbols
+from sympy.tensor.array.expressions import ArrayContraction, ArrayTensorProduct
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(filename="kim-tools.log", level=logging.INFO, force=True)
@@ -806,6 +806,78 @@ def kstest_reduced_distances(
         )
 
 
+def voigt_to_full(voigt_input: sp.Array) -> sp.MutableDenseNDimArray:
+    """
+    Convert a 3-dimensional symbolic Voigt matrix to a full tensor. Order is
+    automatically detected. For now, only works with tensors that don't have special
+    scaling for the Voigt matrix (e.g. this doesn't work with the
+    compliance tensor)
+    """
+    order = sum(voigt_input.shape) // 3
+    this_voigt_map = Tensor.get_voigt_dict(order)
+    t = sp.MutableDenseNDimArray(np.zeros([3] * order))
+    for ind, v in this_voigt_map.items():
+        t[ind] = voigt_input[v]
+    return t
+
+
+def full_to_voigt(full: sp.Array) -> sp.MutableDenseNDimArray:
+    """
+    Convert a 3-dimensional symbolic full tensor to a Voigt matrix. Order is
+    automatically detected. For now, only works with tensors that don't have special
+    scaling for the Voigt matrix (e.g. this doesn't work with the
+    compliance tensor). No error checking is done to see if the
+    full tensor has the required symmetries to be converted to Voigt.
+    """
+    order = len(full.shape)
+    vshape = tuple([3] * (order % 2) + [6] * (order // 2))
+    v_matrix = sp.MutableDenseNDimArray(np.zeros(vshape))
+    this_voigt_map = Tensor.get_voigt_dict(order)
+    for ind, v in this_voigt_map.items():
+        v_matrix[v] = full[ind]
+    return v_matrix
+
+
+def rotate_tensor(t: sp.Array, r: sp.Array) -> sp.Array:
+    """
+    Rotate a 3-dimensional symbolic Cartesian tensor by a rotation matrix.
+
+    Args:
+        t: The tensor to rotate
+        r:
+            The rotation matrix, or a precomputed tensor product of rotation matrices
+            with the correct rank
+    """
+    order = len(t.shape)
+    if r.shape == (3, 3):
+        r_tenprod = [sp.Array(r)] * order
+    elif r.shape == tuple([3] * 2 * order):
+        r_tenprod = [sp.Array(r)]
+    else:
+        raise RuntimeError(
+            "r must be a 3x3 rotation matrix or a tensor product of n 3x3 rotation "
+            f"matrices, where n is the rank of t. Instead got shape f{r.shape}"
+        )
+    args = r_tenprod + [t]
+    fullproduct = ArrayTensorProduct(*args)
+    for i in range(order):
+        current_order = len(fullproduct.shape)
+        # Count back from end: one component of tensor,
+        # plus two components for each rotation matrix.
+        # Then, step forward by 2*i + 1 to land on the second
+        # component of the correct rotation matrix.
+        # but, step forward by i more, because we've knocked out
+        # that many components of the tensor already
+        # (the knocked out components of the rotation matrices
+        # are lower than the current component we are summing)
+        rotation_component = current_order - order * 3 + 3 * i + 1
+        tensor_component = current_order - order + i  # Count back from end
+        fullproduct = ArrayContraction(
+            fullproduct, (rotation_component, tensor_component)
+        )
+    return fullproduct.as_explicit()
+
+
 def fit_voigt_tensor_to_cell_and_space_group(
     voigt_input: npt.ArrayLike, cell: npt.ArrayLike, sgnum: Union[int, str]
 ) -> npt.ArrayLike:
@@ -833,63 +905,26 @@ def fit_voigt_tensor_to_cell_and_space_group(
     Returns:
         Tensor symmetrized w.r.t. operations of the space group
     """
-    t = Tensor.from_voigt(voigt_input)
+    t = voigt_to_full(voigt_input)
+    order = len(t.shape)
 
-    t_rotated_list = []
-
+    # Precompute the average Q (x) Q (x) Q (x) Q for each
+    # Q in G
+    r_tensprod_ave = np.zeros([3] * 2 * order, dtype=float)
     space_group_ops = get_primitive_genpos_ops(sgnum)
-
     for op in space_group_ops:
         frac_rot = op["W"]
         cart_rot = fractional_to_cartesian_itc_rotation_from_ase_cell(frac_rot, cell)
-        cart_rot_op = SymmOp.from_rotation_and_translation(rotation_matrix=cart_rot)
-        t_rotated_list.append(t.transform(cart_rot_op))
+        r_tensprod = 1
+        for _ in range(order):
+            # tensordot with axes=0 is tensor product
+            r_tensprod = np.tensordot(r_tensprod, cart_rot, axes=0)
+        r_tensprod_ave += r_tensprod
+    r_tensprod_ave /= len(space_group_ops)
 
-    t_symmetrized = sum(t_rotated_list) / len(t_rotated_list)
+    t_symmetrized = np.array(rotate_tensor(t, r_tensprod_ave))
 
-    return t_symmetrized.voigt
-
-
-def voigt_to_full(voigt_input: sp.Array) -> sp.MutableDenseNDimArray:
-    rank = sum(voigt_input.shape) // 3
-    this_voigt_map = Tensor.get_voigt_dict(rank)
-    t = sp.MutableDenseNDimArray(np.zeros([3] * rank))
-    for ind, v in this_voigt_map.items():
-        t[ind] = voigt_input[v]
-    return t
-
-
-def full_to_voigt(full: sp.Array) -> sp.MutableDenseNDimArray:
-    rank = len(full.shape)
-    vshape = tuple([3] * (rank % 2) + [6] * (rank // 2))
-    v_matrix = sp.MutableDenseNDimArray(np.zeros(vshape))
-    this_voigt_map = Tensor.get_voigt_dict(rank)
-    for ind, v in this_voigt_map.items():
-        v_matrix[v] = full[ind]
-    return v_matrix
-
-
-def rotate_tensor(t: sp.Array, r: sp.Array) -> sp.Array:
-    rank = len(t.shape)
-    args = [sp.Array(r)] * rank + [t]
-    fullproduct = sp.tensorproduct(*args)
-    print(fullproduct.shape)
-    for i in range(rank):
-        current_rank = len(fullproduct.shape)
-        # Count back from end: one component of tensor,
-        # plus two components for each rotation matrix.
-        # Then, step forward by 2*i + 1 to land on the second
-        # component of the correct rotation matrix.
-        # but, step forward by i more, because we've knocked out
-        # that many components of the tensor already
-        # (the knocked out components of the rotation matrices
-        # are lower than the current component we are summing)
-        rotation_component = current_rank - rank * 3 + 3 * i + 1
-        tensor_component = current_rank - rank + i  # Count back from end
-        fullproduct = sp.tensorcontraction(
-            fullproduct, (rotation_component, tensor_component)
-        )
-    return fullproduct
+    return np.array(full_to_voigt(t_symmetrized), dtype=np.float64)
 
 
 class FixProvidedSymmetry(FixSymmetry):

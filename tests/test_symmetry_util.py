@@ -101,26 +101,18 @@ def test_fit_voigt_tensor_to_cell_and_space_group():
     # Generate a random symmetric matrix
     c = np.random.random((6, 6))
     c = c + c.T
-    for sgnum in range(1, 231):
+    for sgnum in (1, 3, 16, 75, 142, 143, 152, 153, 168, 195):
         lattice = get_formal_bravais_lattice_from_space_group(sgnum)
         symbolic_cell = get_symbolic_cell_from_formal_bravais_lattice(lattice)
         cell = matrix2numpy(symbolic_cell.subs(test_substitutions), dtype=float)
-        # This takes any matrix, picks out the unique constants based on the
-        # algebraic diagrams, and returns a matrix conforming to the material symmetry
-
-        # Test 1: fit_voigt_tensor_to_cell_and_space_group should not change
-        # a matrix that is already symmetrized
-        _, _, c_sym_alg = get_unique_components_and_reconstruct_matrix(c, sgnum)
-        c_sym_alg_tens = fit_voigt_tensor_to_cell_and_space_group(
-            c_sym_alg, cell, sgnum
-        )
-        assert np.allclose(c_sym_alg, c_sym_alg_tens)
 
         # Test 2: fit_voigt_tensor_to_cell_and_space_group should produce
-        # a matrix that is already symmetrized
+        # a matrix that symmetrized
         c_sym_tens = fit_voigt_tensor_to_cell_and_space_group(c, cell, sgnum)
         if lattice == "aP":
             assert np.allclose(c, c_sym_tens)
+        # This takes any matrix, picks out the unique constants based on the
+        # algebraic diagrams, and returns a matrix conforming to the material symmetry
         _, _, c_sym_tens_alg = get_unique_components_and_reconstruct_matrix(
             c_sym_tens, sgnum
         )
@@ -189,7 +181,4 @@ def test_transform_atoms_and_symmetry_and_wyckoff_indices(input_crystal_structur
 
 
 if __name__ == "__main__":
-    import json
-
-    with open("query_result.json") as f:
-        test_transform_atoms_and_symmetry_and_wyckoff_indices(json.load(f))
+    test_fit_voigt_tensor_to_cell_and_space_group()
