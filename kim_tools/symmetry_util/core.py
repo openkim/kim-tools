@@ -879,10 +879,13 @@ def rotate_tensor(t: sp.Array, r: sp.Array) -> sp.Array:
 
 
 def fit_voigt_tensor_to_cell_and_space_group(
-    voigt_input: npt.ArrayLike, cell: npt.ArrayLike, sgnum: Union[int, str]
-) -> npt.ArrayLike:
+    voigt_input: npt.ArrayLike,
+    cell: npt.ArrayLike,
+    sgnum: Union[int, str],
+    voigt_error: Optional[npt.ArrayLike] = None,
+) -> Union[npt.ArrayLike, Tuple[npt.ArrayLike]]:
     """
-    Given a Cartesian Tensor in voigt form, average it over all the operations in the
+    Given a Cartesian Tensor in Voigt form, average it over all the operations in the
     crystal's space group in order to remove violations of the material symmetry due to
     numerical errors. Similar to :meth:`pymatgen.core.tensors.Tensor.fit_to_structure`,
     except the input in output are Voigt, and the symmetry operations are tabulated
@@ -891,6 +894,11 @@ def fit_voigt_tensor_to_cell_and_space_group(
     The provided tensor and cell must be in the standard primitive
     setting and orientation w.r.t. Cartesian coordinates as defined in
     https://doi.org/10.1016/j.commatsci.2017.01.017
+
+    If errors are given, they will be properly accumulated by
+    squaring them to obtain the variances, then substituting them into the final
+    symbolic representation of all the operations undertaken by this function, then
+    changing subtraction to addition, then taking the square root of the result
 
     Args:
         voigt_input:
@@ -901,15 +909,23 @@ def fit_voigt_tensor_to_cell_and_space_group(
             representing a lattice vector
         sgnum:
             Space group number
+        voigt_error:
+            The error corresponding to voigt_input
 
     Returns:
-        Tensor symmetrized w.r.t. operations of the space group
+        Tensor symmetrized w.r.t. operations of the space group,
+        additionally the symmetrized error if `voigt_error`
+        is provided
     """
-    t = voigt_to_full(voigt_input)
+    # First, get the symmetrized tensor as a symbolic
+    voigt_shape = voigt_input.shape
+    sym_voigt_inp = sp.symarray("t", voigt_shape)
+    t = voigt_to_full(sym_voigt_inp)
     order = len(t.shape)
 
     # Precompute the average Q (x) Q (x) Q (x) Q for each
-    # Q in G
+    # Q in G, where (x) is tensor product. Better
+    # to do this with numpy, sympy is SLOW
     r_tensprod_ave = np.zeros([3] * 2 * order, dtype=float)
     space_group_ops = get_primitive_genpos_ops(sgnum)
     for op in space_group_ops:
@@ -921,10 +937,40 @@ def fit_voigt_tensor_to_cell_and_space_group(
             r_tensprod = np.tensordot(r_tensprod, cart_rot, axes=0)
         r_tensprod_ave += r_tensprod
     r_tensprod_ave /= len(space_group_ops)
+    t_symmetrized = rotate_tensor(t, r_tensprod_ave)
+    sym_voigt_out = full_to_voigt(t_symmetrized)
 
-    t_symmetrized = np.array(rotate_tensor(t, r_tensprod_ave))
+    # OK, got the symbolic voigt output. Set up machinery for
+    # substitution
+    voigt_ranges = [range(n) for n in voigt_shape]
+    # Convert to list so can be reused
+    voigt_ranges_product = list(product(*voigt_ranges))
 
-    return np.array(full_to_voigt(t_symmetrized), dtype=np.float64)
+    # Substitute result
+    sub_dict = {}
+    for symb, num in zip(sym_voigt_inp.flatten(), voigt_input.flatten()):
+        sub_dict[symb] = num
+
+    voigt_out = np.zeros(voigt_shape, dtype=float)
+    for indices in voigt_ranges_product:
+        voigt_out[indices] = sym_voigt_out[indices].subs(sub_dict)
+
+    if voigt_error is None:
+        return voigt_out
+    else:
+        # need to return error as well.
+        # Convert to variance by squaring
+        sub_dict = {}
+        for symb, num in zip(sym_voigt_inp.flatten(), voigt_error.flatten()):
+            sub_dict[symb] = num**2
+
+        voigt_err_out = np.zeros(voigt_shape, dtype=float)
+        for indices in voigt_ranges_product:
+            # Substitute - with + for variance
+            voigt_err_out[indices] = sp.parse_expr(
+                str(sym_voigt_out[indices]).replace("-", "+")
+            ).subs(sub_dict)
+        return voigt_out, np.sqrt(voigt_err_out)
 
 
 class FixProvidedSymmetry(FixSymmetry):
