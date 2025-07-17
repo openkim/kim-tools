@@ -25,6 +25,7 @@ from kim_tools import (
 from kim_tools.aflow_util.core import (
     build_abstract_formula_from_stoich_reduced_list,
     find_species_permutation_between_prototype_labels,
+    get_all_equivalent_labels,
 )
 
 logger = logging.getLogger(__name__)
@@ -188,6 +189,10 @@ def test_prototype_labels_are_equivalent():
         )
         is None
     )
+    for label in get_all_equivalent_labels("AB_hP52_156_10a8b8c_10a9b7c"):
+        assert prototype_labels_are_equivalent(label, "AB_hP52_156_10a8b8c_10a9b7c")
+    for label in get_all_equivalent_labels("A2B11_cP39_200_f_aghij"):
+        assert prototype_labels_are_equivalent(label, "A2B11_cP39_200_f_aghij")
 
 
 def test_build_abstract_formula_from_stoich_reduced_list():
@@ -337,7 +342,9 @@ def test_solve_for_params_of_known_prototype(input_crystal_structures):
 
     failed_to_solve_at_least_one = False
 
-    for material in input_crystal_structures:
+    test_materials = input_crystal_structures
+
+    for material in test_materials:
         prototype_label = material["prototype-label"]["source-value"]
 
         bravais_lattice = get_bravais_lattice_from_prototype(prototype_label)
@@ -408,5 +415,4 @@ def test_solve_for_params_of_known_prototype(input_crystal_structures):
 
 
 if __name__ == "__main__":
-    with open("output.3/query_result.json") as f:
-        test_solve_for_params_of_known_prototype(json.load(f))
+    test_prototype_labels_are_equivalent()
