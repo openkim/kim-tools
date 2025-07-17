@@ -24,14 +24,16 @@ This is a tutorial for creating OpenKIM Test Drivers in the Crystal Genome frame
    test_driver
    tutorial_debug
    tutorial_pipeline
+   tutorial_package
 
 .. _doc.submit:
 
 Submitting Your Test Driver
 ===========================
 
-When your Test Driver is complete and fully tested, take the following final steps to get your Test Driver submitted to OpenKIM.org and running in the Pipeline:
+When your Test Driver is complete (meaning you have completed the 5 tasks outlined above), take the following final steps to get your Test Driver submitted to OpenKIM.org and running in the Pipeline:
 
     * Request a member of the OpenKIM team to permanently add your Property Definition to the collection of `KIM Property Definitions <https://openkim.org/properties>`_.
+    * Request a member of the OpenKIM team to add you to the ``openkim-dev-tests`` Github organization, and transfer ownership of your repo there.
     * Create an OpenKIM account at https://openkim.org/new-account.
-    * Submit a tarball of your Test Driver at https://openkim.org/contribute/test-driver/. We recommend issuing a release of your repository using Git or Github, the ``.gitattributes`` file provided with the example Test Driver already has the correct settings to only export the needed files. Follow the instructions in the form to fill out the information about your Test Driver.
+    * Submit a ``tar.gz`` of your Test Driver at https://openkim.org/contribute/test-driver/. Create this archive by issuing a release on Github with the tag ``v000``. The ``.gitattributes`` file provided with the example Test Driver already has the correct settings to only export the needed files. Follow the instructions in the form to fill out the information about your Test Driver.

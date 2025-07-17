@@ -59,10 +59,6 @@ Standalone Installation
 
 Standalone usage of ``kim-tools`` is possible and makes sense if you wish to use the package on an HPC resource, as most do not support running Docker images.
 
-.. todo::
-
-   Add EquilibriumCrystalStructure to ``kimvv``, include ``kimvv`` in KDP, and add standalone installation instructions for ``kimvv`` below
-
 -------------
 Prerequisites
 -------------
@@ -82,8 +78,6 @@ Installing AFLOW using ``snap`` does NOT work, as it does not have access to the
 KIM API and kimpy
 -----------------
 Installation instructions for the KIM API can be found `here <https://openkim.org/doc/usage/obtaining-models/>`_, and for ``kimpy`` `here <https://github.com/openkim/kimpy#readme>`_. Recommended installation methods are building from source or installing from conda-forge (installing the ``kimpy`` package will automatically install ``kim-api`` as well). If you need `LAMMPS <https://www.lammps.org>`_ as well (because you are running or developing Test Drivers that use it, or you wish to use LAMMPS `Simulator Models <https://openkim.org/doc/repository/kim-content/>`_), a good option is to install the ``lammps`` package from conda-forge as well.
-
-There may be issues mixing ``pip`` and Conda. I did not encounter any arising directly from ``kim-tools``, but when developing a test that uses ``numdifftools``, I found that it was only possible to install through Conda, not ``pip``, for example.
 
 GNU Units
 ---------

@@ -392,6 +392,28 @@ def get_wyckoff_lists_from_prototype(prototype_label: str) -> List[str]:
     return expanded_wyckoff_letters
 
 
+def get_atom_indices_for_each_wyckoff_orb(prototype_label: str) -> List[Dict]:
+    """
+    Get a list of dictionaries containing the atom indices of each Wyckoff
+    orbit.
+
+    Returns:
+        The information is in this format -- ``[{"letter":"a", "indices":[0,1]}, ... ]``
+    """
+    return_list = []
+    wyck_lists = get_wyckoff_lists_from_prototype(prototype_label)
+    sgnum = get_space_group_number_from_prototype(prototype_label)
+    range_start = 0
+    for letter in "".join(wyck_lists):
+        multiplicity = get_primitive_wyckoff_multiplicity(sgnum, letter)
+        range_end = range_start + multiplicity
+        return_list.append(
+            {"letter": letter, "indices": list(range(range_start, range_end))}
+        )
+        range_start = range_end
+    return return_list
+
+
 def get_all_equivalent_labels(prototype_label: str) -> List[str]:
     """
     Return all possible permutations of the Wyckoff letters in a prototype
