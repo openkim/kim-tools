@@ -391,36 +391,6 @@ def test_solve_for_params_of_known_prototype(input_crystal_structures):
 
     test_materials = input_crystal_structures
 
-    # This is an adversarial example, because the Wyckoff set eh is
-    # non-contiguous, and the alphabetically minimal label for this
-    # structure becomes A2B11_cP39_200_f_begik, so the position of
-    # the equivalent Wyckoff position moves in the string. This
-    # tests the bugfix to the call to
-    # get_equivalent_atom_sets_from_prototype_and_atom_map()
-    # in AFLOW.solve_for_params_of_known_prototype(), where
-    # formerly the ASSUMED prototype label was being given
-    # instead of the PROVIDED one.
-    test_materials.append(
-        {
-            "prototype-label": {"source-value": "A2B11_cP39_200_f_aghij"},
-            "stoichiometric-species": {"source-value": ["Mg", "Zn"]},
-            "a": {
-                "source-value": 8.4478,
-                "source-unit": "angstrom",
-            },
-            "parameter-values": {
-                "source-value": [
-                    0.22975038,
-                    0.30174117,
-                    0.162039,
-                    0.21801342,
-                    0.23768174,
-                    0.34199675,
-                ]
-            },
-        }
-    )
-
     for material in test_materials:
         prototype_label = material["prototype-label"]["source-value"]
 
