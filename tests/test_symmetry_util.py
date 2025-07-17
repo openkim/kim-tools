@@ -101,22 +101,63 @@ def test_fit_voigt_tensor_to_cell_and_space_group():
     # Generate a random symmetric matrix
     c = np.random.random((6, 6))
     c = c + c.T
-    for sgnum in (1, 3, 16, 75, 142, 143, 152, 153, 168, 195):
+    for sgnum in (1, 3, 16, 142, 143, 152, 153, 168, 195):
         lattice = get_formal_bravais_lattice_from_space_group(sgnum)
         symbolic_cell = get_symbolic_cell_from_formal_bravais_lattice(lattice)
         cell = matrix2numpy(symbolic_cell.subs(test_substitutions), dtype=float)
 
         # Test 2: fit_voigt_tensor_to_cell_and_space_group should produce
         # a matrix that symmetrized
-        c_sym_tens = fit_voigt_tensor_to_cell_and_space_group(c, cell, sgnum)
+        c_mat_symm_rot = fit_voigt_tensor_to_cell_and_space_group(c, cell, sgnum)
         if lattice == "aP":
-            assert np.allclose(c, c_sym_tens)
+            assert np.allclose(c, c_mat_symm_rot)
         # This takes any matrix, picks out the unique constants based on the
         # algebraic diagrams, and returns a matrix conforming to the material symmetry
-        _, _, c_sym_tens_alg = get_unique_components_and_reconstruct_matrix(
-            c_sym_tens, sgnum
+        _, _, c_mat_symm_alg = get_unique_components_and_reconstruct_matrix(
+            c_mat_symm_rot, sgnum
         )
-        assert np.allclose(c_sym_tens, c_sym_tens_alg)
+        assert np.allclose(c_mat_symm_rot, c_mat_symm_alg)
+
+    # Use SG 75 to test a specific matrix including error
+    sgnum = 75
+    lattice = get_formal_bravais_lattice_from_space_group(sgnum)
+    symbolic_cell = get_symbolic_cell_from_formal_bravais_lattice(lattice)
+    cell = matrix2numpy(symbolic_cell.subs(test_substitutions), dtype=float)
+
+    c = np.ones((6, 6))
+    c_err = np.ones((6, 6))
+
+    # In Laue Class 4/m, [0,5]=-[1,5].
+    # Here we have [0,5]=0, [1,5]=1, so
+    # we should end up with [0,5]=-1/2,
+    # [1,5]=1/2, and their variances
+    # averaged together
+    c[0, 5] = 0
+    c[5, 0] = 0
+    c_err[1, 5] = 7 ** (1 / 2)
+    c_err[5, 1] = 7 ** (1 / 2)
+
+    ref_out = (
+        [
+            [1.0, 1.0, 1.0, 0.0, 0.0, -0.5],
+            [1.0, 1.0, 1.0, 0.0, 0.0, 0.5],
+            [1.0, 1.0, 1.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+            [-0.5, 0.5, 0.0, 0.0, 0.0, 1.0],
+        ],
+        [
+            [1.0, 1.0, 1.0, 0.0, 0.0, 2.0],
+            [1.0, 1.0, 1.0, 0.0, 0.0, 2.0],
+            [1.0, 1.0, 1.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0, 1.0, 0.0],
+            [2.0, 2.0, 0.0, 0.0, 0.0, 1.0],
+        ],
+    )
+    assert np.allclose(
+        fit_voigt_tensor_to_cell_and_space_group(c, cell, sgnum, c_err), ref_out
+    )
 
 
 def test_FixProvidedSymmetry():
