@@ -560,6 +560,8 @@ class KIMTestDriver(ABC):
         # count how many instances we had before we started
         previous_properties_end = len(kim_edn.loads(self.__output_property_instances))
 
+        os.makedirs("output", exist_ok=True)
+
         # _setup is likely overridden by an derived class
         self._setup(material, **kwargs)
 
