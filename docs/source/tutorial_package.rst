@@ -11,6 +11,18 @@ published on PyPI at https://pypi.org/project/kimvv/. This page will walk you th
 that your Test Driver will operate correctly independent of your local directory structure or environment
 configuration.
 
+The testing workflow will run your Test Driver on FCC gold (prototype label ``A_cF4_225_a``) using 3 models:
+
+  * a KIM Portable Model: ``LennardJones612_UniversalShifted__MO_959249795837_003``
+  * a KIM Simulator Model: ``Sim_LAMMPS_LJcut_AkersonElliott_Alchemy_PbAu``
+  * a non-KIM ASE Calculator: ``ase.calculators.lj.LennardJones(sigma=2.42324, epsilon=2.30580, rc=9.69298)``
+
+Make sure your Test Driver is able to run these simulations in the first place before beginning this process (except
+for the non-KIM calculator if your Test Driver uses LAMMPS). The two KIM models are example models included in all
+builds of the KIM API by default, except the conda-forge distribution for Apple Silicon Mac.
+
+
+
 Forking the ``kimvv`` repo
 ==========================
 
@@ -73,7 +85,7 @@ Checking that your fork passes the tests
 ========================================
 
 After making the above changes, commit and push the changes to your fork of ``kimvv``. The Github Actions workflow will automatically check that the ``kimvv`` package
-containing your driver correctly installs and runs a calculation on FCC gold using 3 models: a KIM Portable Model, a KIM Simulator Model, and a non-KIM ASE Calculator.
+containing your driver correctly installs and runs the previously described simulations.
 
 .. list-table::
    :class: borderless
