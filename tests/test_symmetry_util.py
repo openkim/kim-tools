@@ -7,7 +7,7 @@ from ase.build import bulk
 from ase.calculators.kim.kim import KIM
 from ase.geometry import get_duplicate_atoms
 from ase.io import read
-from elastic_excerpt import get_unique_components_and_reconstruct_matrix
+from elastic_excerpt import algebraically_reconstruct_matrix
 from sympy import matrix2numpy, symbols
 
 from kim_tools import (
@@ -111,16 +111,13 @@ def test_fit_voigt_tensor_to_cell_and_space_group():
         c_mat_symm_rot_sympy, _ = fit_voigt_tensor_and_error_to_cell_and_space_group(
             c, cell, sgnum, c
         )
-        # Not checking the error here, so just pass c itself as a dummy error
         c_mat_symm_rot = fit_voigt_tensor_to_cell_and_space_group(c, cell, sgnum)
         if lattice == "aP":
             assert np.allclose(c, c_mat_symm_rot_sympy)
             assert np.allclose(c, c_mat_symm_rot)
         # This takes any matrix, picks out the unique constants based on the
         # algebraic diagrams, and returns a matrix conforming to the material symmetry
-        _, _, c_mat_symm_alg = get_unique_components_and_reconstruct_matrix(
-            c_mat_symm_rot_sympy, sgnum
-        )
+        c_mat_symm_alg = algebraically_reconstruct_matrix(c_mat_symm_rot_sympy, sgnum)
         assert np.allclose(c_mat_symm_rot_sympy, c_mat_symm_alg)
         assert np.allclose(c_mat_symm_rot, c_mat_symm_alg)
 
