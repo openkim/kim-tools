@@ -18,6 +18,7 @@ from ase.cell import Cell
 from ase.constraints import FixSymmetry
 from ase.geometry import get_distances, get_duplicate_atoms
 from matplotlib.backends.backend_pdf import PdfPages
+from pymatgen.core.operations import SymmOp
 from pymatgen.core.tensors import Tensor
 from scipy.stats import kstest
 from sklearn.decomposition import PCA
@@ -945,6 +946,10 @@ def fit_voigt_tensor_and_error_to_cell_and_space_group(
     except the input in output are Voigt, and the symmetry operations are tabulated
     instead of being detected on the fly from a structure.
 
+    Only use this function if you need the errors. If you do not,
+    use
+    :func:`fit_voigt_tensor_to_cell_and_space_group`, which is significantly faster.
+
     The provided tensor and cell must be in the standard primitive
     setting and orientation w.r.t. Cartesian coordinates as defined in
     https://doi.org/10.1016/j.commatsci.2017.01.017
@@ -1000,6 +1005,54 @@ def fit_voigt_tensor_and_error_to_cell_and_space_group(
             str(sym_voigt_out[indices]).replace("-", "+")
         ).subs(sub_dict)
     return voigt_out, np.sqrt(voigt_err_out)
+
+
+def fit_voigt_tensor_to_cell_and_space_group(
+    voigt_input: npt.ArrayLike, cell: npt.ArrayLike, sgnum: Union[int, str]
+) -> npt.ArrayLike:
+    """
+    Given a Cartesian Tensor in voigt form, average it over all the operations in the
+    crystal's space group in order to remove violations of the material symmetry due to
+    numerical errors. Similar to :meth:`pymatgen.core.tensors.Tensor.fit_to_structure`,
+    except the input in output are Voigt, and the symmetry operations are tabulated
+    instead of being detected on the fly from a structure.
+
+    If you need to symmetrize the errors as well, use
+    :func:`fit_voigt_tensor_and_error_to_cell_and_space_group`, which properly
+    handles errors, but is much slower.
+
+    The provided tensor and cell must be in the standard primitive
+    setting and orientation w.r.t. Cartesian coordinates as defined in
+    https://doi.org/10.1016/j.commatsci.2017.01.017
+
+    Args:
+        voigt_input:
+            Tensor in Voigt form as understood by
+            :meth:`pymatgen.core.tensors.Tensor.from_voigt`
+        cell:
+            The cell of the crystal, with each row being a cartesian vector
+            representing a lattice vector
+        sgnum:
+            Space group number
+
+    Returns:
+        Tensor symmetrized w.r.t. operations of the space group
+    """
+    t = Tensor.from_voigt(voigt_input)
+
+    t_rotated_list = []
+
+    space_group_ops = get_primitive_genpos_ops(sgnum)
+
+    for op in space_group_ops:
+        frac_rot = op["W"]
+        cart_rot = fractional_to_cartesian_itc_rotation_from_ase_cell(frac_rot, cell)
+        cart_rot_op = SymmOp.from_rotation_and_translation(rotation_matrix=cart_rot)
+        t_rotated_list.append(t.transform(cart_rot_op))
+
+    t_symmetrized = sum(t_rotated_list) / len(t_rotated_list)
+
+    return t_symmetrized.voigt
 
 
 class FixProvidedSymmetry(FixSymmetry):
