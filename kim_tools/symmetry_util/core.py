@@ -806,7 +806,7 @@ def kstest_reduced_distances(
         )
 
 
-def voigt_to_full(voigt_input: sp.Array) -> sp.MutableDenseNDimArray:
+def voigt_to_full_symb(voigt_input: sp.Array) -> sp.MutableDenseNDimArray:
     """
     Convert a 3-dimensional symbolic Voigt matrix to a full tensor. Order is
     automatically detected. For now, only works with tensors that don't have special
@@ -821,7 +821,7 @@ def voigt_to_full(voigt_input: sp.Array) -> sp.MutableDenseNDimArray:
     return t
 
 
-def full_to_voigt(full: sp.Array) -> sp.MutableDenseNDimArray:
+def full_to_voigt_symb(full: sp.Array) -> sp.MutableDenseNDimArray:
     """
     Convert a 3-dimensional symbolic full tensor to a Voigt matrix. Order is
     automatically detected. For now, only works with tensors that don't have special
@@ -838,7 +838,7 @@ def full_to_voigt(full: sp.Array) -> sp.MutableDenseNDimArray:
     return v_matrix
 
 
-def rotate_tensor(t: sp.Array, r: sp.Array) -> sp.Array:
+def rotate_tensor_symb(t: sp.Array, r: sp.Array) -> sp.Array:
     """
     Rotate a 3-dimensional symbolic Cartesian tensor by a rotation matrix.
 
@@ -878,7 +878,7 @@ def rotate_tensor(t: sp.Array, r: sp.Array) -> sp.Array:
     return fullproduct.as_explicit()
 
 
-def fit_symbolic_voigt_tensor_to_cell_and_space_group(
+def fit_voigt_tensor_to_cell_and_space_group_symb(
     sym_voigt_inp: sp.Array,
     cell: npt.ArrayLike,
     sgnum: Union[int, str],
@@ -910,7 +910,7 @@ def fit_symbolic_voigt_tensor_to_cell_and_space_group(
         additionally the symmetrized error if `voigt_error`
         is provided
     """
-    t = voigt_to_full(sym_voigt_inp)
+    t = voigt_to_full_symb(sym_voigt_inp)
     order = len(t.shape)
 
     # Precompute the average Q (x) Q (x) Q (x) Q for each
@@ -927,18 +927,19 @@ def fit_symbolic_voigt_tensor_to_cell_and_space_group(
             r_tensprod = np.tensordot(r_tensprod, cart_rot, axes=0)
         r_tensprod_ave += r_tensprod
     r_tensprod_ave /= len(space_group_ops)
-    t_symmetrized = rotate_tensor(t, r_tensprod_ave)
-    return full_to_voigt(t_symmetrized)
+    t_symmetrized = rotate_tensor_symb(t, r_tensprod_ave)
+    return full_to_voigt_symb(t_symmetrized)
 
 
-def fit_voigt_tensor_to_cell_and_space_group(
+def fit_voigt_tensor_and_error_to_cell_and_space_group(
     voigt_input: npt.ArrayLike,
     cell: npt.ArrayLike,
     sgnum: Union[int, str],
-    voigt_error: Optional[npt.ArrayLike] = None,
-) -> Union[npt.ArrayLike, Tuple[npt.ArrayLike]]:
+    voigt_error: npt.ArrayLike,
+) -> Tuple[npt.ArrayLike, npt.ArrayLike]:
     """
-    Given a Cartesian Tensor in Voigt form, average it over all the operations in the
+    Given a Cartesian Tensor and its errors in Voigt form, average them over
+    all the operations in the
     crystal's space group in order to remove violations of the material symmetry due to
     numerical errors. Similar to :meth:`pymatgen.core.tensors.Tensor.fit_to_structure`,
     except the input in output are Voigt, and the symmetry operations are tabulated
@@ -947,11 +948,6 @@ def fit_voigt_tensor_to_cell_and_space_group(
     The provided tensor and cell must be in the standard primitive
     setting and orientation w.r.t. Cartesian coordinates as defined in
     https://doi.org/10.1016/j.commatsci.2017.01.017
-
-    If errors are given, they will be properly accumulated by
-    squaring them to obtain the variances, then substituting them into the final
-    symbolic representation of all the operations undertaken by this function, then
-    changing subtraction to addition, then taking the square root of the result
 
     Args:
         voigt_input:
@@ -967,13 +963,12 @@ def fit_voigt_tensor_to_cell_and_space_group(
 
     Returns:
         Tensor symmetrized w.r.t. operations of the space group,
-        additionally the symmetrized error if `voigt_error`
-        is provided
+        and its symmetrized error
     """
     # First, get the symmetrized tensor as a symbolic
     voigt_shape = voigt_input.shape
     sym_voigt_inp = sp.symarray("t", voigt_shape)
-    sym_voigt_out = fit_symbolic_voigt_tensor_to_cell_and_space_group(
+    sym_voigt_out = fit_voigt_tensor_to_cell_and_space_group_symb(
         sym_voigt_inp=sym_voigt_inp, cell=cell, sgnum=sgnum
     )
 
@@ -992,22 +987,19 @@ def fit_voigt_tensor_to_cell_and_space_group(
     for indices in voigt_ranges_product:
         voigt_out[indices] = sym_voigt_out[indices].subs(sub_dict)
 
-    if voigt_error is None:
-        return voigt_out
-    else:
-        # need to return error as well.
-        # Convert to variance by squaring
-        sub_dict = {}
-        for symb, num in zip(sym_voigt_inp.flatten(), voigt_error.flatten()):
-            sub_dict[symb] = num**2
+    # need to return error as well.
+    # Convert to variance by squaring
+    sub_dict = {}
+    for symb, num in zip(sym_voigt_inp.flatten(), voigt_error.flatten()):
+        sub_dict[symb] = num**2
 
-        voigt_err_out = np.zeros(voigt_shape, dtype=float)
-        for indices in voigt_ranges_product:
-            # Substitute - with + for variance
-            voigt_err_out[indices] = sp.parse_expr(
-                str(sym_voigt_out[indices]).replace("-", "+")
-            ).subs(sub_dict)
-        return voigt_out, np.sqrt(voigt_err_out)
+    voigt_err_out = np.zeros(voigt_shape, dtype=float)
+    for indices in voigt_ranges_product:
+        # Substitute - with + for variance
+        voigt_err_out[indices] = sp.parse_expr(
+            str(sym_voigt_out[indices]).replace("-", "+")
+        ).subs(sub_dict)
+    return voigt_out, np.sqrt(voigt_err_out)
 
 
 class FixProvidedSymmetry(FixSymmetry):

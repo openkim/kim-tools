@@ -28,7 +28,7 @@ from kim_tools.aflow_util.core import get_atom_indices_for_each_wyckoff_orb
 from kim_tools.symmetry_util.core import (
     FixProvidedSymmetry,
     PeriodExtensionException,
-    fit_voigt_tensor_to_cell_and_space_group,
+    fit_voigt_tensor_and_error_to_cell_and_space_group,
     kstest_reduced_distances,
     reduce_and_avg,
     transform_atoms,
@@ -106,17 +106,18 @@ def test_fit_voigt_tensor_to_cell_and_space_group():
         symbolic_cell = get_symbolic_cell_from_formal_bravais_lattice(lattice)
         cell = matrix2numpy(symbolic_cell.subs(test_substitutions), dtype=float)
 
-        # Test 2: fit_voigt_tensor_to_cell_and_space_group should produce
-        # a matrix that symmetrized
-        c_mat_symm_rot = fit_voigt_tensor_to_cell_and_space_group(c, cell, sgnum)
+        # Not checking the error here, so just pass c itself as a dummy error
+        c_mat_symm_rot_sympy, _ = fit_voigt_tensor_and_error_to_cell_and_space_group(
+            c, cell, sgnum, c
+        )
         if lattice == "aP":
-            assert np.allclose(c, c_mat_symm_rot)
+            assert np.allclose(c, c_mat_symm_rot_sympy)
         # This takes any matrix, picks out the unique constants based on the
         # algebraic diagrams, and returns a matrix conforming to the material symmetry
         _, _, c_mat_symm_alg = get_unique_components_and_reconstruct_matrix(
-            c_mat_symm_rot, sgnum
+            c_mat_symm_rot_sympy, sgnum
         )
-        assert np.allclose(c_mat_symm_rot, c_mat_symm_alg)
+        assert np.allclose(c_mat_symm_rot_sympy, c_mat_symm_alg)
 
     # Use SG 75 to test a specific matrix including error
     sgnum = 75
@@ -156,7 +157,8 @@ def test_fit_voigt_tensor_to_cell_and_space_group():
         ],
     )
     assert np.allclose(
-        fit_voigt_tensor_to_cell_and_space_group(c, cell, sgnum, c_err), ref_out
+        fit_voigt_tensor_and_error_to_cell_and_space_group(c, cell, sgnum, c_err),
+        ref_out,
     )
 
 
