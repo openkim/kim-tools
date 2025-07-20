@@ -989,22 +989,23 @@ def fit_voigt_tensor_and_error_to_cell_and_space_group(
         sub_dict[symb] = num
 
     voigt_out = np.zeros(voigt_shape, dtype=float)
-    for indices in voigt_ranges_product:
-        voigt_out[indices] = sym_voigt_out[indices].subs(sub_dict)
-
-    # need to return error as well.
-    # Convert to variance by squaring
-    sub_dict = {}
-    for symb, num in zip(sym_voigt_inp.flatten(), voigt_error.flatten()):
-        sub_dict[symb] = num**2
-
     voigt_err_out = np.zeros(voigt_shape, dtype=float)
     for indices in voigt_ranges_product:
-        # Substitute - with + for variance
-        voigt_err_out[indices] = sp.parse_expr(
-            str(sym_voigt_out[indices]).replace("-", "+")
-        ).subs(sub_dict)
-    return voigt_out, np.sqrt(voigt_err_out)
+        compon_expr = sym_voigt_out[indices]
+        voigt_out[indices] = compon_expr.subs(sub_dict)
+        # For the error, consider the current component (indicated by ``indices``)
+        # as a random variable that is a linear combination of all the components
+        # of voigt_inp (indicated by ``inp_indices``). The variance of the
+        # current component will be the sum of a_i^2 var_i, where a_i is the
+        # coefficient of the ith component of voigt_inp
+        voigt_out_var_compon = 0
+        for inp_indices in voigt_ranges_product:
+            inp_compon_coeff = float(compon_expr.coeff(sym_voigt_inp[inp_indices]))
+            inp_compon_var = voigt_error[inp_indices] ** 2
+            voigt_out_var_compon += inp_compon_coeff**2 * inp_compon_var
+        voigt_err_out[indices] = voigt_out_var_compon**0.5
+
+    return voigt_out, voigt_err_out
 
 
 def fit_voigt_tensor_to_cell_and_space_group(

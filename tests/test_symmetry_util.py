@@ -106,6 +106,8 @@ def test_fit_voigt_tensor_to_cell_and_space_group():
         lattice = get_formal_bravais_lattice_from_space_group(sgnum)
         symbolic_cell = get_symbolic_cell_from_formal_bravais_lattice(lattice)
         cell = matrix2numpy(symbolic_cell.subs(test_substitutions), dtype=float)
+        # Throw some exponents in there
+        cell += np.random.rand(3, 3) * 1e-16
 
         # Not checking the error here, so just pass c itself as a dummy error
         c_mat_symm_rot_sympy, _ = fit_voigt_tensor_and_error_to_cell_and_space_group(
@@ -126,6 +128,8 @@ def test_fit_voigt_tensor_to_cell_and_space_group():
     lattice = get_formal_bravais_lattice_from_space_group(sgnum)
     symbolic_cell = get_symbolic_cell_from_formal_bravais_lattice(lattice)
     cell = matrix2numpy(symbolic_cell.subs(test_substitutions), dtype=float)
+    # Throw some exponents in there
+    cell += np.random.rand(3, 3) * 1e-16
 
     c = np.ones((6, 6))
     c_err = np.ones((6, 6))
@@ -133,12 +137,12 @@ def test_fit_voigt_tensor_to_cell_and_space_group():
     # In Laue Class 4/m, [0,5]=-[1,5].
     # Here we have [0,5]=0, [1,5]=1, so
     # we should end up with [0,5]=-1/2,
-    # [1,5]=1/2, and their variances
-    # averaged together
+    # [1,5]=1/2, and the resulting variance
+    # be 1/4 of the sum of their variances
     c[0, 5] = 0
     c[5, 0] = 0
-    c_err[1, 5] = 7 ** (1 / 2)
-    c_err[5, 1] = 7 ** (1 / 2)
+    c_err[1, 5] = 15 ** (1 / 2)
+    c_err[5, 1] = 15 ** (1 / 2)
 
     ref_out = (
         [
@@ -150,11 +154,11 @@ def test_fit_voigt_tensor_to_cell_and_space_group():
             [-0.5, 0.5, 0.0, 0.0, 0.0, 1.0],
         ],
         [
-            [1.0, 1.0, 1.0, 0.0, 0.0, 2.0],
-            [1.0, 1.0, 1.0, 0.0, 0.0, 2.0],
-            [1.0, 1.0, 1.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 1.0, 1.0, 0.0],
-            [0.0, 0.0, 0.0, 1.0, 1.0, 0.0],
+            [0.5**0.5, 0.5**0.5, 0.5**0.5, 0.0, 0.0, 2.0],
+            [0.5**0.5, 0.5**0.5, 0.5**0.5, 0.0, 0.0, 2.0],
+            [0.5**0.5, 0.5**0.5, 1.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.5**0.5, 0.5**0.5, 0.0],
+            [0.0, 0.0, 0.0, 0.5**0.5, 0.5**0.5, 0.0],
             [2.0, 2.0, 0.0, 0.0, 0.0, 1.0],
         ],
     )
