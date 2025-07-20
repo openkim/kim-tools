@@ -1,8 +1,14 @@
+import logging
+import math
 from typing import Dict, List, Tuple, Union
 
+import numpy as np
 import numpy.typing as npt
 
 from .core import _check_space_group
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(filename="kim-tools.log", level=logging.INFO, force=True)
 
 
 def voigt_elast_compon_eqn(sgnum: Union[int, str]) -> Dict:
@@ -256,3 +262,116 @@ def indep_elast_compon_names_and_values_from_voigt(
                 elastic_constants_values.append(voigt[i - 1, j - 1])
 
     return elastic_constants_names, elastic_constants_values
+
+
+def calc_bulk(elastic_constants):
+    """
+    Compute the bulk modulus given the elastic constants matrix in
+    Voigt ordering.
+
+    Parameters:
+        elastic_constants : float
+            A 6x6 numpy array containing the elastic constants in
+            Voigt ordering. The material can have arbitrary anisotropy.
+
+    Returns:
+        bulk : float
+            The bulk modulus, defined as the ratio between the hydrostatic
+            stress (negative of the pressure p) in hydrostatic loading and
+            the diltation e (trace of the strain tensor), i.e. B = -p/e
+    """
+    # Compute bulk modulus, based on exercise 6.14 in Tadmor, Miller, Elliott,
+    # Continuum Mechanics and Thermodynamics, Cambridge University Press, 2012.
+    rank_elastic_constants = np.linalg.matrix_rank(elastic_constants)
+    elastic_constants_aug = np.concatenate(
+        (elastic_constants, np.transpose([[1, 1, 1, 0, 0, 0]])), 1
+    )
+    rank_elastic_constants_aug = np.linalg.matrix_rank(elastic_constants_aug)
+    if rank_elastic_constants_aug > rank_elastic_constants:
+        assert rank_elastic_constants_aug == rank_elastic_constants + 1
+        logger.info(
+            "Information: Hydrostatic pressure not in the image of the elasticity "
+            "matrix, zero bulk modulus!"
+        )
+        return 0.0
+    else:
+        # if a solution exists for a stress state of [1,1,1,0,0,0],
+        # you can always use the pseudoinverse
+        compliance = np.linalg.pinv(elastic_constants)
+        bulk = 1 / np.sum(compliance[0:3, 0:3])
+    return bulk
+
+
+def map_to_Kelvin(C: npt.ArrayLike) -> npt.ArrayLike:
+    """
+    Compute the Kelvin form of the input 6x6 Voigt matrix
+    """
+    Ch = C.copy()
+    Ch[0:3, 3:6] *= math.sqrt(2.0)
+    Ch[3:6, 0:3] *= math.sqrt(2.0)
+    Ch[3:6, 3:6] *= 2.0
+    return Ch
+
+
+def function_of_matrix(A, f):
+    """Compute the function of a matrix"""
+    ev, R = np.linalg.eigh(A)
+    Dtilde = np.diag([f(e) for e in ev])
+    return np.matmul(np.matmul(R, Dtilde), np.transpose(R))
+
+
+def find_nearest_isotropy(elastic_constants):
+    """
+    Compute the distance between the provided matrix of elastic constants
+    in Voigt notation, to the nearest matrix of elastic constants for an
+    isotropic material. Return this distance, and the isotropic bulk and
+    shear modulus.
+
+    Ref: Morin, L; Gilormini, P and Derrien, K,
+         "Generalized Euclidean Distances for Elasticity Tensors",
+         Journal of Elasticity, Vol 138, pp. 221-232 (2020).
+
+    Parameters:
+        elastic_constants : float
+            A 6x6 numpy array containing the elastic constants in
+            Voigt ordering. The material can have arbitrary anisotropy.
+
+    Returns:
+        d : float
+            Distance to the nearest elastic constants.
+            log Euclidean metric.
+        kappa : float
+            Isotropic bulk modulus
+        mu : float
+            Isotropic shear modulus
+    """
+    E0 = 1.0  # arbitrary scaling constant (result unaffected by it)
+
+    JJ = np.zeros(shape=(6, 6))
+    KK = np.zeros(shape=(6, 6))
+    v = {0: [0, 0], 1: [1, 1], 2: [2, 2], 3: [1, 2], 4: [0, 2], 5: [0, 1]}
+    for ii in range(6):
+        for jj in range(6):
+            # i j k l = v[ii][0] v[ii][1] v[jj][0] v[jj][1]
+            JJ[ii][jj] = (1.0 / 3.0) * (v[ii][0] == v[ii][1]) * (v[jj][0] == v[jj][1])
+            KK[ii][jj] = (1.0 / 2.0) * (
+                (v[ii][0] == v[jj][0]) * (v[ii][1] == v[jj][1])
+                + (v[ii][0] == v[jj][1]) * (v[ii][1] == v[jj][0])
+            ) - JJ[ii][jj]
+    Chat = map_to_Kelvin(elastic_constants)
+    JJhat = map_to_Kelvin(JJ)
+    KKhat = map_to_Kelvin(KK)
+
+    # Eqn (49) in Morin et al.
+    fCoverE0 = function_of_matrix(Chat / E0, math.log)
+    kappa = (E0 / 3.0) * math.exp(np.einsum("ij,ij", fCoverE0, JJhat))
+    mu = (E0 / 2.0) * math.exp(0.2 * np.einsum("ij,ij", fCoverE0, KKhat))
+
+    # Eqn (47) in Morin et al.
+    dmat = (
+        fCoverE0 - math.log(3.0 * kappa / E0) * JJhat - math.log(2.0 * mu / E0) * KKhat
+    )
+    d = math.sqrt(np.einsum("ij,ij", dmat, dmat))
+
+    # Return results
+    return d, kappa, mu
