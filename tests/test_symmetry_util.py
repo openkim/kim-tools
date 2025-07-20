@@ -109,7 +109,7 @@ def test_fit_voigt_tensor_to_cell_and_space_group():
 
         # Not checking the error here, so just pass c itself as a dummy error
         c_mat_symm_rot_sympy, _ = fit_voigt_tensor_and_error_to_cell_and_space_group(
-            c, cell, sgnum, c
+            c, c, cell, sgnum
         )
         c_mat_symm_rot = fit_voigt_tensor_to_cell_and_space_group(c, cell, sgnum)
         if lattice == "aP":
@@ -159,7 +159,7 @@ def test_fit_voigt_tensor_to_cell_and_space_group():
         ],
     )
     assert np.allclose(
-        fit_voigt_tensor_and_error_to_cell_and_space_group(c, cell, sgnum, c_err),
+        fit_voigt_tensor_and_error_to_cell_and_space_group(c, c_err, cell, sgnum),
         ref_out,
     )
     assert np.allclose(

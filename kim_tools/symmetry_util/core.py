@@ -934,9 +934,9 @@ def fit_voigt_tensor_to_cell_and_space_group_symb(
 
 def fit_voigt_tensor_and_error_to_cell_and_space_group(
     voigt_input: npt.ArrayLike,
+    voigt_error: npt.ArrayLike,
     cell: npt.ArrayLike,
     sgnum: Union[int, str],
-    voigt_error: npt.ArrayLike,
 ) -> Tuple[npt.ArrayLike, npt.ArrayLike]:
     """
     Given a Cartesian Tensor and its errors in Voigt form, average them over
@@ -958,13 +958,13 @@ def fit_voigt_tensor_and_error_to_cell_and_space_group(
         voigt_input:
             Tensor in Voigt form as understood by
             :meth:`pymatgen.core.tensors.Tensor.from_voigt`
+        voigt_error:
+            The error corresponding to voigt_input
         cell:
             The cell of the crystal, with each row being a cartesian vector
             representing a lattice vector
         sgnum:
             Space group number
-        voigt_error:
-            The error corresponding to voigt_input
 
     Returns:
         Tensor symmetrized w.r.t. operations of the space group,
