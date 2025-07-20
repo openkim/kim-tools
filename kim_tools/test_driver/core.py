@@ -30,6 +30,7 @@
 Helper classes for KIM Test Drivers
 
 """
+import json
 import logging
 import os
 import shutil
@@ -91,6 +92,7 @@ __all__ = [
     "detect_unique_crystal_structures",
     "get_deduplicated_property_instances",
     "minimize_wrapper",
+    "crystal_input_from_test_generator_line",
 ]
 
 # Force tolerance for the optional initial relaxation of the provided cell
@@ -2237,3 +2239,42 @@ def get_deduplicated_property_instances(
     property_instances_deduplicated.sort(key=lambda a: a["instance-id"])
 
     return property_instances_deduplicated
+
+
+def crystal_input_from_test_generator_line(
+    test_generator_line: str, kim_model_name: str
+) -> List[Dict]:
+    """
+    Produce a list of dictionaries of kwargs for a Crystal Genome Test Driver invocation
+    from a line in its ``test_generator.json``
+    """
+    test_generator_dict = json.loads(test_generator_line)
+    stoichiometric_species = test_generator_dict["stoichiometric_species"]
+    prototype_label = test_generator_dict["prototype_label"]
+    cell_cauchy_stress_eV_angstrom3 = test_generator_dict.get(
+        "cell_cauchy_stress_eV_angstrom3"
+    )
+    temperature_K = test_generator_dict.get("temperature_K")
+    crystal_genome_test_args = test_generator_dict.get("crystal_genome_test_args")
+    equilibria = query_crystal_structures(
+        stoichiometric_species=stoichiometric_species,
+        prototype_label=prototype_label,
+        kim_model_name=kim_model_name,
+    )
+    inputs = []
+    for equilibrium in equilibria:
+        inputs.append(
+            {
+                "material": equilibrium,
+            }
+        )
+        if cell_cauchy_stress_eV_angstrom3 is not None:
+            inputs[-1][
+                "cell_cauchy_stress_eV_angstrom3"
+            ] = cell_cauchy_stress_eV_angstrom3
+        if temperature_K is not None:
+            inputs[-1]["temperature_K"] = temperature_K
+        if crystal_genome_test_args is not None:
+            inputs[-1].update(crystal_genome_test_args)
+
+    return inputs
