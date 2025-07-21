@@ -511,11 +511,15 @@ class KIMTestDriver(ABC):
         requires a KIM model (e.g. a LAMMPS TD) with a non-KIM Calculator
         """
 
-    def __init__(self, model: Union[str, Calculator]) -> None:
+    def __init__(
+        self, model: Union[str, Calculator], suppr_sm_lmp_log: bool = False
+    ) -> None:
         """
         Args:
             model:
                 ASE calculator or KIM model name to use
+            suppr_sm_lmp_log:
+                Suppress writing a lammps.log
         """
         if isinstance(model, Calculator):
             self.__calc = model
@@ -525,6 +529,9 @@ class KIMTestDriver(ABC):
 
             self.__kim_model_name = model
             self.__calc = KIM(self.__kim_model_name)
+            if suppr_sm_lmp_log:
+                if hasattr(self.__calc.parameters, "log_file"):
+                    self.__calc.parameters.log_file = None
 
         self.__output_property_instances = "[]"
 
@@ -1197,17 +1204,22 @@ class SingleCrystalTestDriver(KIMTestDriver):
     """
 
     def __init__(
-        self, model: Union[str, Calculator], aflow_executable: str = AFLOW_EXECUTABLE
+        self,
+        model: Union[str, Calculator],
+        suppr_sm_lmp_log: bool = False,
+        aflow_executable: str = AFLOW_EXECUTABLE,
     ) -> None:
         """
         Args:
             model:
                 ASE calculator or KIM model name to use
+            suppr_sm_lmp_log:
+                Suppress writing a lammps.log
             aflow_executable:
                 Path to AFLOW executable
         """
         self.aflow_executable = aflow_executable
-        super().__init__(model)
+        super().__init__(model, suppr_sm_lmp_log=suppr_sm_lmp_log)
 
     def _setup(
         self,
