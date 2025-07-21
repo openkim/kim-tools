@@ -880,7 +880,7 @@ def rotate_tensor_symb(t: sp.Array, r: sp.Array) -> sp.Array:
 
 
 def fit_voigt_tensor_to_cell_and_space_group_symb(
-    sym_voigt_inp: sp.Array,
+    symb_voigt_inp: sp.Array,
     cell: npt.ArrayLike,
     sgnum: Union[int, str],
 ):
@@ -897,7 +897,7 @@ def fit_voigt_tensor_to_cell_and_space_group_symb(
     https://doi.org/10.1016/j.commatsci.2017.01.017
 
     Args:
-        sym_voigt_inp:
+        symb_voigt_inp:
             Tensor in Voigt form as understood by
             :meth:`pymatgen.core.tensors.Tensor.from_voigt`
         cell:
@@ -911,7 +911,7 @@ def fit_voigt_tensor_to_cell_and_space_group_symb(
         additionally the symmetrized error if `voigt_error`
         is provided
     """
-    t = voigt_to_full_symb(sym_voigt_inp)
+    t = voigt_to_full_symb(symb_voigt_inp)
     order = len(t.shape)
 
     # Precompute the average Q (x) Q (x) Q (x) Q for each
@@ -937,6 +937,7 @@ def fit_voigt_tensor_and_error_to_cell_and_space_group(
     voigt_error: npt.ArrayLike,
     cell: npt.ArrayLike,
     sgnum: Union[int, str],
+    symmetric: bool = False,
 ) -> Tuple[npt.ArrayLike, npt.ArrayLike]:
     """
     Given a Cartesian Tensor and its errors in Voigt form, average them over
@@ -965,6 +966,9 @@ def fit_voigt_tensor_and_error_to_cell_and_space_group(
             representing a lattice vector
         sgnum:
             Space group number
+        symmetric:
+            Whether the provided matrix is symmetric. Currently
+            only supported for 6x6 Voigt matrices
 
     Returns:
         Tensor symmetrized w.r.t. operations of the space group,
@@ -972,9 +976,18 @@ def fit_voigt_tensor_and_error_to_cell_and_space_group(
     """
     # First, get the symmetrized tensor as a symbolic
     voigt_shape = voigt_input.shape
-    sym_voigt_inp = sp.symarray("t", voigt_shape)
+    symb_voigt_inp = sp.symarray("t", voigt_shape)
+    if symmetric:
+        if voigt_shape != (6, 6):
+            raise NotImplementedError(
+                "Symmetric input only supported for 6x6 Voigt matrices"
+            )
+        for i in range(5):
+            for j in range(i + 1, 6):
+                symb_voigt_inp[j, i] = symb_voigt_inp[i, j]
+
     sym_voigt_out = fit_voigt_tensor_to_cell_and_space_group_symb(
-        sym_voigt_inp=sym_voigt_inp, cell=cell, sgnum=sgnum
+        symb_voigt_inp=symb_voigt_inp, cell=cell, sgnum=sgnum
     )
 
     # OK, got the symbolic voigt output. Set up machinery for
@@ -983,10 +996,14 @@ def fit_voigt_tensor_and_error_to_cell_and_space_group(
     # Convert to list so can be reused
     voigt_ranges_product = list(product(*voigt_ranges))
 
-    # Substitute result
+    # Substitute result. Symmetry not an issue, keys will get overwritten
     sub_dict = {}
-    for symb, num in zip(sym_voigt_inp.flatten(), voigt_input.flatten()):
+    for symb, num in zip(symb_voigt_inp.flatten(), voigt_input.flatten()):
         sub_dict[symb] = num
+
+    sub_dict_err = {}
+    for symb, num in zip(symb_voigt_inp.flatten(), voigt_error.flatten()):
+        sub_dict_err[symb] = num
 
     voigt_out = np.zeros(voigt_shape, dtype=float)
     voigt_err_out = np.zeros(voigt_shape, dtype=float)
@@ -995,13 +1012,13 @@ def fit_voigt_tensor_and_error_to_cell_and_space_group(
         voigt_out[indices] = compon_expr.subs(sub_dict)
         # For the error, consider the current component (indicated by ``indices``)
         # as a random variable that is a linear combination of all the components
-        # of voigt_inp (indicated by ``inp_indices``). The variance of the
+        # of voigt_inp. The variance of the
         # current component will be the sum of a_i^2 var_i, where a_i is the
         # coefficient of the ith component of voigt_inp
         voigt_out_var_compon = 0
-        for inp_indices in voigt_ranges_product:
-            inp_compon_coeff = float(compon_expr.coeff(sym_voigt_inp[inp_indices]))
-            inp_compon_var = voigt_error[inp_indices] ** 2
+        for symb in sub_dict_err:
+            inp_compon_coeff = float(compon_expr.coeff(symb))
+            inp_compon_var = sub_dict_err[symb] ** 2
             voigt_out_var_compon += inp_compon_coeff**2 * inp_compon_var
         voigt_err_out[indices] = voigt_out_var_compon**0.5
 

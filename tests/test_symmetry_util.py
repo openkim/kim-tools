@@ -162,9 +162,31 @@ def test_fit_voigt_tensor_to_cell_and_space_group():
             [2.0, 2.0, 0.0, 0.0, 0.0, 1.0],
         ],
     )
+    ref_out_symm = (
+        [
+            [1.0, 1.0, 1.0, 0.0, 0.0, -0.5],
+            [1.0, 1.0, 1.0, 0.0, 0.0, 0.5],
+            [1.0, 1.0, 1.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+            [-0.5, 0.5, 0.0, 0.0, 0.0, 1.0],
+        ],
+        [
+            [0.5**0.5, 1, 0.5**0.5, 0.0, 0.0, 2.0],
+            [1, 0.5**0.5, 0.5**0.5, 0.0, 0.0, 2.0],
+            [0.5**0.5, 0.5**0.5, 1.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.5**0.5, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0, 0.5**0.5, 0.0],
+            [2.0, 2.0, 0.0, 0.0, 0.0, 1.0],
+        ],
+    )
     assert np.allclose(
         fit_voigt_tensor_and_error_to_cell_and_space_group(c, c_err, cell, sgnum),
         ref_out,
+    )
+    assert np.allclose(
+        fit_voigt_tensor_and_error_to_cell_and_space_group(c, c_err, cell, sgnum, True),
+        ref_out_symm,
     )
     assert np.allclose(
         fit_voigt_tensor_to_cell_and_space_group(c, cell, sgnum),
