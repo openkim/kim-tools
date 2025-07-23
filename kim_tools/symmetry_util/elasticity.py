@@ -1,14 +1,66 @@
 import logging
 import math
+import os
+import shutil
 from typing import Dict, List, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
 
-from .core import _check_space_group
+from .core import DATA_DIR, _check_space_group
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(filename="kim-tools.log", level=logging.INFO, force=True)
+
+
+def voigt_elast_class(sgnum: Union[int, str]) -> str:
+    """
+    Get the name of the class of the structure of the elasticity tensor, out of
+    the following possibilities:
+    "cubic", "hexagonal", "trigonal_3bar_m_2nd_pos", "trigonal_3bar_m_3rd_pos",
+    "trigonal_3bar", "tetragonal_class_4_slash_mmm", "tetragonal_class_4_slash_m",
+    "orthorhombic", "monoclinic", "triclinic". The names that don't
+    correspond to a crystal system are taken from
+    https://dictionary.iucr.org/Laue_class
+
+    Note that this is a novel classification as far as the authors are aware.
+    Most crystallography texts on the subject will show 9 classes. This function
+    returns 10 possibilities, because the structure of the components of
+    the elasticity tensor for Laue class -3m depends on whether the twofold
+    axis is aligned along the Cartesian x or y axis. Assuming one adopts a
+    standard orientation of the hexagonal unit cell w.r.t. the Cartesian coordinate
+    system, as we do, different space groups in this Laue class have different
+    forms.
+
+    See https://doi.org/10.1017/CBO9781139017657.008 pg 232 for a review
+    of the subject.
+    """
+    _check_space_group(sgnum)
+    sgnum = int(sgnum)
+
+    if sgnum < 3:
+        return "triclinic"
+    elif sgnum < 16:
+        return "monoclinic"
+    elif sgnum < 75:
+        return "orthorhombic"
+    elif sgnum < 89:
+        return "tetragonal_4_slash_m"
+    elif sgnum < 143:
+        return "tetragonal_4_slash_mmm"
+    elif sgnum < 149:
+        return "trigonal_3bar"
+    elif sgnum < 168:
+        # Determine if this is one of the groups with the 2-fold operation in the
+        # third position (e.g. 149:P312), which has different equations
+        if sgnum in (149, 151, 153, 157, 159, 162, 163):
+            return "trigonal_3bar_m_3rd_pos"
+        else:
+            return "trigonal_3bar_m_2nd_pos"
+    elif sgnum < 195:
+        return "hexagonal"
+    else:
+        return "cubic"
 
 
 def voigt_elast_compon_eqn(sgnum: Union[int, str]) -> Dict:
@@ -30,180 +82,157 @@ def voigt_elast_compon_eqn(sgnum: Union[int, str]) -> Dict:
         be independent. Only the upper triangle (i<j) is listed. Indices are
         one-based.
     """
-    _check_space_group(sgnum)
-    sgnum = int(sgnum)
-
-    CUBIC_EQN = {
-        (1, 3): ([1], [(1, 2)]),
-        (1, 4): None,
-        (1, 5): None,
-        (1, 6): None,
-        (2, 2): ([1], [(1, 1)]),
-        (2, 3): ([1], [(1, 2)]),
-        (2, 4): None,
-        (2, 5): None,
-        (2, 6): None,
-        (3, 3): ([1], [(1, 1)]),
-        (3, 4): None,
-        (3, 5): None,
-        (3, 6): None,
-        (4, 5): None,
-        (4, 6): None,
-        (5, 5): ([1], [(4, 4)]),
-        (5, 6): None,
-        (6, 6): ([1], [(4, 4)]),
+    ELASTICITY_MATRIX_EQNS = {
+        "cubic": {
+            (1, 3): ([1], [(1, 2)]),
+            (1, 4): None,
+            (1, 5): None,
+            (1, 6): None,
+            (2, 2): ([1], [(1, 1)]),
+            (2, 3): ([1], [(1, 2)]),
+            (2, 4): None,
+            (2, 5): None,
+            (2, 6): None,
+            (3, 3): ([1], [(1, 1)]),
+            (3, 4): None,
+            (3, 5): None,
+            (3, 6): None,
+            (4, 5): None,
+            (4, 6): None,
+            (5, 5): ([1], [(4, 4)]),
+            (5, 6): None,
+            (6, 6): ([1], [(4, 4)]),
+        },
+        "hexagonal": {
+            (1, 4): None,
+            (1, 5): None,
+            (1, 6): None,
+            (2, 2): ([1], [(1, 1)]),
+            (2, 3): ([1], [(1, 3)]),
+            (2, 4): None,
+            (2, 5): None,
+            (2, 6): None,
+            (3, 4): None,
+            (3, 5): None,
+            (3, 6): None,
+            (4, 5): None,
+            (4, 6): None,
+            (5, 5): ([1], [(4, 4)]),
+            (5, 6): None,
+            (6, 6): ([0.5, -0.5], [(1, 1), (1, 2)]),
+        },
+        "trigonal_3bar_m_2nd_pos": {
+            (1, 5): None,
+            (1, 6): None,
+            (2, 2): ([1], [(1, 1)]),
+            (2, 3): ([1], [(1, 3)]),
+            (2, 4): ([-1], [(1, 4)]),
+            (2, 5): None,
+            (2, 6): None,
+            (3, 4): None,
+            (3, 5): None,
+            (3, 6): None,
+            (4, 5): None,
+            (4, 6): None,
+            (5, 5): ([1], [(4, 4)]),
+            (5, 6): ([1], [(1, 4)]),
+            (6, 6): ([0.5, -0.5], [(1, 1), (1, 2)]),
+        },
+        "trigonal_3bar_m_3rd_pos": {
+            (1, 4): None,
+            (1, 6): None,
+            (2, 2): ([1], [(1, 1)]),
+            (2, 3): ([1], [(1, 3)]),
+            (2, 4): None,
+            (2, 5): ([-1], [(1, 5)]),
+            (2, 6): None,
+            (3, 4): None,
+            (3, 5): None,
+            (3, 6): None,
+            (4, 5): None,
+            (4, 6): ([-1], [(1, 5)]),
+            (5, 5): ([1], [(4, 4)]),
+            (5, 6): None,
+            (6, 6): ([0.5, -0.5], [(1, 1), (1, 2)]),
+        },
+        "trigonal_3bar": {
+            (1, 6): None,
+            (2, 2): ([1], [(1, 1)]),
+            (2, 3): ([1], [(1, 3)]),
+            (2, 4): ([-1], [(1, 4)]),
+            (2, 5): ([-1], [(1, 5)]),
+            (2, 6): None,
+            (3, 4): None,
+            (3, 5): None,
+            (3, 6): None,
+            (4, 5): None,
+            (4, 6): ([-1], [(1, 5)]),
+            (5, 5): ([1], [(4, 4)]),
+            (5, 6): ([1], [(1, 4)]),
+            (6, 6): ([0.5, -0.5], [(1, 1), (1, 2)]),
+        },
+        "tetragonal_4_slash_mmm": {
+            (1, 4): None,
+            (1, 5): None,
+            (1, 6): None,
+            (2, 2): ([1], [(1, 1)]),
+            (2, 3): ([1], [(1, 3)]),
+            (2, 4): None,
+            (2, 5): None,
+            (2, 6): None,
+            (3, 4): None,
+            (3, 5): None,
+            (3, 6): None,
+            (4, 5): None,
+            (4, 6): None,
+            (5, 5): ([1], [(4, 4)]),
+            (5, 6): None,
+        },
+        "tetragonal_4_slash_m": {
+            (1, 4): None,
+            (1, 5): None,
+            (2, 2): ([1], [(1, 1)]),
+            (2, 3): ([1], [(1, 3)]),
+            (2, 4): None,
+            (2, 5): None,
+            (2, 6): ([-1], [(1, 6)]),
+            (3, 4): None,
+            (3, 5): None,
+            (3, 6): None,
+            (4, 5): None,
+            (4, 6): None,
+            (5, 5): ([1], [(4, 4)]),
+            (5, 6): None,
+        },
+        "orthorhombic": {
+            (1, 4): None,
+            (1, 5): None,
+            (1, 6): None,
+            (2, 4): None,
+            (2, 5): None,
+            (2, 6): None,
+            (3, 4): None,
+            (3, 5): None,
+            (3, 6): None,
+            (4, 5): None,
+            (4, 6): None,
+            (5, 6): None,
+        },
+        "monoclinic": {
+            (1, 4): None,
+            (1, 6): None,
+            (2, 4): None,
+            (2, 6): None,
+            (3, 4): None,
+            (3, 6): None,
+            (4, 5): None,
+            (5, 6): None,
+        },
+        "triclinic": {},
     }
-
-    HEXAGONAL_EQN = {
-        (1, 4): None,
-        (1, 5): None,
-        (1, 6): None,
-        (2, 2): ([1], [(1, 1)]),
-        (2, 3): ([1], [(1, 3)]),
-        (2, 4): None,
-        (2, 5): None,
-        (2, 6): None,
-        (3, 4): None,
-        (3, 5): None,
-        (3, 6): None,
-        (4, 5): None,
-        (4, 6): None,
-        (5, 5): ([1], [(4, 4)]),
-        (5, 6): None,
-        (6, 6): ([0.5, -0.5], [(1, 1), (1, 2)]),
-    }
-
-    TRIGONAL_CLASS_3BAR_M_SECOND_POS_EQN = {
-        (1, 5): None,
-        (1, 6): None,
-        (2, 2): ([1], [(1, 1)]),
-        (2, 3): ([1], [(1, 3)]),
-        (2, 4): ([-1], [(1, 4)]),
-        (2, 5): None,
-        (2, 6): None,
-        (3, 4): None,
-        (3, 5): None,
-        (3, 6): None,
-        (4, 5): None,
-        (4, 6): None,
-        (5, 5): ([1], [(4, 4)]),
-        (5, 6): ([1], [(1, 4)]),
-        (6, 6): ([0.5, -0.5], [(1, 1), (1, 2)]),
-    }
-
-    TRIGONAL_CLASS_3BAR_M_THIRD_POS_EQN = {
-        (1, 4): None,
-        (1, 6): None,
-        (2, 2): ([1], [(1, 1)]),
-        (2, 3): ([1], [(1, 3)]),
-        (2, 4): None,
-        (2, 5): ([-1], [(1, 5)]),
-        (2, 6): None,
-        (3, 4): None,
-        (3, 5): None,
-        (3, 6): None,
-        (4, 5): None,
-        (4, 6): ([-1], [(1, 5)]),
-        (5, 5): ([1], [(4, 4)]),
-        (5, 6): None,
-        (6, 6): ([0.5, -0.5], [(1, 1), (1, 2)]),
-    }
-
-    TRIGONAL_CLASS_3BAR_EQN = {
-        (1, 6): None,
-        (2, 2): ([1], [(1, 1)]),
-        (2, 3): ([1], [(1, 3)]),
-        (2, 4): ([-1], [(1, 4)]),
-        (2, 5): ([-1], [(1, 5)]),
-        (2, 6): None,
-        (3, 4): None,
-        (3, 5): None,
-        (3, 6): None,
-        (4, 5): None,
-        (4, 6): ([-1], [(1, 5)]),
-        (5, 5): ([1], [(4, 4)]),
-        (5, 6): ([1], [(1, 4)]),
-        (6, 6): ([0.5, -0.5], [(1, 1), (1, 2)]),
-    }
-
-    TETRAGONAL_CLASS_4_SLASH_MM_EQN = {
-        (1, 4): None,
-        (1, 5): None,
-        (1, 6): None,
-        (2, 2): ([1], [(1, 1)]),
-        (2, 3): ([1], [(1, 3)]),
-        (2, 4): None,
-        (2, 5): None,
-        (2, 6): None,
-        (3, 4): None,
-        (3, 5): None,
-        (3, 6): None,
-        (4, 5): None,
-        (4, 6): None,
-        (5, 5): ([1], [(4, 4)]),
-        (5, 6): None,
-    }
-
-    TETRAGONAL_CLASS_4_SLASH_M_EQN = {
-        (1, 4): None,
-        (1, 5): None,
-        (2, 2): ([1], [(1, 1)]),
-        (2, 3): ([1], [(1, 3)]),
-        (2, 4): None,
-        (2, 5): None,
-        (2, 6): ([-1], [(1, 6)]),
-        (3, 4): None,
-        (3, 5): None,
-        (3, 6): None,
-        (4, 5): None,
-        (4, 6): None,
-        (5, 5): ([1], [(4, 4)]),
-        (5, 6): None,
-    }
-
-    ORTHORHOMBIC_EQN = {
-        (1, 4): None,
-        (1, 5): None,
-        (1, 6): None,
-        (2, 4): None,
-        (2, 5): None,
-        (2, 6): None,
-        (3, 4): None,
-        (3, 5): None,
-        (3, 6): None,
-        (4, 5): None,
-        (4, 6): None,
-        (5, 6): None,
-    }
-
-    MONOCLINIC_EQN = {
-        (1, 4): None,
-        (1, 6): None,
-        (2, 4): None,
-        (2, 6): None,
-        (3, 4): None,
-        (3, 6): None,
-        (4, 5): None,
-        (5, 6): None,
-    }
-
-    TRICLINIC_EQN = {}
-
-    ELASTICITY_MATRIX_EQNS = (
-        CUBIC_EQN,
-        HEXAGONAL_EQN,
-        TRIGONAL_CLASS_3BAR_M_SECOND_POS_EQN,
-        TRIGONAL_CLASS_3BAR_M_THIRD_POS_EQN,
-        TRIGONAL_CLASS_3BAR_EQN,
-        TETRAGONAL_CLASS_4_SLASH_MM_EQN,
-        TETRAGONAL_CLASS_4_SLASH_M_EQN,
-        ORTHORHOMBIC_EQN,
-        MONOCLINIC_EQN,
-        TRICLINIC_EQN,
-    )
 
     # error check typing in the above dicts
-    for eqn in ELASTICITY_MATRIX_EQNS:
+    for eqn in ELASTICITY_MATRIX_EQNS.values():
         # only unique keys
         assert sorted(list(set(eqn.keys()))) == sorted(list(eqn.keys()))
         # check that all components appearing in RHS of relations are independent, i.e.
@@ -213,32 +242,16 @@ def voigt_elast_compon_eqn(sgnum: Union[int, str]) -> Dict:
                 for independent_component in eqn[dependent_component][1]:
                     assert not (independent_component in eqn)
 
-    if sgnum < 3:
-        eqn = TRICLINIC_EQN
-    elif sgnum < 16:
-        eqn = MONOCLINIC_EQN
-    elif sgnum < 75:
-        eqn = ORTHORHOMBIC_EQN
-    elif sgnum < 89:
-        eqn = TETRAGONAL_CLASS_4_SLASH_M_EQN
-    elif sgnum < 143:
-        eqn = TETRAGONAL_CLASS_4_SLASH_MM_EQN
-    elif sgnum < 149:
-        eqn = TRIGONAL_CLASS_3BAR_EQN
-    elif sgnum < 168:
-        eqn = TRIGONAL_CLASS_3BAR_M_SECOND_POS_EQN
-    elif sgnum < 195:
-        eqn = HEXAGONAL_EQN
-    else:
-        eqn = CUBIC_EQN
+    return ELASTICITY_MATRIX_EQNS[voigt_elast_class(sgnum)]
 
-    if eqn == TRIGONAL_CLASS_3BAR_M_SECOND_POS_EQN:
-        # Determine if this is one of the groups with the 2-fold operation in the
-        # third position (e.g. 149:P312), which has different equations
-        if sgnum in (149, 151, 153, 157, 159, 162, 163):
-            eqn = TRIGONAL_CLASS_3BAR_M_THIRD_POS_EQN
 
-    return eqn
+def voigt_elast_struct_svg(sgnum: Union[int, str], dest_filename: str) -> None:
+    """
+    Write a copy of the image showing the structure of the Voigt elasticity matrix for
+    the specified space group
+    """
+    src_filename = os.path.join(DATA_DIR, "elast_" + voigt_elast_class(sgnum) + ".svg")
+    shutil.copyfile(src_filename, dest_filename)
 
 
 def indep_elast_compon_names_and_values_from_voigt(
