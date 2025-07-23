@@ -1,2 +1,3 @@
 recursive-include kim_tools/symmetry_util/data *.json
+recursive-include kim_tools/symmetry_util/data *.svg
 recursive-include kim_tools/aflow_util/aflow_prototype_encyclopedia/data *.json
