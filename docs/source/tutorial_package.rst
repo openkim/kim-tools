@@ -77,7 +77,7 @@ file is correctly configured to ignore any files and directories that should be 
         :width: 500px
 
 Next, you need to add the URL of the ``.tar.gz`` to the ``pre_setup.py`` script in your fork of ``kimvv``. An example fork for testing the example Test Driver is available,
-and here is where you add the URL: `pre_setup.py <https://github.com/openkim-hackathons/kimvv-example-driver-testing-fork/blob/ee533e9b611baa7b773a41e1e614af279cd7d737/pre_setup.py#L17>`_.
+and here is where you add the URL: `pre_setup.py <https://github.com/openkim-hackathons/kimvv-example-driver-testing-fork/blob/main/pre_setup.py>`_.
 Finally, you need to add your Property Definitions to the ``test/local-props`` directory of your ``kimvv`` fork. Alternatively, you can skip this by requesting an OpenKIM team member
 to already publish your Property and add it to the ``kim-property`` package.
 
