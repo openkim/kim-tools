@@ -738,8 +738,20 @@ class KIMTestDriver(ABC):
     @property
     def _calc(self) -> Optional[Calculator]:
         """
-        Get the ASE calculator
+        Get the ASE calculator. Reinstantiate it if it's a KIM SM
         """
+        if self.__kim_model_name is not None:
+            reinst = False
+            if hasattr(self.__calc, "clean"):
+                self.__calc.clean()
+                reinst = True
+            if hasattr(self.__calc, "__del__"):
+                self.__calc.__del__()
+                reinst = True
+            if reinst:
+                from ase.calculators.kim.kim import KIM
+
+                self.__calc = KIM(self.__kim_model_name)
         return self.__calc
 
     def _get_serialized_property_instances(self) -> str:
