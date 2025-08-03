@@ -1,4 +1,4 @@
-__version__ = "0.3.8"
+__version__ = "0.3.9"
 
 from .aflow_util import *
 from .aflow_util import __all__ as aflow_all
