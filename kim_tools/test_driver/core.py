@@ -191,12 +191,13 @@ def minimize_wrapper(
     Returns:
         Whether the minimization succeeded
     """
+    existing_constraints = atoms.constraints
     if fix_symmetry is not False:
         if fix_symmetry is True:
             symmetry = FixSymmetry(atoms)
         else:
             symmetry = fix_symmetry
-        atoms.set_constraint(symmetry)
+        atoms.set_constraint([symmetry] + existing_constraints)
     if variable_cell:
         supercell_wrapped = cell_filter(atoms, **flt_kwargs)
         opt = algorithm(supercell_wrapped, logfile=logfile, **opt_kwargs)
@@ -228,7 +229,7 @@ def minimize_wrapper(
         + " steps."
     )
 
-    del atoms.constraints
+    atoms.set_constraint(existing_constraints)
 
     if minimization_stalled or iteration_limits_reached:
         try:
