@@ -1302,17 +1302,28 @@ class SingleCrystalTestDriver(KIMTestDriver):
             crystal_structure = get_crystal_structure_from_atoms(
                 atoms=material, aflow_executable=self.aflow_executable
             )
+            aflow = AFLOW()
+            atoms_rebuilt = get_atoms_from_crystal_structure(crystal_structure)
+            _, self.__input_rotation, _, _ = (
+                aflow.get_basistransformation_rotation_originshift_atom_map_from_atoms(
+                    atoms_rebuilt,
+                    material,
+                )
+            )
             msg = (
-                "Rebuilding atoms object in a standard setting defined by "
+                "Rebuilding Atoms object in a standard setting defined by "
                 "doi.org/10.1016/j.commatsci.2017.01.017. See log file or computed "
                 "properties for the (possibly re-oriented) primitive cell that "
-                "computations will be based on."
+                "computations will be based on. To obtain the rotation of this "
+                "cell relative to the Atoms object you provided, use "
+                f"{self.__class__.__name__}.get_input_rotation()"
             )
             logger.info(msg)
             print()
             print(msg)
             print()
         else:
+            self.__input_rotation = None
             crystal_structure = material
 
         # Pop the temperature and stress keys in case they came along with a query
@@ -1911,6 +1922,18 @@ class SingleCrystalTestDriver(KIMTestDriver):
             ``[{"letter":"a", "indices":[0,1]}, ... ]``
         """
         return get_atom_indices_for_each_wyckoff_orb(self.get_nominal_prototype_label())
+
+    def get_input_rotation(self) -> Optional[npt.ArrayLike]:
+        """
+        Returns:
+            If the Test Driver was called with an Atoms object, the nominal crystal
+            structure may be rotated w.r.t. the input.
+            This returns the Cartesian rotation to transform the Atoms input to the
+            internal nominal crystal structure. I.e., if you want to get computed
+            tensor properties in the same orientation as your input, you should
+            rotate the reported tensors by the transpose of this rotation.
+        """
+        return self.__input_rotation
 
 
 def query_crystal_structures(
