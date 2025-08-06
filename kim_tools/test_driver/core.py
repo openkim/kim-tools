@@ -30,6 +30,7 @@
 Helper classes for KIM Test Drivers
 
 """
+import glob
 import json
 import logging
 import os
@@ -780,6 +781,10 @@ class KIMTestDriver(ABC):
             kim_property_dump(
                 self.__output_property_instances, f
             )  # serialize the dictionary to string first
+        filename_parent = Path(filename).parent.resolve()
+        if filename_parent != Path("output").resolve():
+            for file in glob.glob("output/*"):
+                shutil.move(file, filename_parent)
 
     def get_isolated_energy_per_atom(self, symbol: str) -> float:
         """
