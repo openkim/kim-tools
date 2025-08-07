@@ -140,8 +140,8 @@ def minimize_wrapper(
     steps: int = MAXSTEPS_INITIAL,
     variable_cell: bool = True,
     logfile: Optional[Union[str, IO]] = "kim-tools.log",
-    algorithm: Optimizer = LBFGSLineSearch,
-    cell_filter: UnitCellFilter = FrechetCellFilter,
+    algorithm: type[Optimizer] = LBFGSLineSearch,
+    cell_filter: type[UnitCellFilter] = FrechetCellFilter,
     fix_symmetry: Union[bool, FixSymmetry] = False,
     opt_kwargs: Dict = {},
     flt_kwargs: Dict = {},
@@ -244,7 +244,7 @@ def minimize_wrapper(
                 "trying to evaluate final forces and stress:"
             )
             logger.info(repr(e))
-            return False
+        return False
     else:
         return True
 
@@ -1454,9 +1454,7 @@ class SingleCrystalTestDriver(KIMTestDriver):
             (aflow_parameter_values, library_prototype_label, short_name) = (
                 aflow.solve_for_params_of_known_prototype(
                     atoms=atoms,
-                    prototype_label=self.__nominal_crystal_structure_npt[
-                        "prototype-label"
-                    ]["source-value"],
+                    prototype_label=self.get_nominal_prototype_label(),
                     max_resid=max_resid,
                     cell_rtol=cell_rtol,
                     rot_rtol=rot_rtol,
@@ -1941,6 +1939,17 @@ class SingleCrystalTestDriver(KIMTestDriver):
         return get_stoich_reduced_list_from_prototype(
             self.get_nominal_prototype_label()
         )
+
+    def get_nominal_parameter_names(self) -> List[str]:
+        """
+        Get the list of parameter names besides "a". Return an
+        empty list for cubic crystals
+        """
+        crystal_structure = self._get_nominal_crystal_structure_npt()
+        if "parameter-names" in crystal_structure:
+            return crystal_structure["parameter-names"]["source-value"]
+        else:
+            return []
 
     def get_atom_indices_for_each_wyckoff_orb(self) -> List[Dict]:
         """
