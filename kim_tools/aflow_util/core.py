@@ -1911,7 +1911,9 @@ class AFLOW:
             cell_lengths_and_angles = ref_atoms.cell.cellpar()
 
         test_atoms_copy = test_atoms.copy()
+        del test_atoms_copy.constraints
         ref_atoms_copy = ref_atoms.copy()
+        del ref_atoms_copy.constraints
 
         test_atoms_copy.set_cell(
             Cell.fromcellpar(cell_lengths_and_angles), scale_atoms=True
