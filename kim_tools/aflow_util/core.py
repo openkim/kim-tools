@@ -1547,7 +1547,8 @@ class AFLOW:
         cell_rtol: float = 0.01,
         rot_rtol: float = 0.01,
         rot_atol: float = 0.01,
-    ) -> Tuple[List[float], Optional[str]]:
+        match_library_proto: bool = True,
+    ) -> Union[List[float], Tuple[List[float], Optional[str]]]:
         """
         Given an Atoms object that is a primitive cell of its Bravais lattice as
         defined in doi.org/10.1016/j.commatsci.2017.01.017, and its presumed prototype
@@ -1584,12 +1585,16 @@ class AFLOW:
                 Parameter to pass to :func:`numpy.allclose` for compariong fractional
                 rotations. Default value chosen to be commensurate with AFLOW
                 default distance tolerance of 0.01*(NN distance)
+            match_library_proto:
+                Whether to attempt matching to library prototypes
 
         Returns:
             * List of free parameters that will regenerate `atoms` (up to permutations,
               rotations, and translations) when paired with `prototype_label`
-            * Library prototype label from the AFLOW prototype encyclopedia, if any
-            * Title of library prototype from the AFLOW prototype encyclopedia, if any
+            * Additionally, if 'match_library_proto' is True (default):
+                * Library prototype label from the AFLOW prototype encyclopedia, if any
+                * Title of library prototype from the AFLOW prototype encyclopedia,
+                  if any
 
         Raises:
             AFLOW.ChangedSymmetryException:
@@ -1636,9 +1641,10 @@ class AFLOW:
             "aflow_prototype_label"
         ]
 
-        library_prototype_label, short_name = (
-            self.get_library_prototype_label_and_shortname_from_atoms(atoms)
-        )
+        if match_library_proto:
+            library_prototype_label, short_name = (
+                self.get_library_prototype_label_and_shortname_from_atoms(atoms)
+            )
 
         # NOTE: Because of below, this only works if the provided prototype label is
         # correctly alphabetized. Change this?
@@ -1824,11 +1830,14 @@ class AFLOW:
                         f"Found set of parameters for prototype {prototype_label} "
                         "that is unrotated"
                     )
-                    return (
-                        candidate_prototype_param_values,
-                        library_prototype_label,
-                        short_name,
-                    )
+                    if match_library_proto:
+                        return (
+                            candidate_prototype_param_values,
+                            library_prototype_label,
+                            short_name,
+                        )
+                    else:
+                        return candidate_prototype_param_values
                 else:
                     logger.info(
                         f"Found set of parameters for prototype {prototype_label}, "
