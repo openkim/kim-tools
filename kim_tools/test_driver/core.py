@@ -1695,6 +1695,9 @@ class SingleCrystalTestDriver(KIMTestDriver):
                 omit_keys=omit_keys,
             )
         )
+
+        if omit_keys is None:
+            omit_keys = []
         if "coordinates-file" not in omit_keys:
             self.__add_poscar_to_curr_prop_inst(
                 "primitive", "instance.poscar", "coordinates-file"
