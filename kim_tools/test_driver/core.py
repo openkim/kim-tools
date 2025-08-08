@@ -1695,15 +1695,16 @@ class SingleCrystalTestDriver(KIMTestDriver):
                 omit_keys=omit_keys,
             )
         )
-
-        self.__add_poscar_to_curr_prop_inst(
-            "primitive", "instance.poscar", "coordinates-file"
-        )
-        self.__add_poscar_to_curr_prop_inst(
-            "conventional",
-            "conventional.instance.poscar",
-            "coordinates-file-conventional",
-        )
+        if "coordinates-file" not in omit_keys:
+            self.__add_poscar_to_curr_prop_inst(
+                "primitive", "instance.poscar", "coordinates-file"
+            )
+        if "coordinates-file-conventional" not in omit_keys:
+            self.__add_poscar_to_curr_prop_inst(
+                "conventional",
+                "conventional.instance.poscar",
+                "coordinates-file-conventional",
+            )
 
     def _get_temperature(self, unit: str = "K") -> float:
         """
