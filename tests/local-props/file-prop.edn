@@ -1,0 +1,12 @@
+{
+  "property-id"           "tag:inikiforov@noreply.openkim.org,2025-08-08:property/file-prop"
+  "property-title"        "Mock property"
+  "property-description"  "Mock property"
+  "textfile" {
+    "type"         "file"
+    "has-unit"     false
+    "extent"       []
+    "required"     false
+    "description"  "An example file key"
+  }
+}

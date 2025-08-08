@@ -777,14 +777,16 @@ class KIMTestDriver(ABC):
         Args:
             filename: path to write the file
         """
-        with open(filename, "w") as f:
-            kim_property_dump(
-                self.__output_property_instances, f
-            )  # serialize the dictionary to string first
+        kim_property_dump(self._get_serialized_property_instances(), filename)
         filename_parent = Path(filename).parent.resolve()
         if filename_parent != Path("output").resolve():
-            for file in glob.glob("output/*"):
-                shutil.move(file, filename_parent)
+            for file_in_output in glob.glob("output/*"):
+                file_in_output_name = str(Path(file_in_output).name)
+                for instance in self.property_instances:
+                    for key in instance:
+                        if isinstance(instance[key], dict):
+                            if file_in_output_name == instance[key]["source-value"]:
+                                shutil.move(file_in_output, filename_parent)
 
     def get_isolated_energy_per_atom(self, symbol: str) -> float:
         """
