@@ -67,6 +67,17 @@ class TestStructureDetectionTestDriver(SingleCrystalTestDriver):
         )
 
 
+class FileWritingTestDriver(KIMTestDriver):
+    def _calculate(self):
+        """
+        Mock calculate for file writing testing
+        """
+        self._add_property_instance("file-prop")
+        with open("foo.txt", "w") as f:
+            f.write("foo")
+        self._add_file_to_current_property_instance("textfile", "foo.txt")
+
+
 def test_kimtest(monkeypatch):
     test = TestTestDriver(LennardJones())
     testing_property_names = [
@@ -225,5 +236,20 @@ def test_init_rotation():
     )
 
 
+def test_file_writing():
+    td = FileWritingTestDriver(LennardJones())
+    td()
+    td.write_property_instances_to_file()
+    assert os.path.isfile("output/foo-1.txt")
+    # add a file into output to make sure it's not being moved
+    with open("output/bar", "w") as f:
+        f.write("bar")
+    td.write_property_instances_to_file("foo.edn")
+    # will raise a filenotfound error if missing
+    os.remove("foo.edn")
+    os.remove("foo-1.txt")
+    os.remove("output/bar")
+
+
 if __name__ == "__main__":
-    test_init_rotation()
+    test_file_writing()
