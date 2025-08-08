@@ -30,6 +30,7 @@
 Helper classes for KIM Test Drivers
 
 """
+import glob
 import json
 import logging
 import os
@@ -64,6 +65,7 @@ from kim_query import raw_query
 from ..aflow_util import (
     AFLOW,
     get_space_group_number_from_prototype,
+    get_stoich_reduced_list_from_prototype,
     prototype_labels_are_equivalent,
 )
 from ..aflow_util.core import AFLOW_EXECUTABLE, get_atom_indices_for_each_wyckoff_orb
@@ -191,12 +193,13 @@ def minimize_wrapper(
     Returns:
         Whether the minimization succeeded
     """
+    existing_constraints = atoms.constraints
     if fix_symmetry is not False:
         if fix_symmetry is True:
             symmetry = FixSymmetry(atoms)
         else:
             symmetry = fix_symmetry
-        atoms.set_constraint(symmetry)
+        atoms.set_constraint([symmetry] + existing_constraints)
     if variable_cell:
         supercell_wrapped = cell_filter(atoms, **flt_kwargs)
         opt = algorithm(supercell_wrapped, logfile=logfile, **opt_kwargs)
@@ -228,7 +231,7 @@ def minimize_wrapper(
         + " steps."
     )
 
-    del atoms.constraints
+    atoms.set_constraint(existing_constraints)
 
     if minimization_stalled or iteration_limits_reached:
         try:
@@ -769,17 +772,21 @@ class KIMTestDriver(ABC):
     def write_property_instances_to_file(self, filename="output/results.edn") -> None:
         """
         Write internal property instances (possibly accumulated over several calls to
-        the Test Driver) to a file at the requested path. Also dumps any cached files to
-        the same directory.
+        the Test Driver) to a file at the requested path.
 
         Args:
             filename: path to write the file
         """
-
-        with open(filename, "w") as f:
-            kim_property_dump(
-                self.__output_property_instances, f
-            )  # serialize the dictionary to string first
+        kim_property_dump(self._get_serialized_property_instances(), filename)
+        filename_parent = Path(filename).parent.resolve()
+        if filename_parent != Path("output").resolve():
+            for file_in_output in glob.glob("output/*"):
+                file_in_output_name = str(Path(file_in_output).name)
+                for instance in self.property_instances:
+                    for key in instance:
+                        if isinstance(instance[key], dict):
+                            if file_in_output_name == instance[key]["source-value"]:
+                                shutil.move(file_in_output, filename_parent)
 
     def get_isolated_energy_per_atom(self, symbol: str) -> float:
         """
@@ -814,6 +821,7 @@ def _add_common_crystal_genome_keys_to_current_property_instance(
     temperature_unit: Optional[str] = "K",
     crystal_genome_source_structure_id: Optional[List[List[str]]] = None,
     aflow_executable: str = AFLOW_EXECUTABLE,
+    omit_keys: Optional[List[str]] = None,
 ) -> str:
     """
     Write common Crystal Genome keys to the last element of ``property_instances``. See
@@ -827,19 +835,26 @@ def _add_common_crystal_genome_keys_to_current_property_instance(
             The key will be added to the last dictionary in the list
         aflow_executable:
             Path to the AFLOW executable
+        omit_keys:
+            Which keys to omit writing
 
     Returns:
         Updated EDN-serialized list of property instances
     """
-    property_instances = _add_key_to_current_property_instance(
-        property_instances, "prototype-label", prototype_label
-    )
-    property_instances = _add_key_to_current_property_instance(
-        property_instances, "stoichiometric-species", stoichiometric_species
-    )
-    property_instances = _add_key_to_current_property_instance(
-        property_instances, "a", a, a_unit
-    )
+    if omit_keys is None:
+        omit_keys = []
+    if "prototype-label" not in omit_keys:
+        property_instances = _add_key_to_current_property_instance(
+            property_instances, "prototype-label", prototype_label
+        )
+    if "stoichiometric-species" not in omit_keys:
+        property_instances = _add_key_to_current_property_instance(
+            property_instances, "stoichiometric-species", stoichiometric_species
+        )
+    if "a" not in omit_keys:
+        property_instances = _add_key_to_current_property_instance(
+            property_instances, "a", a, a_unit
+        )
 
     # get parameter names
     aflow = AFLOW(aflow_executable=aflow_executable)
@@ -856,24 +871,28 @@ def _add_common_crystal_genome_keys_to_current_property_instance(
                 "Incorrect number of parameter_values (i.e. dimensionless parameters "
                 "besides a) for the provided prototype"
             )
-        property_instances = _add_key_to_current_property_instance(
-            property_instances, "parameter-names", aflow_parameter_names[1:]
-        )
-        property_instances = _add_key_to_current_property_instance(
-            property_instances, "parameter-values", parameter_values
-        )
+        if "parameter-names" not in omit_keys:
+            property_instances = _add_key_to_current_property_instance(
+                property_instances, "parameter-names", aflow_parameter_names[1:]
+            )
+        if "parameter-values" not in omit_keys:
+            property_instances = _add_key_to_current_property_instance(
+                property_instances, "parameter-values", parameter_values
+            )
 
     if short_name is not None:
         if not isinstance(short_name, list):
             short_name = [short_name]
-        property_instances = _add_key_to_current_property_instance(
-            property_instances, "short-name", short_name
-        )
+        if "short-name" not in omit_keys:
+            property_instances = _add_key_to_current_property_instance(
+                property_instances, "short-name", short_name
+            )
 
     if library_prototype_label is not None:
-        property_instances = _add_key_to_current_property_instance(
-            property_instances, "library-prototype-label", library_prototype_label
-        )
+        if "library-prototype-label" not in omit_keys:
+            property_instances = _add_key_to_current_property_instance(
+                property_instances, "library-prototype-label", library_prototype_label
+            )
 
     if cell_cauchy_stress is not None:
         if len(cell_cauchy_stress) != 6:
@@ -882,27 +901,30 @@ def _add_common_crystal_genome_keys_to_current_property_instance(
                 "order [xx, yy, zz, yz, xz, xy]"
             )
         if cell_cauchy_stress_unit is None:
-            raise KIMTestDriver("Please provide a `cell_cauchy_stress_unit`")
-        property_instances = _add_key_to_current_property_instance(
-            property_instances,
-            "cell-cauchy-stress",
-            cell_cauchy_stress,
-            cell_cauchy_stress_unit,
-        )
+            raise KIMTestDriverError("Please provide a `cell_cauchy_stress_unit`")
+        if "cell-cauchy-stress" not in omit_keys:
+            property_instances = _add_key_to_current_property_instance(
+                property_instances,
+                "cell-cauchy-stress",
+                cell_cauchy_stress,
+                cell_cauchy_stress_unit,
+            )
 
     if temperature is not None:
         if temperature_unit is None:
-            raise KIMTestDriver("Please provide a `temperature_unit`")
-        property_instances = _add_key_to_current_property_instance(
-            property_instances, "temperature", temperature, temperature_unit
-        )
+            raise KIMTestDriverError("Please provide a `temperature_unit`")
+        if "temperature" not in omit_keys:
+            property_instances = _add_key_to_current_property_instance(
+                property_instances, "temperature", temperature, temperature_unit
+            )
 
     if crystal_genome_source_structure_id is not None:
-        property_instances = _add_key_to_current_property_instance(
-            property_instances,
-            "crystal-genome-source-structure-id",
-            crystal_genome_source_structure_id,
-        )
+        if "crystal-genome-source-structure-id" not in omit_keys:
+            property_instances = _add_key_to_current_property_instance(
+                property_instances,
+                "crystal-genome-source-structure-id",
+                crystal_genome_source_structure_id,
+            )
 
     return property_instances
 
@@ -924,6 +946,7 @@ def _add_property_instance_and_common_crystal_genome_keys(
     disclaimer: Optional[str] = None,
     property_instances: Optional[str] = None,
     aflow_executable: str = AFLOW_EXECUTABLE,
+    omit_keys: Optional[List[str]] = None,
 ) -> str:
     """
     Initialize a new property instance to ``property_instances`` (an empty
@@ -946,6 +969,8 @@ def _add_property_instance_and_common_crystal_genome_keys(
             A pre-existing EDN-serialized list of KIM Property instances to add to
         aflow_executable:
             Path to the AFLOW executable
+        omit_keys:
+            Which keys to omit writing
 
     Returns:
             Updated EDN-serialized list of property instances
@@ -968,6 +993,7 @@ def _add_property_instance_and_common_crystal_genome_keys(
         cell_cauchy_stress_unit=cell_cauchy_stress_unit,
         cell_cauchy_stress=cell_cauchy_stress,
         aflow_executable=aflow_executable,
+        omit_keys=omit_keys,
     )
 
 
@@ -1301,17 +1327,28 @@ class SingleCrystalTestDriver(KIMTestDriver):
             crystal_structure = get_crystal_structure_from_atoms(
                 atoms=material, aflow_executable=self.aflow_executable
             )
+            aflow = AFLOW()
+            atoms_rebuilt = get_atoms_from_crystal_structure(crystal_structure)
+            _, self.__input_rotation, _, _ = (
+                aflow.get_basistransformation_rotation_originshift_atom_map_from_atoms(
+                    atoms_rebuilt,
+                    material,
+                )
+            )
             msg = (
-                "Rebuilding atoms object in a standard setting defined by "
+                "Rebuilding Atoms object in a standard setting defined by "
                 "doi.org/10.1016/j.commatsci.2017.01.017. See log file or computed "
                 "properties for the (possibly re-oriented) primitive cell that "
-                "computations will be based on."
+                "computations will be based on. To obtain the rotation of this "
+                "cell relative to the Atoms object you provided, use "
+                f"{self.__class__.__name__}.get_input_rotation()"
             )
             logger.info(msg)
             print()
             print(msg)
             print()
         else:
+            self.__input_rotation = None
             crystal_structure = material
 
         # Pop the temperature and stress keys in case they came along with a query
@@ -1526,6 +1563,7 @@ class SingleCrystalTestDriver(KIMTestDriver):
         stress_unit: Optional[str] = None,
         temp_unit: str = "K",
         disclaimer: Optional[str] = None,
+        omit_keys: Optional[List[str]] = None,
     ) -> None:
         """
         Initialize a new property instance to ``self.property_instances``. It will
@@ -1556,6 +1594,8 @@ class SingleCrystalTestDriver(KIMTestDriver):
             disclaimer:
                 An optional disclaimer commenting on the applicability of this result,
                 e.g. "This relaxation did not reach the desired tolerance."
+            omit_keys:
+                Which keys to omit writing
         """
         crystal_structure = self.__nominal_crystal_structure_npt
 
@@ -1654,6 +1694,7 @@ class SingleCrystalTestDriver(KIMTestDriver):
                 disclaimer=disclaimer,
                 property_instances=super()._get_serialized_property_instances(),
                 aflow_executable=self.aflow_executable,
+                omit_keys=omit_keys,
             )
         )
 
@@ -1900,6 +1941,14 @@ class SingleCrystalTestDriver(KIMTestDriver):
             "source-value"
         ]
 
+    def get_nominal_space_group_number(self) -> int:
+        return get_space_group_number_from_prototype(self.get_nominal_prototype_label())
+
+    def get_stoichiometry(self) -> List[int]:
+        return get_stoich_reduced_list_from_prototype(
+            self.get_nominal_prototype_label()
+        )
+
     def get_atom_indices_for_each_wyckoff_orb(self) -> List[Dict]:
         """
         Get a list of dictionaries containing the atom indices of each Wyckoff
@@ -1910,6 +1959,18 @@ class SingleCrystalTestDriver(KIMTestDriver):
             ``[{"letter":"a", "indices":[0,1]}, ... ]``
         """
         return get_atom_indices_for_each_wyckoff_orb(self.get_nominal_prototype_label())
+
+    def get_input_rotation(self) -> Optional[npt.ArrayLike]:
+        """
+        Returns:
+            If the Test Driver was called with an Atoms object, the nominal crystal
+            structure may be rotated w.r.t. the input.
+            This returns the Cartesian rotation to transform the Atoms input to the
+            internal nominal crystal structure. I.e., if you want to get computed
+            tensor properties in the same orientation as your input, you should
+            rotate the reported tensors by the transpose of this rotation.
+        """
+        return self.__input_rotation
 
 
 def query_crystal_structures(

@@ -12,10 +12,16 @@ from ase.calculators.lj import LennardJones
 from kim_tools import (
     KIMTestDriver,
     SingleCrystalTestDriver,
+    cartesian_rotation_is_in_point_group,
     detect_unique_crystal_structures,
     get_deduplicated_property_instances,
 )
 from kim_tools.test_driver.core import _get_optional_source_value
+
+
+class TestInitSingleCrystalTestDriver(SingleCrystalTestDriver):
+    def _calculate(self, **kwargs) -> None:
+        pass
 
 
 class TestIsolatedEnergyDriver(KIMTestDriver):
@@ -45,7 +51,7 @@ class TestTestDriver(KIMTestDriver):
         )
 
 
-class TestSingleCrystalTestDriver(SingleCrystalTestDriver):
+class TestStructureDetectionTestDriver(SingleCrystalTestDriver):
     def _calculate(self, deform_matrix: npt.NDArray = np.eye(3), **kwargs):
         """
         strain the crystal and write a crystal-structure-npt.
@@ -59,6 +65,17 @@ class TestSingleCrystalTestDriver(SingleCrystalTestDriver):
         self._add_property_instance_and_common_crystal_genome_keys(
             "crystal-structure-npt"
         )
+
+
+class FileWritingTestDriver(KIMTestDriver):
+    def _calculate(self):
+        """
+        Mock calculate for file writing testing
+        """
+        self._add_property_instance("file-prop")
+        with open("foo.txt", "w") as f:
+            f.write("foo")
+        self._add_file_to_current_property_instance("textfile", "foo.txt")
 
 
 def test_kimtest(monkeypatch):
@@ -164,7 +181,7 @@ def test_get_deduplicated_property_instances():
 
 
 def test_structure_detection():
-    test = TestSingleCrystalTestDriver(LennardJones())
+    test = TestStructureDetectionTestDriver(LennardJones())
     atoms = bulk("Mg")
     hcp_prototype = "A_hP2_194_c"
     hcp_library_prototype = "A_hP2_194_c-001"
@@ -196,5 +213,43 @@ def test_get_isolated_energy_per_atom():
             td(species=species)
 
 
+def test_init_rotation():
+    td = TestInitSingleCrystalTestDriver(LennardJones())
+    atoms = bulk("Mg", crystalstructure="bct", a=1, c=3.14)
+    atoms.rotate(60, "z", rotate_cell=True)
+    # We rotated from standard orientation by 60 deg
+    # ccw. So when the atoms get rebuilt, the rotation
+    # we will do to standardize is 60 deg cw.
+    ref_rotation = np.array(
+        [  # 60 deg clockwise
+            [0.5, 0.866025, 0.0],
+            [-0.866025, 0.5, 0.0],
+            [0.0, 0.0, 1.0],
+        ]
+    )
+    td(atoms)
+    input_rotation = td.get_input_rotation()
+    assert cartesian_rotation_is_in_point_group(
+        ref_rotation.T @ input_rotation,
+        139,
+        atoms.cell,
+    )
+
+
+def test_file_writing():
+    td = FileWritingTestDriver(LennardJones())
+    td()
+    td.write_property_instances_to_file()
+    assert os.path.isfile("output/foo-1.txt")
+    # add a file into output to make sure it's not being moved
+    with open("output/bar", "w") as f:
+        f.write("bar")
+    td.write_property_instances_to_file("foo.edn")
+    # will raise a filenotfound error if missing
+    os.remove("foo.edn")
+    os.remove("foo-1.txt")
+    os.remove("output/bar")
+
+
 if __name__ == "__main__":
-    test_structure_detection()
+    test_file_writing()
