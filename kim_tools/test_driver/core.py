@@ -787,6 +787,10 @@ class KIMTestDriver(ABC):
                         if isinstance(instance[key], dict):
                             if file_in_output_name == instance[key]["source-value"]:
                                 shutil.move(file_in_output, filename_parent)
+                            elif isinstance(instance[key]["source-value"], list):
+                                for file_in_property in instance[key]["source-value"]:
+                                    if file_in_output_name == file_in_property:
+                                        shutil.move(file_in_output, filename_parent)
 
     def get_isolated_energy_per_atom(self, symbol: str) -> float:
         """
@@ -1402,6 +1406,7 @@ class SingleCrystalTestDriver(KIMTestDriver):
         cell_rtol: float = 0.01,
         rot_rtol: float = 0.01,
         rot_atol: float = 0.01,
+        match_library_proto: bool = True,
     ) -> None:
         """
         Update the nominal parameter values of the nominal crystal structure from the
@@ -1446,6 +1451,8 @@ class SingleCrystalTestDriver(KIMTestDriver):
                 Parameter to pass to :func:`numpy.allclose` for compariong fractional
                 rotations. Default value chosen to be commensurate with AFLOW
                 default distance tolerance of 0.01*(NN distance)
+            match_library_proto:
+                Whether to match to library prototypes
 
         Raises:
             AFLOW.FailedToMatchException:
@@ -1458,16 +1465,29 @@ class SingleCrystalTestDriver(KIMTestDriver):
         """
         aflow = AFLOW(aflow_executable=self.aflow_executable)
         try:
-            (aflow_parameter_values, library_prototype_label, short_name) = (
-                aflow.solve_for_params_of_known_prototype(
+            if match_library_proto:
+                (aflow_parameter_values, library_prototype_label, short_name) = (
+                    aflow.solve_for_params_of_known_prototype(
+                        atoms=atoms,
+                        prototype_label=self.get_nominal_prototype_label(),
+                        max_resid=max_resid,
+                        cell_rtol=cell_rtol,
+                        rot_rtol=rot_rtol,
+                        rot_atol=rot_atol,
+                    )
+                )
+            else:
+                aflow_parameter_values = aflow.solve_for_params_of_known_prototype(
                     atoms=atoms,
                     prototype_label=self.get_nominal_prototype_label(),
                     max_resid=max_resid,
                     cell_rtol=cell_rtol,
                     rot_rtol=rot_rtol,
                     rot_atol=rot_atol,
+                    match_library_proto=False,
                 )
-            )
+                library_prototype_label = None
+                short_name = None
         except (AFLOW.FailedToMatchException, AFLOW.ChangedSymmetryException) as e:
             raise type(e)(
                 "Encountered an error that MAY be the result of the nominal crystal "
@@ -1946,21 +1966,38 @@ class SingleCrystalTestDriver(KIMTestDriver):
     def get_nominal_space_group_number(self) -> int:
         return get_space_group_number_from_prototype(self.get_nominal_prototype_label())
 
-    def get_stoichiometry(self) -> List[int]:
+    def get_nominal_stoichiometric_species(self) -> List[str]:
+        return self._get_nominal_crystal_structure_npt()["stoichiometric-species"][
+            "source-value"
+        ]
+
+    def get_nominal_stoichiometry(self) -> List[int]:
         return get_stoich_reduced_list_from_prototype(
             self.get_nominal_prototype_label()
         )
 
+    def get_nominal_a(self) -> float:
+        return self._get_nominal_crystal_structure_npt()["a"]["source-value"]
+
     def get_nominal_parameter_names(self) -> List[str]:
-        """
-        Get the list of parameter names besides "a". Return an
-        empty list for cubic crystals
-        """
-        crystal_structure = self._get_nominal_crystal_structure_npt()
-        if "parameter-names" in crystal_structure:
-            return crystal_structure["parameter-names"]["source-value"]
-        else:
-            return []
+        return _get_optional_source_value(
+            self._get_nominal_crystal_structure_npt(), "parameter-names"
+        )
+
+    def get_nominal_parameter_values(self) -> List[float]:
+        return _get_optional_source_value(
+            self._get_nominal_crystal_structure_npt(), "parameter-values"
+        )
+
+    def get_nominal_short_name(self) -> List[str]:
+        return _get_optional_source_value(
+            self._get_nominal_crystal_structure_npt(), "short-name"
+        )
+
+    def get_nominal_library_prototype_label(self) -> str:
+        return _get_optional_source_value(
+            self._get_nominal_crystal_structure_npt(), "library-prototype-label"
+        )
 
     def get_atom_indices_for_each_wyckoff_orb(self) -> List[Dict]:
         """
