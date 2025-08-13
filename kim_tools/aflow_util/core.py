@@ -1642,9 +1642,21 @@ class AFLOW:
         ]
 
         if match_library_proto:
-            library_prototype_label, short_name = (
-                self.get_library_prototype_label_and_shortname_from_atoms(atoms)
-            )
+            try:
+                library_prototype_label, short_name = (
+                    self.get_library_prototype_label_and_shortname_from_atoms(atoms)
+                )
+            except subprocess.CalledProcessError:
+                library_prototype_label = None
+                short_name = None
+                msg = (
+                    "WARNING: aflow --compare2prototypes returned error, skipping "
+                    "library matching"
+                )
+                print()
+                print(msg)
+                print()
+                logger.warning(msg)
 
         # NOTE: Because of below, this only works if the provided prototype label is
         # correctly alphabetized. Change this?

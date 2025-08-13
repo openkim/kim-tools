@@ -777,8 +777,9 @@ class KIMTestDriver(ABC):
         Args:
             filename: path to write the file
         """
-        kim_property_dump(self._get_serialized_property_instances(), filename)
         filename_parent = Path(filename).parent.resolve()
+        os.makedirs(filename_parent, exist_ok=True)
+        kim_property_dump(self._get_serialized_property_instances(), filename)
         if filename_parent != Path("output").resolve():
             for file_in_output in glob.glob("output/*"):
                 file_in_output_name = str(Path(file_in_output).name)
