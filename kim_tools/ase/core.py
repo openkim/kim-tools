@@ -34,7 +34,6 @@ Helper routines for KIM Tests and Verification Checks
 import itertools
 import logging
 import random
-from typing import Union
 
 import numpy as np
 from ase import Atoms
@@ -208,10 +207,20 @@ def randomize_positions(atoms, pert_amp, seed=None):
 
 
 ################################################################################
-def get_isolated_energy_per_atom(model, symbol, initial_separation=1.0, max_separation=15.0, separation_neg_exponent=4, quit_early_after_convergence=True, energy_tolerance=1e-12):
+def get_isolated_energy_per_atom(
+    model,
+    symbol,
+    initial_separation=1.0,
+    max_separation=15.0,
+    separation_neg_exponent=4,
+    quit_early_after_convergence=True,
+    energy_tolerance=1e-12,
+):
     """
     Construct a non-periodic cell containing a single atom and compute its energy.
-    It tries to iteratively finetune the atomic separation for a dimer up to a specified precision (separation_neg_exponent). If between two successive phases the energy difference is less than energy_tolerance, it stops early, i.e. if
+    It tries to iteratively finetune the atomic separation for a dimer up to a
+    specified precision (separation_neg_exponent). If between two successive phases
+    the energy difference is less than energy_tolerance, it stops early, i.e. if
     4.0x and 4.00x are within energy_tolerance, it stops at 4.00x.
     All separations are in Angstroms.
 
@@ -248,7 +257,7 @@ def get_isolated_energy_per_atom(model, symbol, initial_separation=1.0, max_sepa
 
         return energy_per_atom
 
-    except Exception as e:
+    except Exception:
 
         def _try_dimer_energy(separation):
             try:
@@ -278,9 +287,9 @@ def get_isolated_energy_per_atom(model, symbol, initial_separation=1.0, max_sepa
                         calc.clean()
                     if hasattr(calc, "__del__"):
                         calc.__del__()
-                    if 'dimer' in locals():
+                    if "dimer" in locals():
                         del dimer
-                except:
+                except Exception:
                     pass
                 return None
 
@@ -299,7 +308,9 @@ def get_isolated_energy_per_atom(model, symbol, initial_separation=1.0, max_sepa
                 break
 
         if last_successful_separation is None:
-            raise RuntimeError(f"Failed to obtain isolated energy for {symbol} - no separations worked")
+            raise RuntimeError(
+                f"Failed to obtain isolated energy for {symbol} - no separations worked"
+            )
 
         # refine
         current_separation = last_successful_separation
@@ -308,8 +319,6 @@ def get_isolated_energy_per_atom(model, symbol, initial_separation=1.0, max_sepa
         for decimal_place in range(1, separation_neg_exponent + 1):
 
             step_size = 10 ** (-decimal_place)
-            phase_start_separation = current_separation
-            phase_start_energy = last_successful_energy
 
             for i in range(1, 10):
                 test_sep = current_separation + step_size
