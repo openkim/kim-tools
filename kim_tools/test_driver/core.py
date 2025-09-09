@@ -46,7 +46,9 @@ import kim_edn
 import numpy as np
 import numpy.typing as npt
 from ase import Atoms
+from ase.build import bulk
 from ase.calculators.calculator import Calculator
+from ase.calculators.kim import get_model_supported_species
 from ase.constraints import FixSymmetry
 from ase.data import atomic_masses
 from ase.filters import FrechetCellFilter, UnitCellFilter
@@ -61,6 +63,7 @@ from kim_property import (
 )
 from kim_property.modify import STANDARD_KEYS_SCLAR_OR_WITH_EXTENT
 from kim_query import raw_query
+from lammps import lammps
 
 from ..aflow_util import (
     AFLOW,
@@ -95,6 +98,7 @@ __all__ = [
     "get_deduplicated_property_instances",
     "minimize_wrapper",
     "crystal_input_from_test_generator_line",
+    "get_supported_lammps_atom_style",
 ]
 
 # Force tolerance for the optional initial relaxation of the provided cell
@@ -106,6 +110,46 @@ PROP_SEARCH_PATHS_INFO = (
     "- $PWD/local-props/**/\n"
     "- $PWD/local_props/**/"
 )
+
+
+def get_supported_lammps_atom_style(model: str) -> str:
+    """
+    Get the supported LAMMPS atom_style of a KIM model
+    """
+    candidate_atom_styles = ("atomic", "charge", "full")
+    banned_species = "electron"  # Species in KIM models not understood by ASE
+    supported_species = get_model_supported_species(model)
+    test_species = None
+    for species in supported_species:
+        if species not in banned_species:
+            test_species = species
+            break
+    if test_species is None:
+        raise RuntimeError(
+            "Model appears to only support species not understood by ASE:\n"
+            + str(supported_species)
+        )
+    atoms = bulk(test_species, "fcc", 10.0)  # Very low-density FCC lattice
+    for atom_style in candidate_atom_styles:
+        with lammps(cmdargs=["-sc", "none"]) as lmp, NamedTemporaryFile() as f:
+            lmp.command(f"kim init {model} metal unit_conversion_mode")
+            atoms.write(f.name, format="lammps-data", atom_style=atom_style)
+            try:
+                lmp.command(f"read_data {f.name}")
+                return atom_style
+            except Exception as e:
+                if str(e).startswith(
+                    "ERROR: Incorrect format in Atoms section of data file:"
+                ):
+                    continue
+                else:
+                    msg = (
+                        "The following unexpected exception was encountered when trying"
+                        " to determine atom_style:\n" + repr(e)
+                    )
+                    print(msg)
+                    raise e
+    raise RuntimeError("Unable to determine supported atom type")
 
 
 def _get_optional_source_value(property_instance: Dict, key: str) -> Any:
@@ -717,6 +761,9 @@ class KIMTestDriver(ABC):
         self._add_key_to_current_property_instance(
             name, os.path.relpath(final_path, output_path)
         )
+
+    def _get_supported_lammps_atom_style(self):
+        return get_supported_lammps_atom_style(self.kim_model_name)
 
     @property
     def kim_model_name(self) -> Optional[str]:
