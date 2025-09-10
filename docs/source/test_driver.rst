@@ -106,38 +106,54 @@ Functionality not covered in the above example
 - ``self.``:attr:`~kim_tools.test_driver.core.KIMTestDriver.kim_model_name`:
   The KIM Model Name (if present). You should only use this if exporting data to a non-ASE simulator (see below).
 
-.. note::
+Molecular Dynamics
+------------------
 
-  If you are running an MD simulation, the structure you report should be time-averaged and likely averaged over the supercell folded back into the unit cell.
-  This will give you more robust averages assuming the translational symmetry of the unit cell was not broken. At this time, the functions
-  :func:`kim_tools.symmetry_util.core.reduce_and_avg` and :func:`kim_tools.symmetry_util.core.kstest_reduced_distances` allow you to perform these operations,
-  assuming your supercell is built from contiguous repeats of the unit cell (i.e. atoms 0 to *N*-1 in the supercell are the original unit cell, atoms
-  *N* to 2 *N*-1 are a the original unit cell shifted by an integer multiple of the lattice vectors, and so on). See
-  https://github.com/openkim/kim-tools/blob/main/tests/test_symmetry_util.py for an example of how to use these functions.
+If you are running an MD simulation, the structure you report should be time-averaged and likely averaged over the supercell folded back into the unit cell.
+This will give you more robust averages assuming the translational symmetry of the unit cell was not broken. At this time, the functions
+:func:`kim_tools.symmetry_util.core.reduce_and_avg` and :func:`kim_tools.symmetry_util.core.kstest_reduced_distances` allow you to perform these operations,
+assuming your supercell is built from contiguous repeats of the unit cell (i.e. atoms 0 to *N*-1 in the supercell are the original unit cell, atoms
+*N* to 2 *N*-1 are a the original unit cell shifted by an integer multiple of the lattice vectors, and so on). See
+https://github.com/openkim/kim-tools/blob/main/tests/test_symmetry_util.py for an example of how to use these functions.
 
-  Additionally, if you are performing an NPT simulation, you may as well write an instance of the
-  `crystal-structure-npt <https://openkim.org/properties/show/crystal-structure-npt>`_ property for future re-use. Note the optional ``restart-file`` key.
-  It is recommended that you save a restart file (for example, ``restart.dump``). You can then add it using ``self.``:func:`~kim_tools.test_driver.core.KIMTestDriver._add_file_to_current_property_instance`.
+Additionally, if you are performing an NPT simulation, you may as well write an instance of the
+`crystal-structure-npt <https://openkim.org/properties/show/crystal-structure-npt>`_ property for future re-use. Note the optional ``restart-file`` key.
+It is recommended that you save a restart file (for example, ``restart.dump``).
+You can then add it using ``self.``:func:`~kim_tools.test_driver.core.KIMTestDriver._add_file_to_current_property_instance`.
 
-  .. code-block:: Python
+.. code-block:: Python
 
-    self._add_property_instance_and_common_crystal_genome_keys("crystal-structure-npt",write_temp=True,write_stress=True)
-    self._add_file_to_current_property_instance("restart-file","restart.dump")
+  self._add_property_instance_and_common_crystal_genome_keys("crystal-structure-npt",write_temp=True,write_stress=True)
+  self._add_file_to_current_property_instance("restart-file","restart.dump")
 
 .. todo::
 
   Update :func:`kim_tools.symmetry_util.core.change_of_basis_atoms` to incorporate the functionalities of :func:`kim_tools.symmetry_util.core.reduce_and_avg`
   and :func:`kim_tools.symmetry_util.core.kstest_reduced_distances`, without the restriction on how the supercell is built.
 
-LAMMPS and other non-ASE simulators
------------------------------------
-.. note::
+Writting Test Drivers using LAMMPS
+----------------------------------
 
-  Non-ASE calculations require extra steps.
-  For example, one way to run a LAMMPS simulation in this framework is to export your atomic configuration using :func:`ase.io.write`, create LAMMPS input file(s)
-  with `kim commands <https://docs.lammps.org/kim_commands.html>`_ using the KIM model stored in the base class' attribute ``self.``:attr:`~kim_tools.test_driver.core.KIMTestDriver.kim_model_name`,
-  run your simulation(s), and read the configuration back in using :func:`ase.io.read` (for example, to re-detect the changed crystal structure).
+In general, using ASE to perform the computations is preferable, but you may need access to LAMMPS functionality, for example to run a large parallel MD or static
+calculation with domain decomposition. You may use LAMMPS in whichever way is most convenient for you as long as it is wrapped within the ``_calculate`` Python
+method.
+For example, one way to run a LAMMPS simulation in this framework is to export your atomic configuration using :func:`ase.io.write`, create LAMMPS input file(s)
+with `kim commands <https://docs.lammps.org/kim_commands.html>`_ using the KIM model stored in the base class' attribute ``self.``:attr:`~kim_tools.test_driver.core.KIMTestDriver.kim_model_name`,
+run your simulation(s), and read the configuration back in using :func:`ase.io.read` (for example, to re-detect the changed crystal structure).
+
+There are some special considerations when using LAMMPS to write KIM Test Drivers. See https://github.com/openkim-hackathons/CrystalGenomeLAMMPSExample__TD_000000654322_000
+for a trivial Crystal Genome LAMMPS example.
+
+* Not all models support all LAMMPS systems of units. To work around this, use the ``unit_conversion_mode`` option for the ``kim init`` command and use the
+  LAMMPS variables created by this command to convert to a single set of units. See https://docs.lammps.org/kim_commands.html#openkim-im-initialization-kim-init
+  for more info.
+* The format of a LAMMPS data file must be commensurate to the LAMMPS ``atom_style`` declared. Most KIM models use ``atom_style atomic``, however some use ``atom_style charge``.
+  To determine the ``atom_style``, use ``self.``:func:`~kim_tools.test_driver.core.KIMTestDriver._get_supported_lammps_atom_style`. You can then pass the value returned by this
+  function to :func:`ase.io.write` to generate a LAMMPS data file with the appropriate ``atom_style``.
+* By default, LAMMPS will un-skew the box if it gets too tilted. This can cause :func:`~kim_tools.test_driver.core.SingleCrystalTestDriver._update_nominal_parameter_values`
+  to fail. To suppress this LAMMPS behavior, use the ``flip no`` option with ``fix npt`` or ``fix deform``. See
+  https://docs.lammps.org/Howto_triclinic.html#periodicity-and-tilt-factors-for-triclinic-simulation-boxes for more info.
 
 .. todo::
 
-  This should be an integrated part of ``kim-tools``
+  LAMMPS capabilities should be better integrated into ``kim-tools`` and better examples should be provided.
