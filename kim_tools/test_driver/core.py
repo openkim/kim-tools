@@ -63,7 +63,6 @@ from kim_property import (
 )
 from kim_property.modify import STANDARD_KEYS_SCLAR_OR_WITH_EXTENT
 from kim_query import raw_query
-from lammps import lammps
 
 from ..aflow_util import (
     AFLOW,
@@ -116,6 +115,8 @@ def get_supported_lammps_atom_style(model: str) -> str:
     """
     Get the supported LAMMPS atom_style of a KIM model
     """
+    from lammps import lammps
+
     candidate_atom_styles = ("atomic", "charge", "full")
     banned_species = "electron"  # Species in KIM models not understood by ASE
     supported_species = get_model_supported_species(model)
