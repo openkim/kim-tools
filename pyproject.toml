@@ -29,7 +29,8 @@ authors = [
     { name = "Eric Fuemmeler", email = "efuemmel@umn.edu" },
     { name = "Philipp Hoellmer", email = "ph2484@nyu.edu" },
     { name = "Guanming Zhang", email = "gz2241@nyu.edu" },
-    { name = "Tom Egg", email = "tje3676@nyu.edu"}
+    { name = "Tom Egg", email = "tje3676@nyu.edu"  },
+    { name = "Navaneeth Mohan", email = "mohan227@umn.edu" }
 ]
 maintainers = [
     { name = "ilia Nikiforov", email = "nikif002@umn.edu" },
