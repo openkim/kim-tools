@@ -762,7 +762,12 @@ class KIMTestDriver(ABC):
             name, os.path.relpath(final_path, output_path)
         )
 
-    def _get_supported_lammps_atom_style(self):
+    def _get_supported_lammps_atom_style(self) -> str:
+        """
+        Return the atom_style that should be used when writing LAMMPS data files.
+        This atom_style will be compatible with the KIM model this object
+        was instantiated with.
+        """
         return get_supported_lammps_atom_style(self.kim_model_name)
 
     @property
