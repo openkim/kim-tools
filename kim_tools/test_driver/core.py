@@ -395,8 +395,15 @@ def _add_property_instance(
                                 property_name = path_str
                                 found_custom_property = True
                                 break
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        msg = (
+                            "MESSAGE: Trying to load a property from the .edn file at\n"
+                            f"{path}\n"
+                            "failed with the following exception:\n"
+                            f"{repr(e)}"
+                        )
+                        logger.info(msg)
+                        print(msg)
 
         if not found_custom_property:
             raise KIMTestDriverError(
