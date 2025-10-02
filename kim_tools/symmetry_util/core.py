@@ -20,8 +20,9 @@ from ase.geometry import get_distances, get_duplicate_atoms
 from matplotlib.backends.backend_pdf import PdfPages
 from pymatgen.core.operations import SymmOp
 from pymatgen.core.tensors import Tensor
-from scipy.stats import kstest
+from scipy.stats import kstest, norm
 from sklearn.decomposition import PCA
+from sklearn.mixture import GaussianMixture
 from sympy import Matrix, cos, matrix2numpy, sin, sqrt, symbols
 from sympy.tensor.array.expressions import ArrayContraction, ArrayTensorProduct
 
@@ -804,6 +805,135 @@ def kstest_reduced_distances(
         print(
             "Detected normal distribution or reduced atom positions around their "
             f"average (smallest p value {np.min(p_values)})."
+        )
+
+
+def multimodal_test_reduced_distances(
+    reduced_distances: npt.ArrayLike,
+    plot_filename: Optional[str] = None,
+    number_bins: Optional[int] = None,
+    random_seed: Optional[int] = 0,
+    max_components: int = 5,
+    weight_threshold: float = 0.05,
+    bhattacharyya_separation_threshold: float = 10.0,
+) -> None:
+    assert len(reduced_distances.shape) == 3
+    assert reduced_distances.shape[2] == 3
+    if plot_filename is not None:
+        if number_bins is None:
+            raise ValueError(
+                "number_bins must be specified if plot_filename is specified"
+            )
+        if not plot_filename.endswith(".pdf"):
+            raise ValueError(f"{plot_filename} is not a PDF file")
+    else:
+        if number_bins is not None:
+            raise ValueError(
+                "number_bins must not be specified if plot_filename is not specified"
+            )
+
+    pdf = PdfPages(plot_filename) if plot_filename is not None else None
+    mean_values = np.empty(
+        (reduced_distances.shape[0], max_components, reduced_distances.shape[2])
+    )
+    cov_values = np.empty(
+        (reduced_distances.shape[0], max_components, reduced_distances.shape[2])
+    )
+    weight_values = np.empty(
+        (reduced_distances.shape[0], max_components, reduced_distances.shape[2])
+    )
+    for i in range(reduced_distances.shape[0]):
+        atom_distances = reduced_distances[i]
+        # Perform PCA on the xyz distribution.
+        pca = PCA(n_components=atom_distances.shape[1])
+        pca_components = pca.fit_transform(atom_distances)
+
+        # Fit Gaussian Mixture Model to each PCA component.
+        min_var = np.min(np.var(pca_components, axis=0))
+        gmm = GaussianMixture(
+            n_components=max_components,
+            covariance_type="diag",
+            n_init=100,
+            random_state=random_seed,
+            reg_covar=min_var * 1.0e-6,
+        )
+        # Fit separately to allow for different weigths in each direction.
+        for j in range(pca_components.shape[1]):
+            gmm.fit(pca_components[:, j].reshape(-1, 1))
+            mean_values[i, :, j] = gmm.means_.flatten()
+            cov_values[i, :, j] = gmm.covariances_.flatten()
+            weight_values[i, :, j] = gmm.weights_.flatten()
+
+        if pdf is not None:
+            fig, axs = plt.subplots(1, 3, figsize=(10.0, 4.0))
+            for j in range(pca_components.shape[1]):
+                axs[j].hist(
+                    pca_components[:, j], bins=number_bins, density=True, histtype="bar"
+                )
+                x = np.linspace(
+                    np.min(pca_components[:, j]), np.max(pca_components[:, j]), 100
+                )
+                axs[j].plot(
+                    x,
+                    sum(
+                        norm.pdf(x, mean_values[i, k, j], np.sqrt(cov_values[i, k, j]))
+                        * weight_values[i, k, j]
+                        for k in range(max_components)
+                    ),
+                    color="k",
+                    linestyle="dashed",
+                )
+                axs[j].set_xlabel(f"PCA $x_{j}$")
+            axs[0].set_ylabel("PDF")
+            fig.suptitle(f"Atom {i}")
+            fig.tight_layout()
+            pdf.savefig(fig, bbox_inches="tight")
+            plt.close(fig)
+    pdf.close() if pdf is not None else None
+
+    max_separations = np.zeros((reduced_distances.shape[0], reduced_distances.shape[2]))
+    for i in range(reduced_distances.shape[0]):
+        for j in range(reduced_distances.shape[2]):
+            means = mean_values[i, :, j]
+            vars = cov_values[i, :, j]
+            ws = weight_values[i, :, j]
+
+            keep_indices = np.nonzero(ws > weight_threshold)[0]
+            assert len(keep_indices) > 0
+            # If only one component has significant weight, unimodal.
+            if len(keep_indices) == 1:
+                continue
+
+            keep_means = means[keep_indices]
+            keep_vars = vars[keep_indices]
+            # Pairwise 1D Bhattacharyya distance.
+            # See https://en.wikipedia.org/wiki/Bhattacharyya_distance
+            for a in range(len(keep_indices)):
+                for b in range(a + 1, len(keep_indices)):
+                    term_one = (
+                        0.25
+                        * ((keep_means[a] - keep_means[b]) ** 2)
+                        / (keep_vars[a] + keep_vars[b])
+                    )
+                    term_two = 0.5 * np.log(
+                        (keep_vars[a] + keep_vars[b])
+                        / (2.0 * np.sqrt(keep_vars[a] * keep_vars[b]))
+                    )
+                    separation = term_one + term_two
+                    assert separation >= 0.0
+                    if separation > max_separations[i, j]:
+                        max_separations[i, j] = separation
+
+    largest_separation = np.max(max_separations)
+    if largest_separation > bhattacharyya_separation_threshold:
+        raise PeriodExtensionException(
+            "Detected multimodal distribution of reduced atom positions around their "
+            f"average (largest Bhattacharyya distance {largest_separation})."
+        )
+    else:
+        print(
+            "Detected unimodal distribution of reduced atom positions around their "
+            f"average (largest Bhattacharyya distance {largest_separation})."
         )
 
 
