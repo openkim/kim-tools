@@ -9,7 +9,6 @@ from itertools import product
 from math import ceil
 from typing import Dict, List, Optional, Tuple, Union
 
-import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 import sympy as sp
@@ -17,12 +16,9 @@ from ase import Atoms
 from ase.cell import Cell
 from ase.constraints import FixSymmetry
 from ase.geometry import get_distances, get_duplicate_atoms
-from matplotlib.backends.backend_pdf import PdfPages
+from ase.neighborlist import natural_cutoffs, neighbor_list
 from pymatgen.core.operations import SymmOp
 from pymatgen.core.tensors import Tensor
-from scipy.stats import kstest, norm
-from sklearn.decomposition import PCA
-from sklearn.mixture import GaussianMixture
 from sympy import Matrix, cos, matrix2numpy, sin, sqrt, symbols
 from sympy.tensor.array.expressions import ArrayContraction, ArrayTensorProduct
 
@@ -51,6 +47,7 @@ __all__ = [
     "change_of_basis_atoms",
     "get_possible_primitive_shifts",
     "get_primitive_genpos_ops",
+    "get_smallest_nn_dist",
 ]
 
 C_CENTERED_ORTHORHOMBIC_GROUPS = (20, 21, 35, 36, 37, 63, 64, 65, 66, 67, 68)
@@ -517,7 +514,9 @@ def get_change_of_basis_matrix_to_conventional_cell_from_formal_bravais_lattice(
     return np.round(change_of_basis_matrix)
 
 
-def change_of_basis_atoms(atoms: Atoms, change_of_basis: npt.ArrayLike) -> Atoms:
+def change_of_basis_atoms(
+    atoms: Atoms, change_of_basis: npt.ArrayLike, cutoff: Optional[float] = None
+) -> Atoms:
     """
     Perform an arbitrary basis change on an ``Atoms`` object, duplicating or cropping
     atoms as needed. A basic check is made that the determinant of ``change_of_basis``
@@ -525,7 +524,7 @@ def change_of_basis_atoms(atoms: Atoms, change_of_basis: npt.ArrayLike) -> Atoms
     that ``change_of_basis`` is appropriate for the particuar crystal described by
     ``atoms``, which is up to the user.
 
-    TODO: Incorporate :func:`kstest_reduced_distances` into this function
+    TODO: Incorporate :func:`cutoff_test_reduced_distances` into this function
 
     Args:
         atoms:
@@ -544,6 +543,9 @@ def change_of_basis_atoms(atoms: Atoms, change_of_basis: npt.ArrayLike) -> Atoms
 
             Relationship between fractional coordinates in each basis:
             **x** = **P** **x**'
+        cutoff:
+            The cutoff to use for deleting duplicate atoms. If not specified,
+            the AFLOW tolerance of 0.01*(smallest NN distance) is used.
 
     Returns:
         The transformed ``Atoms`` object, containing the original number of
@@ -578,7 +580,9 @@ def change_of_basis_atoms(atoms: Atoms, change_of_basis: npt.ArrayLike) -> Atoms
     new_atoms = atoms.repeat(repeat)
     new_atoms.set_cell(new_cell)
     new_atoms.wrap()
-    get_duplicate_atoms(new_atoms, delete=True)
+    if cutoff is None:
+        cutoff = get_smallest_nn_dist(atoms) * 0.01
+    get_duplicate_atoms(new_atoms, cutoff=cutoff, delete=True)
 
     volume_change = np.linalg.det(change_of_basis)
     if not np.isclose(len(atoms) * volume_change, len(new_atoms)):
@@ -722,219 +726,19 @@ def reduce_and_avg(
     return new_atoms, distances
 
 
-def kstest_reduced_distances(
+def cutoff_test_reduced_distances(
+    reduced_atoms: Atoms,
     reduced_distances: npt.ArrayLike,
-    significance_level: float = 0.05,
-    plot_filename: Optional[str] = None,
-    number_bins: Optional[int] = None,
-) -> None:
+):
     """
-    TODO: Incorporate this into :func:`change_of_basis_atoms`
-
-    Function to test whether the reduced atom positions are normally distributed
-    around their average.
-
-    Args:
-        reduced_distances:
-            Distance array provided by :func:`reduce_and_avg`
-        significance_level:
-            Significance level for Kolmogorov-Smirnov
-        plot_filename:
-        number_bins:
-            Number of bins for plot
-
-    Raises:
-        PeriodExtensionException:
-            If a non-normal distribution is detected
+    Simply test if the reduced distances are within the cutoff
+    0.01*(smallest NN distance)
     """
-    assert len(reduced_distances.shape) == 3
-    assert reduced_distances.shape[2] == 3
-
-    if plot_filename is not None:
-        if number_bins is None:
-            raise ValueError(
-                "number_bins must be specified if plot_filename is specified"
-            )
-        if not plot_filename.endswith(".pdf"):
-            raise ValueError(f"{plot_filename} is not a PDF file")
-        with PdfPages(plot_filename) as pdf:
-            for i in range(reduced_distances.shape[0]):
-                fig, axs = plt.subplots(1, 3, figsize=(10.0, 4.0))
-                for j in range(reduced_distances.shape[2]):
-                    axs[j].hist(reduced_distances[i, :, j], bins=number_bins)
-                    axs[j].set_xlabel(f"$x_{j}$")
-                axs[0].set_ylabel("Counts")
-                fig.suptitle(f"Atom {i}")
-                pdf.savefig()
-    else:
-        if number_bins is not None:
-            raise ValueError(
-                "number_bins must not be specified if plot_filename is not specified"
-            )
-
-    p_values = np.empty((reduced_distances.shape[0], reduced_distances.shape[2]))
-    for i in range(reduced_distances.shape[0]):
-        atom_distances = reduced_distances[i]
-
-        # Perform PCA on the xyz distribution.
-        pca = PCA(n_components=atom_distances.shape[1])
-        pca_components = pca.fit_transform(atom_distances)
-        assert (
-            pca_components.shape == atom_distances.shape == reduced_distances.shape[1:]
-        )
-
-        # Test each component with a KS test.
-        for j in range(pca_components.shape[1]):
-            component = pca_components[:, j]
-            component_mean = np.mean(component)
-            assert abs(component_mean) < 1.0e-7
-            component_std = np.std(component)
-            # Normalize component
-            normalized_component = (component - component_mean) / component_std
-            assert abs(np.mean(normalized_component)) < 1.0e-7
-            assert abs(np.std(normalized_component) - 1.0) < 1.0e-7
-            res = kstest(normalized_component, "norm")
-            p_values[i, j] = res.pvalue
-
-    if np.any(p_values <= significance_level):
-        raise PeriodExtensionException(
-            "Detected non-normal distribution of reduced atom positions around their "
-            f"average (smallest p value {np.min(p_values)})."
-        )
-    else:
-        print(
-            "Detected normal distribution or reduced atom positions around their "
-            f"average (smallest p value {np.min(p_values)})."
-        )
-
-
-def multimodal_test_reduced_distances(
-    reduced_distances: npt.ArrayLike,
-    plot_filename: Optional[str] = None,
-    number_bins: Optional[int] = None,
-    random_seed: Optional[int] = 0,
-    max_components: int = 5,
-    weight_threshold: float = 0.05,
-    bhattacharyya_separation_threshold: float = 10.0,
-) -> None:
-    assert len(reduced_distances.shape) == 3
-    assert reduced_distances.shape[2] == 3
-    if plot_filename is not None:
-        if number_bins is None:
-            raise ValueError(
-                "number_bins must be specified if plot_filename is specified"
-            )
-        if not plot_filename.endswith(".pdf"):
-            raise ValueError(f"{plot_filename} is not a PDF file")
-    else:
-        if number_bins is not None:
-            raise ValueError(
-                "number_bins must not be specified if plot_filename is not specified"
-            )
-
-    pdf = PdfPages(plot_filename) if plot_filename is not None else None
-    mean_values = np.empty(
-        (reduced_distances.shape[0], max_components, reduced_distances.shape[2])
-    )
-    cov_values = np.empty(
-        (reduced_distances.shape[0], max_components, reduced_distances.shape[2])
-    )
-    weight_values = np.empty(
-        (reduced_distances.shape[0], max_components, reduced_distances.shape[2])
-    )
-    for i in range(reduced_distances.shape[0]):
-        atom_distances = reduced_distances[i]
-        # Perform PCA on the xyz distribution.
-        pca = PCA(n_components=atom_distances.shape[1])
-        pca_components = pca.fit_transform(atom_distances)
-
-        # Fit Gaussian Mixture Model to each PCA component.
-        min_var = np.min(np.var(pca_components, axis=0))
-        gmm = GaussianMixture(
-            n_components=max_components,
-            covariance_type="diag",
-            n_init=100,
-            random_state=random_seed,
-            reg_covar=min_var * 1.0e-6,
-        )
-        # Fit separately to allow for different weigths in each direction.
-        for j in range(pca_components.shape[1]):
-            gmm.fit(pca_components[:, j].reshape(-1, 1))
-            mean_values[i, :, j] = gmm.means_.flatten()
-            cov_values[i, :, j] = gmm.covariances_.flatten()
-            weight_values[i, :, j] = gmm.weights_.flatten()
-
-        if pdf is not None:
-            fig, axs = plt.subplots(1, 3, figsize=(10.0, 4.0))
-            for j in range(pca_components.shape[1]):
-                axs[j].hist(
-                    pca_components[:, j], bins=number_bins, density=True, histtype="bar"
-                )
-                x = np.linspace(
-                    np.min(pca_components[:, j]), np.max(pca_components[:, j]), 100
-                )
-                axs[j].plot(
-                    x,
-                    sum(
-                        norm.pdf(x, mean_values[i, k, j], np.sqrt(cov_values[i, k, j]))
-                        * weight_values[i, k, j]
-                        for k in range(max_components)
-                    ),
-                    color="k",
-                    linestyle="dashed",
-                )
-                axs[j].set_xlabel(f"PCA $x_{j}$")
-            axs[0].set_ylabel("PDF")
-            fig.suptitle(f"Atom {i}")
-            fig.tight_layout()
-            pdf.savefig(fig, bbox_inches="tight")
-            plt.close(fig)
-    pdf.close() if pdf is not None else None
-
-    max_separations = np.zeros((reduced_distances.shape[0], reduced_distances.shape[2]))
-    for i in range(reduced_distances.shape[0]):
-        for j in range(reduced_distances.shape[2]):
-            means = mean_values[i, :, j]
-            vars = cov_values[i, :, j]
-            ws = weight_values[i, :, j]
-
-            keep_indices = np.nonzero(ws > weight_threshold)[0]
-            assert len(keep_indices) > 0
-            # If only one component has significant weight, unimodal.
-            if len(keep_indices) == 1:
-                continue
-
-            keep_means = means[keep_indices]
-            keep_vars = vars[keep_indices]
-            # Pairwise 1D Bhattacharyya distance.
-            # See https://en.wikipedia.org/wiki/Bhattacharyya_distance
-            for a in range(len(keep_indices)):
-                for b in range(a + 1, len(keep_indices)):
-                    term_one = (
-                        0.25
-                        * ((keep_means[a] - keep_means[b]) ** 2)
-                        / (keep_vars[a] + keep_vars[b])
-                    )
-                    term_two = 0.5 * np.log(
-                        (keep_vars[a] + keep_vars[b])
-                        / (2.0 * np.sqrt(keep_vars[a] * keep_vars[b]))
-                    )
-                    separation = term_one + term_two
-                    assert separation >= 0.0
-                    if separation > max_separations[i, j]:
-                        max_separations[i, j] = separation
-
-    largest_separation = np.max(max_separations)
-    if largest_separation > bhattacharyya_separation_threshold:
-        raise PeriodExtensionException(
-            "Detected multimodal distribution of reduced atom positions around their "
-            f"average (largest Bhattacharyya distance {largest_separation})."
-        )
-    else:
-        print(
-            "Detected unimodal distribution of reduced atom positions around their "
-            f"average (largest Bhattacharyya distance {largest_separation})."
-        )
+    cutoff = get_smallest_nn_dist(reduced_atoms) * 0.01
+    n, m, _ = reduced_distances.shape
+    for i, j in product(range(n), range(m)):
+        if np.linalg.norm(reduced_distances[i, j, :]) > cutoff:
+            raise PeriodExtensionException
 
 
 def voigt_to_full_symb(voigt_input: sp.Array) -> sp.MutableDenseNDimArray:
@@ -1201,6 +1005,23 @@ def fit_voigt_tensor_to_cell_and_space_group(
     t_symmetrized = sum(t_rotated_list) / len(t_rotated_list)
 
     return t_symmetrized.voigt
+
+
+def get_smallest_nn_dist(atoms: Atoms) -> float:
+    """
+    Get the smallest NN distance in an Atoms object
+    """
+    nl_len = 0
+    cov_mult = 1
+    while nl_len == 0:
+        logger.info(
+            "Attempting to find NN distance by searching "
+            f"within covalent radii times {cov_mult}"
+        )
+        nl = neighbor_list("d", atoms, natural_cutoffs(atoms, mult=cov_mult))
+        nl_len = nl.size
+        cov_mult += 1
+    return nl.min()
 
 
 class FixProvidedSymmetry(FixSymmetry):

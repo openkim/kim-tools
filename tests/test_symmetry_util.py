@@ -28,9 +28,9 @@ from kim_tools.aflow_util.core import get_atom_indices_for_each_wyckoff_orb
 from kim_tools.symmetry_util.core import (
     FixProvidedSymmetry,
     PeriodExtensionException,
+    cutoff_test_reduced_distances,
     fit_voigt_tensor_and_error_to_cell_and_space_group,
     fit_voigt_tensor_to_cell_and_space_group,
-    kstest_reduced_distances,
     reduce_and_avg,
     transform_atoms,
 )
@@ -80,9 +80,9 @@ def test_test_reduced_distances():
     for data_file in data_file_has_period_extension:
         has_period_extension = data_file_has_period_extension[data_file]
         atoms = read(data_file, format="lammps-data")
-        _, reduced_distances = reduce_and_avg(atoms, repeat)
+        reduced_atoms, reduced_distances = reduce_and_avg(atoms, repeat)
         try:
-            kstest_reduced_distances(reduced_distances)
+            cutoff_test_reduced_distances(reduced_atoms, reduced_distances)
             assert not has_period_extension
         except PeriodExtensionException:
             assert has_period_extension
