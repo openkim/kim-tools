@@ -735,6 +735,7 @@ def cutoff_test_reduced_distances(
     0.01*(smallest NN distance)
     """
     cutoff = get_smallest_nn_dist(reduced_atoms) * 0.01
+    logger.info(f"Cutoff for period extension test is {cutoff}")
     n, m, _ = reduced_distances.shape
     for i, j in product(range(n), range(m)):
         if np.linalg.norm(reduced_distances[i, j, :]) > cutoff:

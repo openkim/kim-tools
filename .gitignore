@@ -2,6 +2,7 @@
 *.egg-info
 *.egg
 *scratch*
+tests/multimodality_debug/
 
 .vscode/
 

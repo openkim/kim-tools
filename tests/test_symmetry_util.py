@@ -73,13 +73,13 @@ def test_change_of_basis_atoms(
 
 def test_test_reduced_distances():
     data_file_has_period_extension = {
-        "structures/FeP_period_extended_phase_transition.data": True,
-        "structures/FeP_stable.data": False,
+        "structures/FeP_unstable.extxyz": True,
+        "structures/FeP_stable.extxyz": False,
     }
     repeat = [11, 11, 11]
     for data_file in data_file_has_period_extension:
         has_period_extension = data_file_has_period_extension[data_file]
-        atoms = read(data_file, format="lammps-data")
+        atoms = read(data_file)
         reduced_atoms, reduced_distances = reduce_and_avg(atoms, repeat)
         try:
             cutoff_test_reduced_distances(reduced_atoms, reduced_distances)
