@@ -9,7 +9,6 @@ from itertools import product
 from math import ceil
 from typing import Dict, List, Optional, Tuple, Union
 
-import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 import sympy as sp
@@ -17,11 +16,9 @@ from ase import Atoms
 from ase.cell import Cell
 from ase.constraints import FixSymmetry
 from ase.geometry import get_distances, get_duplicate_atoms
-from matplotlib.backends.backend_pdf import PdfPages
+from ase.neighborlist import natural_cutoffs, neighbor_list
 from pymatgen.core.operations import SymmOp
 from pymatgen.core.tensors import Tensor
-from scipy.stats import kstest
-from sklearn.decomposition import PCA
 from sympy import Matrix, cos, matrix2numpy, sin, sqrt, symbols
 from sympy.tensor.array.expressions import ArrayContraction, ArrayTensorProduct
 
@@ -50,6 +47,7 @@ __all__ = [
     "change_of_basis_atoms",
     "get_possible_primitive_shifts",
     "get_primitive_genpos_ops",
+    "get_smallest_nn_dist",
 ]
 
 C_CENTERED_ORTHORHOMBIC_GROUPS = (20, 21, 35, 36, 37, 63, 64, 65, 66, 67, 68)
@@ -516,7 +514,9 @@ def get_change_of_basis_matrix_to_conventional_cell_from_formal_bravais_lattice(
     return np.round(change_of_basis_matrix)
 
 
-def change_of_basis_atoms(atoms: Atoms, change_of_basis: npt.ArrayLike) -> Atoms:
+def change_of_basis_atoms(
+    atoms: Atoms, change_of_basis: npt.ArrayLike, cutoff: Optional[float] = None
+) -> Atoms:
     """
     Perform an arbitrary basis change on an ``Atoms`` object, duplicating or cropping
     atoms as needed. A basic check is made that the determinant of ``change_of_basis``
@@ -524,7 +524,7 @@ def change_of_basis_atoms(atoms: Atoms, change_of_basis: npt.ArrayLike) -> Atoms
     that ``change_of_basis`` is appropriate for the particuar crystal described by
     ``atoms``, which is up to the user.
 
-    TODO: Incorporate :func:`kstest_reduced_distances` into this function
+    TODO: Incorporate :func:`cutoff_test_reduced_distances` into this function
 
     Args:
         atoms:
@@ -543,6 +543,9 @@ def change_of_basis_atoms(atoms: Atoms, change_of_basis: npt.ArrayLike) -> Atoms
 
             Relationship between fractional coordinates in each basis:
             **x** = **P** **x**'
+        cutoff:
+            The cutoff to use for deleting duplicate atoms. If not specified,
+            the AFLOW tolerance of 0.01*(smallest NN distance) is used.
 
     Returns:
         The transformed ``Atoms`` object, containing the original number of
@@ -577,7 +580,9 @@ def change_of_basis_atoms(atoms: Atoms, change_of_basis: npt.ArrayLike) -> Atoms
     new_atoms = atoms.repeat(repeat)
     new_atoms.set_cell(new_cell)
     new_atoms.wrap()
-    get_duplicate_atoms(new_atoms, delete=True)
+    if cutoff is None:
+        cutoff = get_smallest_nn_dist(atoms) * 0.01
+    get_duplicate_atoms(new_atoms, cutoff=cutoff, delete=True)
 
     volume_change = np.linalg.det(change_of_basis)
     if not np.isclose(len(atoms) * volume_change, len(new_atoms)):
@@ -634,14 +639,16 @@ def transform_atoms(atoms: Atoms, op: Dict) -> Atoms:
     return atoms_transformed
 
 
-def reduce_and_avg(
-    atoms: Atoms, repeat: Tuple[int, int, int]
-) -> Tuple[Atoms, npt.ArrayLike]:
+def reduce_and_avg(atoms: Atoms, repeat: Tuple[int, int, int]) -> Atoms:
     """
     TODO: Upgrade :func:`change_of_basis_atoms` to provide the distances
     array, obviating this function
 
-    Function to reduce all atoms to the original unit cell position.
+    Function to reduce all atoms to the original unit cell position,
+    assuming the supercell is built from contiguous repeats of the unit cell
+    (i.e. atoms 0 to N-1 in the supercell are the original unit cell, atoms N to
+    2*[N-1] are the original unit cell shifted by an integer multiple of
+    the lattice vectors, and so on)
 
     Args:
         atoms:
@@ -651,10 +658,13 @@ def reduce_and_avg(
             provided supercell
 
     Returns:
-        * The reduced unit cell
-        * An array of displacement vectors. First dimension: index of reference atom
-          in reduced cell. Second dimension: index of atom in provided supercell.
-          Third dimension: x, y, z
+        The reduced unit cell
+
+    Raises:
+        PeriodExtensionException:
+            If two atoms that should be identical by translational symmetry
+            are further than 0.01*(smallest NN distance) apart when
+            reduced to the unit cell
     """
     new_atoms = atoms.copy()
 
@@ -685,126 +695,46 @@ def reduce_and_avg(
     # Start from end of the atoms
     # because we will remove all atoms except the reference ones.
     for i in reversed(range(number_atoms)):
+        reference_atom_index = i % original_number_atoms
         if i >= original_number_atoms:
             # Get the distance to the reference atom in the original unit cell with the
             # minimum image convention.
             distance = new_atoms.get_distance(
-                i % original_number_atoms, i, mic=True, vector=True
+                reference_atom_index, i, mic=True, vector=True
             )
             # Get the position that has the closest distance to
             # the reference atom in the original unit cell.
-            position_i = positions[i % original_number_atoms] + distance
+            position_i = positions[reference_atom_index] + distance
             # Remove atom from atoms object.
             new_atoms.pop()
         else:
             # Atom was part of the original unit cell.
             position_i = positions[i]
         # Average
-        avg_positions_in_prim_cell[i % original_number_atoms] += position_i / M
+        avg_positions_in_prim_cell[reference_atom_index] += position_i / M
         positions_in_prim_cell[i] = position_i
 
     new_atoms.set_positions(avg_positions_in_prim_cell)
 
-    # Calculate the distances.
-    distances = np.empty((original_number_atoms, M, 3))
-    for i in range(number_atoms):
-        dr, _ = get_distances(
-            positions_in_prim_cell[i],
-            avg_positions_in_prim_cell[i % original_number_atoms],
+    # Check that all atoms
+    cutoff = get_smallest_nn_dist(new_atoms) * 0.01
+    logger.info(f"Cutoff for period extension test is {cutoff}")
+    for i in range(original_number_atoms):
+        positions_of_all_images_of_atom_i = [
+            positions_in_prim_cell[j * original_number_atoms + i] for j in range(M)
+        ]
+        _, r = get_distances(
+            positions_of_all_images_of_atom_i,
             cell=new_atoms.get_cell(),
             pbc=True,
         )
         # dr is a distance matrix, here we only have one distance
-        assert dr.shape == (1, 1, 3)
-        distances[i % original_number_atoms, i // original_number_atoms] = dr[0][0]
-
-    return new_atoms, distances
-
-
-def kstest_reduced_distances(
-    reduced_distances: npt.ArrayLike,
-    significance_level: float = 0.05,
-    plot_filename: Optional[str] = None,
-    number_bins: Optional[int] = None,
-) -> None:
-    """
-    TODO: Incorporate this into :func:`change_of_basis_atoms`
-
-    Function to test whether the reduced atom positions are normally distributed
-    around their average.
-
-    Args:
-        reduced_distances:
-            Distance array provided by :func:`reduce_and_avg`
-        significance_level:
-            Significance level for Kolmogorov-Smirnov
-        plot_filename:
-        number_bins:
-            Number of bins for plot
-
-    Raises:
-        PeriodExtensionException:
-            If a non-normal distribution is detected
-    """
-    assert len(reduced_distances.shape) == 3
-    assert reduced_distances.shape[2] == 3
-
-    if plot_filename is not None:
-        if number_bins is None:
-            raise ValueError(
-                "number_bins must be specified if plot_filename is specified"
+        assert r.shape == (M, M)
+        if r.max() > cutoff:
+            raise PeriodExtensionException(
+                f"At least one image of atom {i} is outside of tolerance"
             )
-        if not plot_filename.endswith(".pdf"):
-            raise ValueError(f"{plot_filename} is not a PDF file")
-        with PdfPages(plot_filename) as pdf:
-            for i in range(reduced_distances.shape[0]):
-                fig, axs = plt.subplots(1, 3, figsize=(10.0, 4.0))
-                for j in range(reduced_distances.shape[2]):
-                    axs[j].hist(reduced_distances[i, :, j], bins=number_bins)
-                    axs[j].set_xlabel(f"$x_{j}$")
-                axs[0].set_ylabel("Counts")
-                fig.suptitle(f"Atom {i}")
-                pdf.savefig()
-    else:
-        if number_bins is not None:
-            raise ValueError(
-                "number_bins must not be specified if plot_filename is not specified"
-            )
-
-    p_values = np.empty((reduced_distances.shape[0], reduced_distances.shape[2]))
-    for i in range(reduced_distances.shape[0]):
-        atom_distances = reduced_distances[i]
-
-        # Perform PCA on the xyz distribution.
-        pca = PCA(n_components=atom_distances.shape[1])
-        pca_components = pca.fit_transform(atom_distances)
-        assert (
-            pca_components.shape == atom_distances.shape == reduced_distances.shape[1:]
-        )
-
-        # Test each component with a KS test.
-        for j in range(pca_components.shape[1]):
-            component = pca_components[:, j]
-            component_mean = np.mean(component)
-            assert abs(component_mean) < 1.0e-7
-            component_std = np.std(component)
-            # Normalize component
-            normalized_component = (component - component_mean) / component_std
-            assert abs(np.mean(normalized_component)) < 1.0e-7
-            assert abs(np.std(normalized_component) - 1.0) < 1.0e-7
-            res = kstest(normalized_component, "norm")
-            p_values[i, j] = res.pvalue
-
-    if np.any(p_values <= significance_level):
-        raise PeriodExtensionException(
-            "Detected non-normal distribution of reduced atom positions around their "
-            f"average (smallest p value {np.min(p_values)})."
-        )
-    else:
-        print(
-            "Detected normal distribution or reduced atom positions around their "
-            f"average (smallest p value {np.min(p_values)})."
-        )
+    return new_atoms
 
 
 def voigt_to_full_symb(voigt_input: sp.Array) -> sp.MutableDenseNDimArray:
@@ -1071,6 +1001,23 @@ def fit_voigt_tensor_to_cell_and_space_group(
     t_symmetrized = sum(t_rotated_list) / len(t_rotated_list)
 
     return t_symmetrized.voigt
+
+
+def get_smallest_nn_dist(atoms: Atoms) -> float:
+    """
+    Get the smallest NN distance in an Atoms object
+    """
+    nl_len = 0
+    cov_mult = 1
+    while nl_len == 0:
+        logger.info(
+            "Attempting to find NN distance by searching "
+            f"within covalent radii times {cov_mult}"
+        )
+        nl = neighbor_list("d", atoms, natural_cutoffs(atoms, mult=cov_mult))
+        nl_len = nl.size
+        cov_mult += 1
+    return nl.min()
 
 
 class FixProvidedSymmetry(FixSymmetry):

@@ -17,7 +17,6 @@ import numpy as np
 import numpy.typing as npt
 from ase import Atoms
 from ase.cell import Cell
-from ase.neighborlist import natural_cutoffs, neighbor_list
 from semver import Version
 from sympy import Symbol, linear_eq_to_matrix, matrix2numpy, parse_expr
 
@@ -30,6 +29,7 @@ from ..symmetry_util import (
     cartesian_rotation_is_in_point_group,
     get_possible_primitive_shifts,
     get_primitive_wyckoff_multiplicity,
+    get_smallest_nn_dist,
     get_wyck_pos_xform_under_normalizer,
     space_group_numbers_are_enantiomorphic,
 )
@@ -1605,20 +1605,12 @@ class AFLOW:
         """
         # If max_resid not provided, determine it from neighborlist
         if max_resid is None:
-            nl_len = 0
-            cov_mult = 1
-            while nl_len == 0:
-                logger.info(
-                    "Attempting to find NN distance by searching "
-                    f"within covalent radii times {cov_mult}"
-                )
-                nl = neighbor_list("d", atoms, natural_cutoffs(atoms, mult=cov_mult))
-                nl_len = nl.size
-                cov_mult += 1
             # set the maximum error to 1% of NN distance to follow AFLOW convention
             # rescale by cube root of cell volume to get rough conversion from
             # cartesian to fractional
-            max_resid = nl.min() * 0.01 * atoms.get_volume() ** (-1 / 3)
+            max_resid = (
+                get_smallest_nn_dist(atoms) * 0.01 * atoms.get_volume() ** (-1 / 3)
+            )
             logger.info(
                 "Automatically set max fractional residual for solving position "
                 f"equations to {max_resid}"

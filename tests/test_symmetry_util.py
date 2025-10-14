@@ -30,7 +30,6 @@ from kim_tools.symmetry_util.core import (
     PeriodExtensionException,
     fit_voigt_tensor_and_error_to_cell_and_space_group,
     fit_voigt_tensor_to_cell_and_space_group,
-    kstest_reduced_distances,
     reduce_and_avg,
     transform_atoms,
 )
@@ -73,16 +72,15 @@ def test_change_of_basis_atoms(
 
 def test_test_reduced_distances():
     data_file_has_period_extension = {
-        "structures/FeP_period_extended_phase_transition.data": True,
-        "structures/FeP_stable.data": False,
+        "structures/FeP_unstable.extxyz": True,
+        "structures/FeP_stable.extxyz": False,
     }
-    repeat = [11, 11, 11]
+    repeat = [10, 10, 10]
     for data_file in data_file_has_period_extension:
         has_period_extension = data_file_has_period_extension[data_file]
-        atoms = read(data_file, format="lammps-data")
-        _, reduced_distances = reduce_and_avg(atoms, repeat)
+        atoms = read(data_file)
         try:
-            kstest_reduced_distances(reduced_distances)
+            reduce_and_avg(atoms, repeat)
             assert not has_period_extension
         except PeriodExtensionException:
             assert has_period_extension
