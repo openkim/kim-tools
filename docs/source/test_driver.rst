@@ -109,12 +109,13 @@ Functionality not covered in the above example
 Molecular Dynamics
 ------------------
 
-If you are running an MD simulation, the structure you report should be time-averaged and likely averaged over the supercell folded back into the unit cell.
-This will give you more robust averages assuming the translational symmetry of the unit cell was not broken. At this time, the functions
-:func:`kim_tools.symmetry_util.core.reduce_and_avg` and :func:`kim_tools.symmetry_util.core.kstest_reduced_distances` allow you to perform these operations,
-assuming your supercell is built from contiguous repeats of the unit cell (i.e. atoms 0 to *N*-1 in the supercell are the original unit cell, atoms
-*N* to 2 *N*-1 are a the original unit cell shifted by an integer multiple of the lattice vectors, and so on). See
-https://github.com/openkim/kim-tools/blob/main/tests/test_symmetry_util.py for an example of how to use these functions.
+If you are running an MD simulation, the structure you report should be time-averaged and averaged over the supercell folded back into the unit cell.
+This will give you more robust averages assuming the translational symmetry of the unit cell was not broken. At this time, the function
+:func:`kim_tools.symmetry_util.core.reduce_and_avg` will perform the averaging assuming your supercell is built from contiguous repeats of the unit cell
+(i.e. atoms 0 to *N*-1 in the supercell are the original unit cell, atoms
+*N* to 2 *N*-1 are a the original unit cell shifted by an integer multiple of the lattice vectors, and so on). If the translational symmetry
+is broken, this function will detect it and raise an error. See
+https://github.com/openkim/kim-tools/blob/main/tests/test_symmetry_util.py for an example of how to use this function.
 
 Additionally, if you are performing an NPT simulation, you may as well write an instance of the
 `crystal-structure-npt <https://openkim.org/properties/show/crystal-structure-npt>`_ property for future re-use. Note the optional ``restart-file`` key.
@@ -128,8 +129,7 @@ You can then add it using ``self.``:func:`~kim_tools.test_driver.core.KIMTestDri
 
 .. todo::
 
-  Update :func:`kim_tools.symmetry_util.core.change_of_basis_atoms` to incorporate the functionalities of :func:`kim_tools.symmetry_util.core.reduce_and_avg`
-  and :func:`kim_tools.symmetry_util.core.kstest_reduced_distances`, without the restriction on how the supercell is built.
+  Update :func:`kim_tools.symmetry_util.core.change_of_basis_atoms` to incorporate the functionality of :func:`kim_tools.symmetry_util.core.reduce_and_avg`, without the restriction on how the supercell is built.
 
 Writting Test Drivers using LAMMPS
 ----------------------------------

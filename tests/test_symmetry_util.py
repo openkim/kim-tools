@@ -28,7 +28,6 @@ from kim_tools.aflow_util.core import get_atom_indices_for_each_wyckoff_orb
 from kim_tools.symmetry_util.core import (
     FixProvidedSymmetry,
     PeriodExtensionException,
-    cutoff_test_reduced_distances,
     fit_voigt_tensor_and_error_to_cell_and_space_group,
     fit_voigt_tensor_to_cell_and_space_group,
     reduce_and_avg,
@@ -76,13 +75,12 @@ def test_test_reduced_distances():
         "structures/FeP_unstable.extxyz": True,
         "structures/FeP_stable.extxyz": False,
     }
-    repeat = [11, 11, 11]
+    repeat = [10, 10, 10]
     for data_file in data_file_has_period_extension:
         has_period_extension = data_file_has_period_extension[data_file]
         atoms = read(data_file)
-        reduced_atoms, reduced_distances = reduce_and_avg(atoms, repeat)
         try:
-            cutoff_test_reduced_distances(reduced_atoms, reduced_distances)
+            reduce_and_avg(atoms, repeat)
             assert not has_period_extension
         except PeriodExtensionException:
             assert has_period_extension

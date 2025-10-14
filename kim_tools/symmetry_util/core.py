@@ -639,14 +639,16 @@ def transform_atoms(atoms: Atoms, op: Dict) -> Atoms:
     return atoms_transformed
 
 
-def reduce_and_avg(
-    atoms: Atoms, repeat: Tuple[int, int, int]
-) -> Tuple[Atoms, npt.ArrayLike]:
+def reduce_and_avg(atoms: Atoms, repeat: Tuple[int, int, int]) -> Atoms:
     """
     TODO: Upgrade :func:`change_of_basis_atoms` to provide the distances
     array, obviating this function
 
-    Function to reduce all atoms to the original unit cell position.
+    Function to reduce all atoms to the original unit cell position,
+    assuming the supercell is built from contiguous repeats of the unit cell
+    (i.e. atoms 0 to N-1 in the supercell are the original unit cell, atoms N to
+    2*[N-1] are the original unit cell shifted by an integer multiple of
+    the lattice vectors, and so on)
 
     Args:
         atoms:
@@ -656,10 +658,13 @@ def reduce_and_avg(
             provided supercell
 
     Returns:
-        * The reduced unit cell
-        * An array of displacement vectors. First dimension: index of reference atom
-          in reduced cell. Second dimension: index of atom in provided supercell.
-          Third dimension: x, y, z
+        The reduced unit cell
+
+    Raises:
+        PeriodExtensionException:
+            If two atoms that should be identical by translational symmetry
+            are further than 0.01*(smallest NN distance) apart when
+            reduced to the unit cell
     """
     new_atoms = atoms.copy()
 
@@ -690,56 +695,46 @@ def reduce_and_avg(
     # Start from end of the atoms
     # because we will remove all atoms except the reference ones.
     for i in reversed(range(number_atoms)):
+        reference_atom_index = i % original_number_atoms
         if i >= original_number_atoms:
             # Get the distance to the reference atom in the original unit cell with the
             # minimum image convention.
             distance = new_atoms.get_distance(
-                i % original_number_atoms, i, mic=True, vector=True
+                reference_atom_index, i, mic=True, vector=True
             )
             # Get the position that has the closest distance to
             # the reference atom in the original unit cell.
-            position_i = positions[i % original_number_atoms] + distance
+            position_i = positions[reference_atom_index] + distance
             # Remove atom from atoms object.
             new_atoms.pop()
         else:
             # Atom was part of the original unit cell.
             position_i = positions[i]
         # Average
-        avg_positions_in_prim_cell[i % original_number_atoms] += position_i / M
+        avg_positions_in_prim_cell[reference_atom_index] += position_i / M
         positions_in_prim_cell[i] = position_i
 
     new_atoms.set_positions(avg_positions_in_prim_cell)
 
-    # Calculate the distances.
-    distances = np.empty((original_number_atoms, M, 3))
-    for i in range(number_atoms):
-        dr, _ = get_distances(
-            positions_in_prim_cell[i],
-            avg_positions_in_prim_cell[i % original_number_atoms],
+    # Check that all atoms
+    cutoff = get_smallest_nn_dist(new_atoms) * 0.01
+    logger.info(f"Cutoff for period extension test is {cutoff}")
+    for i in range(original_number_atoms):
+        positions_of_all_images_of_atom_i = [
+            positions_in_prim_cell[j * original_number_atoms + i] for j in range(M)
+        ]
+        _, r = get_distances(
+            positions_of_all_images_of_atom_i,
             cell=new_atoms.get_cell(),
             pbc=True,
         )
         # dr is a distance matrix, here we only have one distance
-        assert dr.shape == (1, 1, 3)
-        distances[i % original_number_atoms, i // original_number_atoms] = dr[0][0]
-
-    return new_atoms, distances
-
-
-def cutoff_test_reduced_distances(
-    reduced_atoms: Atoms,
-    reduced_distances: npt.ArrayLike,
-):
-    """
-    Simply test if the reduced distances are within the cutoff
-    0.01*(smallest NN distance)
-    """
-    cutoff = get_smallest_nn_dist(reduced_atoms) * 0.01
-    logger.info(f"Cutoff for period extension test is {cutoff}")
-    n, m, _ = reduced_distances.shape
-    for i, j in product(range(n), range(m)):
-        if np.linalg.norm(reduced_distances[i, j, :]) > cutoff:
-            raise PeriodExtensionException
+        assert r.shape == (M, M)
+        if r.max() > cutoff:
+            raise PeriodExtensionException(
+                f"At least one image of atom {i} is outside of tolerance"
+            )
+    return new_atoms
 
 
 def voigt_to_full_symb(voigt_input: sp.Array) -> sp.MutableDenseNDimArray:
