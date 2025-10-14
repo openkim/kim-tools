@@ -88,6 +88,9 @@ the usage of the following functions. Click the links below for more information
 - ``self.``:func:`~kim_tools.test_driver.core.KIMTestDriver._add_file_to_current_property_instance`:
   For adding keys with the "file" type to your Property Instance, e.g. restart files or images
 
+.. note::
+
+  The units you choose for writing property key values must be comprehensible by the GNU ``units`` utility.
 
 .. _doc.example_test_driver:
 
@@ -122,6 +125,10 @@ Additionally, if you are performing an NPT simulation, you may as well write an 
 It is recommended that you save a restart file (for example, ``restart.dump``).
 You can then add it using ``self.``:func:`~kim_tools.test_driver.core.KIMTestDriver._add_file_to_current_property_instance`.
 
+.. note::
+
+  Your Test Driver should take a fixed seed with a default value as an argument. The user can randomize this input if needed. If you run multiple simulations in your Test Driver, please derive additional seeds deterministically from the input seed.
+
 .. code-block:: Python
 
   self._add_property_instance_and_common_crystal_genome_keys("crystal-structure-npt",write_temp=True,write_stress=True)
@@ -136,10 +143,8 @@ Writting Test Drivers using LAMMPS
 
 In general, using ASE to perform the computations is preferable, but you may need access to LAMMPS functionality, for example to run a large parallel MD or static
 calculation with domain decomposition. You may use LAMMPS in whichever way is most convenient for you as long as it is wrapped within the ``_calculate`` Python
-method.
-For example, one way to run a LAMMPS simulation in this framework is to export your atomic configuration using :func:`ase.io.write`, create LAMMPS input file(s)
-with `kim commands <https://docs.lammps.org/kim_commands.html>`_ using the KIM model stored in the base class' attribute ``self.``:attr:`~kim_tools.test_driver.core.KIMTestDriver.kim_model_name`,
-run your simulation(s), and read the configuration back in using :func:`ase.io.read` (for example, to re-detect the changed crystal structure).
+method. For example, one way to run a LAMMPS simulation in this framework is to export your atomic configuration using :func:`ase.io.write`, create LAMMPS input file(s)
+with `kim commands <https://docs.lammps.org/kim_commands.html>`_ using the KIM model stored in the base class' attribute ``self.``:attr:`~kim_tools.test_driver.core.KIMTestDriver.kim_model_name`, run your simulation(s), and read the configuration back in using :func:`ase.io.read` (for example, to re-detect the changed crystal structure).
 
 There are some special considerations when using LAMMPS to write KIM Test Drivers. See https://github.com/openkim-hackathons/CrystalGenomeLAMMPSExample__TD_000000654322_000
 for a trivial Crystal Genome LAMMPS example.
@@ -153,6 +158,9 @@ for a trivial Crystal Genome LAMMPS example.
 * By default, LAMMPS will un-skew the box if it gets too tilted. This can cause :func:`~kim_tools.test_driver.core.SingleCrystalTestDriver._update_nominal_parameter_values`
   to fail. To suppress this LAMMPS behavior, use the ``flip no`` option with ``fix npt`` or ``fix deform``. See
   https://docs.lammps.org/Howto_triclinic.html#periodicity-and-tilt-factors-for-triclinic-simulation-boxes for more info.
+* If you are running the LAMMPS executable (e.g. using ``subprocess``), your Test Driver should take the name of the LAMMPS executable as an argument with the default value ``"lmp"``.
+  In this case, there should not be internal logic in the Test Driver for running LAMMPS with MPI -- your Driver should support being passed e.g. ``"mpirun -np 2 lmp"``. This way,
+  the user (or OpenKIM pipeline) can explicitly handle running in parallel on their machine.
 
 .. todo::
 

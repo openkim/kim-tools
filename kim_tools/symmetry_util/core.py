@@ -716,7 +716,7 @@ def reduce_and_avg(atoms: Atoms, repeat: Tuple[int, int, int]) -> Atoms:
 
     new_atoms.set_positions(avg_positions_in_prim_cell)
 
-    # Check that all atoms
+    # Check that all atoms are within tolerance of their translational images
     cutoff = get_smallest_nn_dist(new_atoms) * 0.01
     logger.info(f"Cutoff for period extension test is {cutoff}")
     for i in range(original_number_atoms):
@@ -728,7 +728,10 @@ def reduce_and_avg(atoms: Atoms, repeat: Tuple[int, int, int]) -> Atoms:
             cell=new_atoms.get_cell(),
             pbc=True,
         )
-        # dr is a distance matrix, here we only have one distance
+        # Checking full MxM matrix, could probably speed up by
+        # checking upper triangle only. Could also save memory
+        # by looping over individual distances instead of
+        # checking the max of a giant matrix
         assert r.shape == (M, M)
         if r.max() > cutoff:
             raise PeriodExtensionException(
