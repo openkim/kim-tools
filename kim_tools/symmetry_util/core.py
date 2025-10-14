@@ -524,7 +524,7 @@ def change_of_basis_atoms(
     that ``change_of_basis`` is appropriate for the particuar crystal described by
     ``atoms``, which is up to the user.
 
-    TODO: Incorporate :func:`cutoff_test_reduced_distances` into this function
+    TODO: Incorporate period extension test into this function
 
     Args:
         atoms:
