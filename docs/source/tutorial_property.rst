@@ -16,10 +16,12 @@ Here are some examples of existing Crystal Genome properties:
 
 It is possible that your Test Driver will write multiple material properties. In this case, create a separate property definition file for each. For example, the bulk modulus and elastic constants shown above are separate properties.
 
-``kim-tools`` will automatically look for property definitions in the ``local-props`` and ``local_props`` subdirectories of the current working directory. If you wish to put them somewhere else,
+Once your property is finalized, you will need to request a member of the OpenKIM team to permanently add it to the collection of `KIM Property Definitions <https://openkim.org/properties>`_. This will trigger a new release of the `kim-property <https://github.com/openkim/kim-property>`_
+package containing your new definition, making it automatically usable by your Test Driver if ``kim-property`` is up to date.
+
+If you prefer to keep your property as a local file during development, ``kim-tools`` will automatically look for property definitions in the ``local-props`` and ``local_props`` subdirectories of the current working directory. If you wish to put them somewhere else,
 you can point the environment variable ``KIM_PROPERTY_PATH`` to their location. ``kim-tools`` will expand any globs, including recursive ``**``.
 
-Once your property is finalized, you will need to request a member of the OpenKIM team to permanently add it to the collection of `KIM Property Definitions <https://openkim.org/properties>`_. Your property should only be added after you have gone through the rest of the steps in this tutorial to make sure you do not encounter any unanticipated problems while developing your Test Driver. However, you are encouraged to contact us early in the development to begin iterating on your property definiton.
 
 Tips
 ====

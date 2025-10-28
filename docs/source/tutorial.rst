@@ -33,7 +33,7 @@ Submitting Your Test Driver
 
 When your Test Driver is complete (meaning you have completed the 5 tasks outlined above), take the following final steps to get your Test Driver submitted to OpenKIM.org and running in the Pipeline:
 
-    * Request a member of the OpenKIM team to permanently add your Property Definition to the collection of `KIM Property Definitions <https://openkim.org/properties>`_.
+    * If you have not done so already, request a member of the OpenKIM team to permanently add your Property Definition to the collection of `KIM Property Definitions <https://openkim.org/properties>`_.
     * Request a member of the OpenKIM team to add you to the ``openkim-dev-tests`` Github organization, and transfer ownership of your repo there.
     * Create an OpenKIM account at https://openkim.org/new-account.
-    * Submit a ``tar.gz`` of your Test Driver at https://openkim.org/contribute/test-driver/. Create this archive by issuing a release on Github with the tag ``v000``. The ``.gitattributes`` file provided with the example Test Driver already has the correct settings to only export the needed files. Follow the instructions in the form to fill out the information about your Test Driver.
+    * Submit a ``tar.gz`` of your Test Driver at https://openkim.org/contribute/test-driver/. Create this archive by issuing a release on Github with the tag ``v000``. The ``.gitattributes`` file provided with the example Test Driver already has the correct settings to only export the needed files. Follow the instructions in the form to fill out the information about your Test Driver. Before you submit, you will be provided a ``.txz`` archive named ``InProgress...``. Repeat the ``kimvv`` integration test one last time with this archive, then you are ready to submit!

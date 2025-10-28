@@ -16,7 +16,7 @@ Everything you need to run the example script is containerized in the :ref:`doc.
 or alternatively will be installed if you follow the :ref:`doc.standalone_installation`, except for the ``kimvv`` package, which can be installed using
 ``pip install kimvv``.
 
-``kim-tools`` will automatically look for property definitions in the ``local-props`` and ``local_props`` subdirectories of the current working directory. If you wish to put them somewhere else,
+If you have not requested your new properties to be added to OpenKIM, remember that ``kim-tools`` will automatically look for property definitions in the ``local-props`` and ``local_props`` subdirectories of the current working directory. If you wish to put them somewhere else,
 you can point the environment variable ``KIM_PROPERTY_PATH`` to their location. ``kim-tools`` will expand any globs, including recursive ``**``.
 
 .. _doc.example_script:

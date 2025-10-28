@@ -92,14 +92,22 @@ file is correctly configured to ignore any files and directories that should be 
    * - Issue a release by clicking the "Create a new release" link in your Test Driver repository:
      - .. image:: release_start.png
         :width: 500px
-   * - Once the release is issued, you will need the URL of the ``.tar.gz`` file created by GitHub as part of it:
+   * - Once the release is issued, you will need the URL of the ``.tar.gz`` file created by GitHub as part of it, or the file itself:
      - .. image:: release_download.png
         :width: 500px
 
 Next, you need to add the URL of the ``.tar.gz`` to the ``pre_setup.py`` script in your fork of ``kimvv``. An example fork for testing the example Test Driver is available,
 and here is where you add the URL: `pre_setup.py <https://github.com/openkim-hackathons/kimvv-example-driver-testing-fork/blob/main/pre_setup.py>`_.
-Finally, you need to add your Property Definitions to the ``test/local-props`` directory of your ``kimvv`` fork. Alternatively, you can skip this by requesting an OpenKIM team member
-to already publish your Property and add it to the ``kim-property`` package.
+Alternatively, you may add the archive directly to your fork, and add the filename to ``pre_setup.py``, like in this example: https://github.com/openkim-hackathons/kimvv-example-LAMMPS-driver-testing-fork/blob/main/pre_setup.py (the archive is simply in the top level of the repo). Note that ``DEVEL_TEST_DRIVERS`` is a dictionary
+with the path or URL as a key. The values are the dictionary of additional non-default arguments you wish to pass to your Test Driver for testing. For example, for a molecular dynamics
+TD, you will likely want to specify a small system size so it can run in reasonable time on a free GitHub runner.
+
+.. note::
+
+  If you are performing the final test before hitting "submit" on the openkim.org web form, you should use your ``InProgress`` ``.txz`` archive from the webapp
+  instead of from GitHub.
+
+Finally, if your properties have not yet been added to openkim.org, you need to add your Property Definitions to the ``test/local-props`` directory of your ``kimvv`` fork.
 
 Checking that your fork passes the tests
 ========================================
