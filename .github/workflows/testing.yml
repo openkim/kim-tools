@@ -65,6 +65,7 @@ jobs:
         shell: bash -el {0}
         run: |
           export PATH=$PATH:$PWD/aflow-4.0.5-Linux/bin
+          python -m pip install pytest-cov
           cd tests
           pytest --cov kim_tools --cov-report=xml
 
