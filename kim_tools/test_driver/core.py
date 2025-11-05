@@ -35,6 +35,7 @@ import json
 import logging
 import os
 import shutil
+import tarfile
 from abc import ABC, abstractmethod
 from copy import deepcopy
 from pathlib import Path
@@ -557,6 +558,10 @@ class KIMTestDriver(ABC):
         __output_property_instances (str):
             Property instances, possibly accumulated over multiple invocations of
             the Test Driver
+        __files_to_keep_in_output (List[PathLike]):
+            List of files that were written by this class explicitly, that we won't
+            touch when cleaning and backing up the output directory. Specified
+            relative to 'output' directory.
     """
 
     class NonKIMModelError(Exception):
@@ -589,6 +594,25 @@ class KIMTestDriver(ABC):
                     self.__calc.parameters.log_file = None
 
         self.__output_property_instances = "[]"
+        self.__files_to_keep_in_output = []
+
+        os.makedirs("output", exist_ok=True)
+        # Will return all non-hidden files and directories
+        output_glob = glob.glob("output/*")
+        if len(output_glob) > 0:
+            i = 0
+            while os.path.exists(f"output.{i}"):
+                i += 1
+            output_bak_name = f"output.{i}"
+            msg = (
+                "'output' directory is non-empty, backing up all "
+                f"non-hidden files and directories to {output_bak_name}"
+            )
+            print(msg)
+            logger.info(msg)
+            os.mkdir(output_bak_name)
+            for file_in_output in output_glob:
+                shutil.move(file_in_output, output_bak_name)
 
     def _setup(self, material, **kwargs) -> None:
         """
@@ -624,13 +648,55 @@ class KIMTestDriver(ABC):
         # count how many instances we had before we started
         previous_properties_end = len(kim_edn.loads(self.__output_property_instances))
 
-        os.makedirs("output", exist_ok=True)
+        # We should have a record of all non-hidden files in output. If any
+        # untracked files are present, raise an error
+        output_glob = glob.glob("output/**", recursive=True)
+        for filepath in output_glob:
+            if os.path.isfile(filepath):  # not tracking directories
+                if (
+                    os.path.relpath(filepath, "output")
+                    not in self.__files_to_keep_in_output
+                ):
+                    raise KIMTestDriverError(
+                        f"Unknown file {filepath} in 'output' directory appeared "
+                        "between calls to this Test Driver. This is not allowed "
+                        "because stray files can cause issues."
+                    )
 
         # _setup is likely overridden by an derived class
         self._setup(material, **kwargs)
 
         # implemented by each individual Test Driver
         self._calculate(**kwargs)
+
+        # Archive untracked files as aux files
+        i = 0
+        while f"aux_files.{i}.txz" in self.__files_to_keep_in_output:
+            assert os.path.isfile(f"output/aux_files.{i}.txz")
+            i += 1
+        tar_prefix = f"aux_files.{i}"
+        output_glob = glob.glob("output/**", recursive=True)
+        archived_files = []  # For deleting them later
+        with tarfile.open(f"output/{tar_prefix}.txz", "w:xz") as tar:
+            for filepath in output_glob:
+                if os.path.isfile(filepath):  # not tracking directories
+                    output_relpath = os.path.relpath(filepath, "output")
+                    if output_relpath not in self.__files_to_keep_in_output:
+                        tar.add(
+                            os.path.join(filepath),
+                            os.path.join(tar_prefix, output_relpath),
+                        )
+                        archived_files.append(filepath)
+        self.__files_to_keep_in_output.append(f"{tar_prefix}.txz")
+        for filepath in archived_files:
+            os.remove(filepath)
+            try:
+                os.removedirs(os.path.dirname(filepath))
+            except OSError:
+                pass  # might not be empty yet
+
+        # should not have removed output dir in any situation
+        assert os.path.isdir("output")
 
         # The current invocation returns a Python list of dictionaries containing all
         # properties computed during this run
@@ -765,10 +831,10 @@ class KIMTestDriver(ABC):
 
         shutil.move(filename, final_path)
 
+        output_relpath = os.path.relpath(final_path, output_path)
         # Filenames are reported relative to $CWD/output
-        self._add_key_to_current_property_instance(
-            name, os.path.relpath(final_path, output_path)
-        )
+        self._add_key_to_current_property_instance(name, output_relpath)
+        self.__files_to_keep_in_output.append(output_relpath)
 
     def _get_supported_lammps_atom_style(self) -> str:
         """
@@ -841,17 +907,14 @@ class KIMTestDriver(ABC):
         os.makedirs(filename_parent, exist_ok=True)
         kim_property_dump(self._get_serialized_property_instances(), filename)
         if filename_parent != Path("output").resolve():
-            for file_in_output in glob.glob("output/*"):
-                file_in_output_name = str(Path(file_in_output).name)
-                for instance in self.property_instances:
-                    for key in instance:
-                        if isinstance(instance[key], dict):
-                            if file_in_output_name == instance[key]["source-value"]:
-                                shutil.move(file_in_output, filename_parent)
-                            elif isinstance(instance[key]["source-value"], list):
-                                for file_in_property in instance[key]["source-value"]:
-                                    if file_in_output_name == file_in_property:
-                                        shutil.move(file_in_output, filename_parent)
+            msg = (
+                f"Writing properties .edn file to non-standard location {filename}. "
+                "note that all other files remain in 'output' directory."
+            )
+            print(msg)
+            logger.info(msg)
+        else:
+            self.__files_to_keep_in_output.append(os.path.relpath(filename, "output"))
 
     def get_isolated_energy_per_atom(self, symbol: str) -> float:
         """

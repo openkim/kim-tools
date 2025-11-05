@@ -1,7 +1,11 @@
 #!/usr/bin/python
 
+import glob
 import os
+import shutil
 import subprocess
+import tarfile
+from tempfile import TemporaryDirectory
 
 import kim_edn
 import numpy as np
@@ -12,6 +16,7 @@ from ase.calculators.lj import LennardJones
 
 from kim_tools import (
     KIMTestDriver,
+    KIMTestDriverError,
     SingleCrystalTestDriver,
     cartesian_rotation_is_in_point_group,
     detect_unique_crystal_structures,
@@ -76,12 +81,56 @@ class TestStructureDetectionTestDriver(SingleCrystalTestDriver):
 class FileWritingTestDriver(KIMTestDriver):
     def _calculate(self):
         """
-        Mock calculate for file writing testing
+        Mock calculate for file writing testing. Will result in the following
+        files being created under the output directory and listed in the property
+        instance (n is the number of times _calculate has been previously called):
+
+        output/foo_prop-{3*n+1}.txt
+        output/bar/bar_prop-{3*n+2}.txt
+        output/baz_prop-{3*n+3}
+
+        And an archive named aux_files.{n}.txz containing the following directory
+        tree:
+        aux_files.{n}/foo
+        aux_files.{n}/bar/bar
+        aux_files.{n}/baz/baz
         """
         self._add_property_instance("file-prop")
-        with open("foo.txt", "w") as f:
+        with open("output/foo_prop.txt", "w") as f:
             f.write("foo")
-        self._add_file_to_current_property_instance("textfile", "foo.txt")
+        # Because it's under output, should leave it untouched except rename
+        # to foo_prop-{n+1}.txt (where n is the number of times _calculate has been
+        # previously called)
+        self._add_file_to_current_property_instance("textfile", "output/foo_prop.txt")
+
+        self._add_property_instance("file-prop")
+        os.makedirs("bar", exist_ok=True)
+        with open("bar/bar_prop.txt", "w") as f:
+            f.write("bar")
+        # Not under output, but under CWD, so should preserve relative path and
+        # write to "output/bar/bar_prop-{n+1}.txt (where n is the number of times
+        # _calculate has been previously called)
+        self._add_file_to_current_property_instance("textfile", "bar/bar_prop.txt")
+        os.rmdir("bar")
+
+        self._add_property_instance("file-prop")
+        with TemporaryDirectory() as d:
+            tempfilepath = os.path.join(d, "baz_prop")
+            with open(tempfilepath, "w") as f:
+                f.write("baz")
+            # Random path in system not under CWD, so should just go to
+            # "output/baz_prop-{n+1}.txt (where n is the number of times
+            # _calculate has been previously called)
+            self._add_file_to_current_property_instance("textfile", tempfilepath)
+
+        # Now, write some auxiliary files
+        with open("output/foo", "w") as f:
+            f.write("foo")
+        with open("output/bar/bar", "w") as f:
+            f.write("bar")
+        os.makedirs("output/baz", exist_ok=True)
+        with open("output/baz/baz", "w") as f:
+            f.write("baz")
 
 
 def test_kimtest(monkeypatch):
@@ -243,18 +292,120 @@ def test_init_rotation():
 
 
 def test_file_writing():
-    td = FileWritingTestDriver(LennardJones())
-    td()
-    td.write_property_instances_to_file()
-    assert os.path.isfile("output/foo-1.txt")
-    # add a file into output to make sure it's not being moved
-    with open("output/bar", "w") as f:
-        f.write("bar")
-    td.write_property_instances_to_file("foo.edn")
-    # will raise a filenotfound error if missing
-    os.remove("foo.edn")
-    os.remove("foo-1.txt")
-    os.remove("output/bar")
+    """
+    The n-th call (zero-based) to FileWritingTestDriver should
+    result in the following directory structure:
+
+    output/foo_prop-{n+1}.txt
+    output/bar/bar_prop-{n+2}.txt
+    output/baz_prop-{n+3}
+
+    And an archive named output/aux_files.{n}.txz containing the following directory
+    tree:
+    aux_files.{n}/foo
+    aux_files.{n}/bar/bar
+    aux_files.{n}/baz/baz
+    """
+    oldcwd = os.getcwd()
+    with TemporaryDirectory() as d:
+        shutil.copytree("local-props", os.path.join(d, "local-props"))
+        os.chdir(d)
+        os.mkdir("output")
+        dotfile_path = "output/.dotfile"
+        with open(dotfile_path, "w") as f:
+            f.write("foo")
+        td = FileWritingTestDriver(LennardJones())
+        # Dotfile should not get touched or flagged
+        # for a nonnempty directory
+        assert os.path.isfile(dotfile_path)
+        assert not os.path.isdir("output.0")
+        # Call the TD once
+        td()
+        # Should not go in output directory
+        td.write_property_instances_to_file("results.edn")
+        assert os.path.isfile("results.edn")
+        n = 0
+        assert os.path.isfile(f"output/foo_prop-{3*n+1}.txt")
+        assert os.path.isfile(f"output/bar/bar_prop-{3*n+2}.txt")
+        assert os.path.isfile(f"output/baz_prop-{3*n+3}")
+        with tarfile.open(f"output/aux_files.{n}.txz") as tar:
+            assert len(tar.getmembers()) == 3
+            for member in tar.getmembers():
+                assert member.name in [
+                    f"aux_files.{n}/foo",
+                    f"aux_files.{n}/bar/bar",
+                    f"aux_files.{n}/baz/baz",
+                ]
+        # Baz should have been cleaned up
+        assert not os.path.isdir("output/baz")
+
+        # Remake baz and put a dotfile in there. Should not create a problem
+        os.mkdir("output/baz")
+        with open("output/baz/.dotfile", "w") as f:
+            f.write("foo")
+
+        # Run the TD again
+        td()
+        td.write_property_instances_to_file()
+        assert os.path.isfile("output/results.edn")
+        # Dotfiles should not have been touched
+        assert os.path.isfile(dotfile_path)
+        assert os.path.isfile("output/baz/.dotfile")
+        for n in range(2):
+            assert os.path.isfile(f"output/foo_prop-{3*n+1}.txt")
+            assert os.path.isfile(f"output/bar/bar_prop-{3*n+2}.txt")
+            assert os.path.isfile(f"output/baz_prop-{3*n+3}")
+            with tarfile.open(f"output/aux_files.{n}.txz") as tar:
+                assert len(tar.getmembers()) == 3
+                for member in tar.getmembers():
+                    assert member.name in [
+                        f"aux_files.{n}/foo",
+                        f"aux_files.{n}/bar/bar",
+                        f"aux_files.{n}/baz/baz",
+                    ]
+
+        # make a non-dot file under baz. Now TD should detect the issue and crash
+        with open("output/baz/nondotfile", "w") as f:
+            f.write("foo")
+
+        try:
+            td()
+            assert False
+        except KIMTestDriverError:
+            assert True
+
+        # Reinstantiate the Test Driver. It should find the lowest
+        # output.{n} available and back up the existing output there
+        os.mkdir("output.0")
+        td = FileWritingTestDriver(LennardJones())
+        # Root dotfile should not have been touched
+        assert not os.path.exists("output.1/.dotfile")
+        # Non-root dotfiles should have been moved
+        assert os.path.isfile("output.1/baz/.dotfile")
+
+        # Other files
+        assert os.path.isfile("output.1/baz/nondotfile")
+        assert os.path.isfile("output.1/results.edn")
+
+        # Files writted inside calculate
+        for n in range(2):
+            assert os.path.isfile(f"output.1/foo_prop-{3*n+1}.txt")
+            assert os.path.isfile(f"output.1/bar/bar_prop-{3*n+2}.txt")
+            assert os.path.isfile(f"output.1/baz_prop-{3*n+3}")
+            with tarfile.open(f"output.1/aux_files.{n}.txz") as tar:
+                assert len(tar.getmembers()) == 3
+                for member in tar.getmembers():
+                    assert member.name in [
+                        f"aux_files.{n}/foo",
+                        f"aux_files.{n}/bar/bar",
+                        f"aux_files.{n}/baz/baz",
+                    ]
+
+        # New output directory should be clean with only a the dotfile in there
+        assert os.path.isfile(dotfile_path)
+        assert len(glob.glob("output/*")) == 0
+
+    os.chdir(oldcwd)
 
 
 def test_atom_style():
