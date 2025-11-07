@@ -50,7 +50,7 @@ jobs:
         run: |
           brew tap aflow-org/aflow
           brew install aflow
-          brew install gunits
+          brew install gnu-units
 
       - name: Install
         shell: bash -el {0}
