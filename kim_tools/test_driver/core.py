@@ -39,6 +39,7 @@ import tarfile
 from abc import ABC, abstractmethod
 from copy import deepcopy
 from pathlib import Path
+from secrets import token_bytes
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import IO, Any, Dict, List, Optional, Union
 
@@ -110,6 +111,7 @@ PROP_SEARCH_PATHS_INFO = (
     "- $PWD/local-props/**/\n"
     "- $PWD/local_props/**/"
 )
+TOKENPATH = "output/.token"
 
 
 def get_supported_lammps_atom_style(model: str) -> str:
@@ -562,6 +564,10 @@ class KIMTestDriver(ABC):
             List of files that were written by this class explicitly, that we won't
             touch when cleaning and backing up the output directory. Specified
             relative to 'output' directory.
+        __token (Optional[bytes]):
+            Token that is written to 'output/.token' upon first evaluation. This
+            is used to check that multiple Test Drivers are not being called
+            concurrently, causing potential conflicts in the output directory
     """
 
     class NonKIMModelError(Exception):
@@ -595,24 +601,7 @@ class KIMTestDriver(ABC):
 
         self.__output_property_instances = "[]"
         self.__files_to_keep_in_output = []
-
-        os.makedirs("output", exist_ok=True)
-        # Will return all non-hidden files and directories
-        output_glob = glob.glob("output/*")
-        if len(output_glob) > 0:
-            i = 0
-            while os.path.exists(f"output.{i}"):
-                i += 1
-            output_bak_name = f"output.{i}"
-            msg = (
-                "'output' directory is non-empty, backing up all "
-                f"non-hidden files and directories to {output_bak_name}"
-            )
-            print(msg)
-            logger.info(msg)
-            os.mkdir(output_bak_name)
-            for file_in_output in output_glob:
-                shutil.move(file_in_output, output_bak_name)
+        self.__token = None
 
     def _setup(self, material, **kwargs) -> None:
         """
@@ -620,33 +609,56 @@ class KIMTestDriver(ABC):
         """
         pass
 
-    @abstractmethod
-    def _calculate(self, **kwargs) -> None:
+    def _init_output_dir(self) -> None:
         """
-        Abstract calculate method
+        Initialize the output directory
         """
-        raise NotImplementedError("Subclasses must implement the _calculate method.")
+        if self.__token is None:
+            # First time we've called this instance of the class
+            assert len(self.property_instances) == 0
 
-    def __call__(self, material: Any = None, **kwargs) -> List[Dict]:
-        """
+            os.makedirs("output", exist_ok=True)
 
-        Main operation of a Test Driver:
+            # Move all top-level non-hidden files and directories
+            # to backup
+            output_glob = glob.glob("output/*")
+            if len(output_glob) > 0:
+                i = 0
+                while os.path.exists(f"output.{i}"):
+                    i += 1
+                output_bak_name = f"output.{i}"
+                msg = (
+                    "'output' directory is non-empty, backing up all "
+                    f"non-hidden files and directories to {output_bak_name}"
+                )
+                print(msg)
+                logger.info(msg)
+                os.mkdir(output_bak_name)
+                for file_in_output in output_glob:
+                    shutil.move(file_in_output, output_bak_name)
 
-            * Run :func:`~KIMTestDriver._setup` (the base class provides a barebones
-              version, derived classes may override)
-            * Call :func:`~KIMTestDriver._calculate` (implemented by each individual
-              Test Driver)
-
-        Args:
-            material:
-                Placeholder object for arguments describing the material to run
-                the Test Driver on
-
-        Returns:
-            The property instances calculated during the current run
-        """
-        # count how many instances we had before we started
-        previous_properties_end = len(kim_edn.loads(self.__output_property_instances))
+            # Create token
+            self.__token = token_bytes(16)
+            with open(TOKENPATH, "wb") as f:
+                f.write(self.__token)
+        else:
+            # Token is stored, check that it matches the token file
+            if not os.path.isfile(TOKENPATH):
+                raise KIMTestDriverError(
+                    f"Token file at {TOKENPATH} was not found,"
+                    "can't confirm non-interference of Test Drivers. Did something "
+                    "edit the 'output' directory between calls to this Test Driver?"
+                )
+            else:
+                with open(TOKENPATH, "rb") as f:
+                    if self.__token != f.read():
+                        raise KIMTestDriverError(
+                            f"Token file at {TOKENPATH} does not match this object's "
+                            "token. This likely means that a different KIMTestDriver "
+                            "instance was called between calls to this one. In order to"
+                            " prevent conflicts in the output directory, this is not "
+                            "allowed."
+                        )
 
         # We should have a record of all non-hidden files in output. If any
         # untracked files are present, raise an error
@@ -663,12 +675,10 @@ class KIMTestDriver(ABC):
                         "because stray files can cause issues."
                     )
 
-        # _setup is likely overridden by an derived class
-        self._setup(material, **kwargs)
-
-        # implemented by each individual Test Driver
-        self._calculate(**kwargs)
-
+    def _archive_aux_files(self) -> None:
+        """
+        Archive aux files after a run
+        """
         # Archive untracked files as aux files
         i = 0
         while f"aux_files.{i}.txz" in self.__files_to_keep_in_output:
@@ -698,9 +708,52 @@ class KIMTestDriver(ABC):
         # should not have removed output dir in any situation
         assert os.path.isdir("output")
 
+    @abstractmethod
+    def _calculate(self, **kwargs) -> None:
+        """
+        Abstract calculate method
+        """
+        raise NotImplementedError("Subclasses must implement the _calculate method.")
+
+    def __call__(self, material: Any = None, **kwargs) -> List[Dict]:
+        """
+
+        Main operation of a Test Driver:
+
+            * Run :func:`~KIMTestDriver._setup` (the base class provides a barebones
+              version, derived classes may override)
+            * Call :func:`~KIMTestDriver._init_output_dir`
+            * Call :func:`~KIMTestDriver._calculate` (implemented by each individual
+              Test Driver)
+            * Call :func:`~KIMTestDriver._archive_aux_files`
+
+        Args:
+            material:
+                Placeholder object for arguments describing the material to run
+                the Test Driver on
+
+        Returns:
+            The property instances calculated during the current run
+        """
+
+        # count how many instances we had before we started
+        previous_properties_end = len(self.property_instances)
+
+        # Set up the output directory
+        self._init_output_dir()
+
+        # _setup is likely overridden by an derived class
+        self._setup(material, **kwargs)
+
+        # implemented by each individual Test Driver
+        self._calculate(**kwargs)
+
+        # Postprocess output directory for this invocation
+        self._archive_aux_files()
+
         # The current invocation returns a Python list of dictionaries containing all
         # properties computed during this run
-        return kim_edn.loads(self.__output_property_instances)[previous_properties_end:]
+        return self.property_instances[previous_properties_end:]
 
     def _add_property_instance(
         self, property_name: str, disclaimer: Optional[str] = None
@@ -818,7 +871,7 @@ class KIMTestDriver(ABC):
 
         input_name = filename_path.name
         if add_instance_id:
-            current_instance_id = len(kim_edn.loads(self.__output_property_instances))
+            current_instance_id = len(self.property_instances)
             root, ext = os.path.splitext(input_name)
             root = root + "-" + str(current_instance_id)
             final_name = root + ext

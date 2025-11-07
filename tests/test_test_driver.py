@@ -312,15 +312,25 @@ def test_file_writing():
         os.chdir(d)
         os.mkdir("output")
         dotfile_path = "output/.dotfile"
+        tokenfile_path = "output/.token"
+
         with open(dotfile_path, "w") as f:
             f.write("foo")
+        # Nothing happens when instantiating, only when calling
         td = FileWritingTestDriver(LennardJones())
-        # Dotfile should not get touched or flagged
-        # for a nonnempty directory
-        assert os.path.isfile(dotfile_path)
-        assert not os.path.isdir("output.0")
-        # Call the TD once
+
+        # Simply instantiating a second TD shouldn't break anything
+        td2 = FileWritingTestDriver(LennardJones())
+
+        # Call the TD once. Now the output directory should be established
         td()
+        # Dotfile should not get touched or flagged for a nonnempty directory,
+        # so nothing should have been backed up
+        assert not os.path.isdir("output.0")
+
+        assert os.path.isfile(dotfile_path)
+        assert os.path.isfile(tokenfile_path)
+
         # Should not go in output directory
         td.write_property_instances_to_file("results.edn")
         assert os.path.isfile("results.edn")
@@ -339,6 +349,10 @@ def test_file_writing():
         # Baz should have been cleaned up
         assert not os.path.isdir("output/baz")
 
+        # For checking later that after switching to a different instance,
+        # output looks the same
+        num_files_after_one_run = len(glob.glob("output/**"))
+
         # Remake baz and put a dotfile in there. Should not create a problem
         os.mkdir("output/baz")
         with open("output/baz/.dotfile", "w") as f:
@@ -350,6 +364,7 @@ def test_file_writing():
         assert os.path.isfile("output/results.edn")
         # Dotfiles should not have been touched
         assert os.path.isfile(dotfile_path)
+        assert os.path.isfile(tokenfile_path)
         assert os.path.isfile("output/baz/.dotfile")
         for n in range(2):
             assert os.path.isfile(f"output/foo_prop-{3*n+1}.txt")
@@ -374,12 +389,15 @@ def test_file_writing():
         except KIMTestDriverError:
             assert True
 
-        # Reinstantiate the Test Driver. It should find the lowest
-        # output.{n} available and back up the existing output there
         os.mkdir("output.0")
-        td = FileWritingTestDriver(LennardJones())
-        # Root dotfile should not have been touched
+
+        # Call the second Test Driver for the first time. It should find the lowest
+        # output.{n} available and back up the existing output there
+        td2()
+        # Root dotfiles should not have been touched
         assert not os.path.exists("output.1/.dotfile")
+        assert not os.path.exists("output.1/.token")
+
         # Non-root dotfiles should have been moved
         assert os.path.isfile("output.1/baz/.dotfile")
 
@@ -387,7 +405,7 @@ def test_file_writing():
         assert os.path.isfile("output.1/baz/nondotfile")
         assert os.path.isfile("output.1/results.edn")
 
-        # Files writted inside calculate
+        # Files written inside calculate
         for n in range(2):
             assert os.path.isfile(f"output.1/foo_prop-{3*n+1}.txt")
             assert os.path.isfile(f"output.1/bar/bar_prop-{3*n+2}.txt")
@@ -401,9 +419,15 @@ def test_file_writing():
                         f"aux_files.{n}/baz/baz",
                     ]
 
-        # New output directory should be clean with only a the dotfile in there
-        assert os.path.isfile(dotfile_path)
-        assert len(glob.glob("output/*")) == 0
+        assert num_files_after_one_run == len(glob.glob("output/**"))
+
+        # Try calling the first Test Driver again. Should fail
+        # due to a token mismatch.
+        try:
+            td()
+            assert False
+        except KIMTestDriverError:
+            assert True
 
     os.chdir(oldcwd)
 
