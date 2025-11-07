@@ -12,6 +12,8 @@ import re
 import subprocess
 import warnings
 
+import numpy as np
+
 warnings.simplefilter("ignore")
 
 
@@ -24,17 +26,31 @@ _units_output_expression = re.compile(
 )
 
 
-def check_units_util():
+def check_units_util() -> str:
     """
-    Check that units util can be found
+    Figure out if units (first choice) or gunits (second choice) works
+    with the options that we use
     """
+    args = ["-o", r"%1.15e", "-qt1", "0.0 eV/angstrom^3 bar"]
     try:
-        subprocess.check_output(["units", "--help"])
+        output = subprocess.check_output(["units"] + args, encoding="utf-8")
+        assert np.isclose(float(output), 0)
+        units_command = "units"
     except Exception:
-        raise UnitConversion(
-            "Failed to run a 'units' test command. It is likely "
-            "that the 'units' executable was not found."
-        )
+        try:
+            output = subprocess.check_output(["gunits"] + args, encoding="utf-8")
+            assert np.isclose(float(output), 0)
+            units_command = "gunits"
+        except Exception:
+            raise UnitConversion(
+                "Neither "
+                r"units -o %1.15e -qt1 '0.0 eV/angstrom^3 bar'"
+                " nor "
+                r"gunits -o %1.15e -qt1 '0.0 eV/angstrom^3 bar'"
+                " successfully ran and returned 0.e0. Please install a "
+                "compatible version of units."
+            )
+    return units_command
 
 
 def linear_fit(x, y):
@@ -68,7 +84,7 @@ def islinear(unit, to_unit=None):
 
 def convert_units(from_value, from_unit, wanted_unit=None, suppress_unit=False):
     """Works with 'units' utility"""
-    check_units_util()
+    units_util = check_units_util()
     from_sign = from_value < 0
     from_value = str(abs(from_value))
     from_unit = str(from_unit)
@@ -77,7 +93,7 @@ def convert_units(from_value, from_unit, wanted_unit=None, suppress_unit=False):
 
     if from_unit in TEMPERATURE_FUNCTION_UNITS:
         args = [
-            "units",
+            units_util,
             "-o",
             "%1.15e",
             "-qt1",
@@ -85,7 +101,7 @@ def convert_units(from_value, from_unit, wanted_unit=None, suppress_unit=False):
         ]
 
     else:
-        args = ["units", "-o", "%1.15e", "-qt1", " ".join((from_value, from_unit))]
+        args = [units_util, "-o", "%1.15e", "-qt1", " ".join((from_value, from_unit))]
 
     if wanted_unit:
         args.append(wanted_unit)
