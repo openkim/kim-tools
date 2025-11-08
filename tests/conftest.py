@@ -7,8 +7,8 @@ import pytest
 
 from kim_tools import detect_unique_crystal_structures, query_crystal_structures
 
-TEST_CASES = [572, 1656]  # Test just on triclinic and cubic, extremes of symmetry
-# TEST_CASES = [572, 365, 1729, 1194, 1473, 166, 1205, 1357, 915, 212, 641, 22]
+# TEST_CASES = [572, 1656]  # Test just on triclinic and cubic, extremes of symmetry
+TEST_CASES = [572, 365, 1729, 1194, 1473, 166, 1205, 1357, 915, 212, 641, 22]
 MATERIALS_FILE = "test_structures.json"
 QUERY_DUMP = "output/query_result.json"
 

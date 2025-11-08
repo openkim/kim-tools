@@ -13,6 +13,8 @@ dist-old/
 # test stuff
 *.log*
 log.*
+/tests/prof/
+/tests/*/*.so
 /tests/*.out*
 /tests/*.err*
 /tests/__pycache__/
