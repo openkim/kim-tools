@@ -3,7 +3,6 @@
 import glob
 import os
 import shutil
-import subprocess
 import tarfile
 from tempfile import TemporaryDirectory
 
@@ -435,19 +434,10 @@ def test_file_writing():
 def test_atom_style():
     td = TestInitKIMTestDriver("LennardJones612_UniversalShifted__MO_959249795837_003")
     assert td._get_supported_lammps_atom_style() == "atomic"
-    charge_sm = "Sim_LAMMPS_ReaxFF_AnGoddard_2015_BC__SM_389039364091_000"
-    subprocess.run(
-        f"kim-api-collections-management install --force CWD {charge_sm}",
-        shell=True,
-        check=True,
+    td = TestInitKIMTestDriver(
+        "Sim_LAMMPS_ReaxFF_AnGoddard_2015_BC__SM_389039364091_000"
     )
-    td = TestInitKIMTestDriver(charge_sm)
     assert td._get_supported_lammps_atom_style() == "charge"
-    subprocess.run(
-        f"kim-api-collections-management remove --force {charge_sm}",
-        shell=True,
-        check=True,
-    )
 
 
 if __name__ == "__main__":
