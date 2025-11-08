@@ -81,7 +81,7 @@ Installation instructions for the KIM API can be found `here <https://openkim.or
 
 GNU Units
 ---------
-``kim-tools`` uses the `GNU Units <https://www.gnu.org/software/units/>`_ utility for automatic unit conversion. You can check if you already have it by running ``units --help``. It is available from many native package managers such as ``apt``. If you are on a system where you do not have admin access, you may have to build it from source. Once you download the source code from the GNU website, you should be able to install it by running the following commands from the source directory. The ``--prefix=/desired/install/dir`` option specifies the install location, and you will have to add ``/desired/install/dir/bin`` to your ``PATH``. For more info, see the ``INSTALL`` and ``README`` files in the source.
+``kim-tools`` uses the `GNU Units <https://www.gnu.org/software/units/>`_ utility for automatic unit conversion. You can check if you already have it by running ``units --help`` or ``gunits --help``. It is available from many native package managers such as ``apt`` and homebrew (as ``gnu-units``). If you are on a system where you do not have admin access, you may have to build it from source. Once you download the source code from the GNU website, you should be able to install it by running the following commands from the source directory. The ``--prefix=/desired/install/dir`` option specifies the install location, and you will have to add ``/desired/install/dir/bin`` to your ``PATH``. For more info, see the ``INSTALL`` and ``README`` files in the source.
 
 .. code-block:: bash
 
