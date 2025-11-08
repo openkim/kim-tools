@@ -79,7 +79,7 @@ def install_models():
                 "kim-api-collections-management",
                 "install",
                 "CWD",
-                "LennardJones612_UniversalShifted__MO_959249795837_003",
+                "LJ_ElliottAkerson_2015_Universal__MO_959249795837_003",
             ],
             check=True,
             capture_output=True,

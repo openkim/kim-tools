@@ -259,7 +259,7 @@ def test_structure_detection():
 def test_get_isolated_energy_per_atom():
     for model in [
         LennardJones(),
-        "LennardJones612_UniversalShifted__MO_959249795837_003",
+        "LJ_ElliottAkerson_2015_Universal__MO_959249795837_003",
         "Sim_LAMMPS_LJcut_AkersonElliott_Alchemy_PbAu",
     ]:
         td = TestIsolatedEnergyDriver(model)
@@ -432,7 +432,7 @@ def test_file_writing():
 
 
 def test_atom_style():
-    td = TestInitKIMTestDriver("LennardJones612_UniversalShifted__MO_959249795837_003")
+    td = TestInitKIMTestDriver("LJ_ElliottAkerson_2015_Universal__MO_959249795837_003")
     assert td._get_supported_lammps_atom_style() == "atomic"
     td = TestInitKIMTestDriver(
         "Sim_LAMMPS_ReaxFF_AnGoddard_2015_BC__SM_389039364091_000"
