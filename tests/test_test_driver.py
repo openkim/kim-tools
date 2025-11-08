@@ -21,7 +21,7 @@ from kim_tools import (
     detect_unique_crystal_structures,
     get_deduplicated_property_instances,
 )
-from kim_tools.test_driver.core import _get_optional_source_value
+from kim_tools.test_driver.core import TOKENPATH, _get_optional_source_value
 
 
 class TestInitSingleCrystalTestDriver(SingleCrystalTestDriver):
@@ -311,7 +311,6 @@ def test_file_writing():
         os.chdir(d)
         os.mkdir("output")
         dotfile_path = "output/.dotfile"
-        tokenfile_path = "output/.token"
 
         with open(dotfile_path, "w") as f:
             f.write("foo")
@@ -328,7 +327,7 @@ def test_file_writing():
         assert not os.path.isdir("output.0")
 
         assert os.path.isfile(dotfile_path)
-        assert os.path.isfile(tokenfile_path)
+        assert os.path.isfile(TOKENPATH)
 
         # Should not go in output directory
         td.write_property_instances_to_file("results.edn")
@@ -363,7 +362,6 @@ def test_file_writing():
         assert os.path.isfile("output/results.edn")
         # Dotfiles should not have been touched
         assert os.path.isfile(dotfile_path)
-        assert os.path.isfile(tokenfile_path)
         assert os.path.isfile("output/baz/.dotfile")
         for n in range(2):
             assert os.path.isfile(f"output/foo_prop-{3*n+1}.txt")
@@ -395,7 +393,6 @@ def test_file_writing():
         td2()
         # Root dotfiles should not have been touched
         assert not os.path.exists("output.1/.dotfile")
-        assert not os.path.exists("output.1/.token")
 
         # Non-root dotfiles should have been moved
         assert os.path.isfile("output.1/baz/.dotfile")
@@ -403,6 +400,7 @@ def test_file_writing():
         # Other files
         assert os.path.isfile("output.1/baz/nondotfile")
         assert os.path.isfile("output.1/results.edn")
+        assert os.path.isfile(TOKENPATH.replace("output", "output.1"))
 
         # Files written inside calculate
         for n in range(2):

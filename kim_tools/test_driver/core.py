@@ -111,7 +111,8 @@ PROP_SEARCH_PATHS_INFO = (
     "- $PWD/local-props/**/\n"
     "- $PWD/local_props/**/"
 )
-TOKENPATH = "output/.token"
+TOKEN_NAME = "kim-tools.token"
+TOKENPATH = os.path.join("output", TOKEN_NAME)
 
 
 def get_supported_lammps_atom_style(model: str) -> str:
@@ -565,7 +566,7 @@ class KIMTestDriver(ABC):
             touch when cleaning and backing up the output directory. Specified
             relative to 'output' directory.
         __token (Optional[bytes]):
-            Token that is written to 'output/.token' upon first evaluation. This
+            Token that is written to TOKENPATH upon first evaluation. This
             is used to check that multiple Test Drivers are not being called
             concurrently, causing potential conflicts in the output directory
     """
@@ -641,6 +642,7 @@ class KIMTestDriver(ABC):
             self.__token = token_bytes(16)
             with open(TOKENPATH, "wb") as f:
                 f.write(self.__token)
+            self.__files_to_keep_in_output.append(TOKEN_NAME)
         else:
             # Token is stored, check that it matches the token file
             if not os.path.isfile(TOKENPATH):
