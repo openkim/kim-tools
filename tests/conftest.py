@@ -92,3 +92,22 @@ def install_models():
             pass
         else:
             raise e
+    try:
+        subprocess.run(
+            [
+                "kim-api-collections-management",
+                "install",
+                "CWD",
+                "Sim_LAMMPS_Table_GrogerVitekDlouhy_2020_CoCrFeMnNi__SM_786004631953_001",  # noqa:E501
+            ],
+            check=True,
+            capture_output=True,
+            encoding="utf-8",
+        )
+    except subprocess.CalledProcessError as e:
+        if ("already installed" in e.output) or (
+            "does not appear to contain CMakeLists.txt." in e.output
+        ):
+            pass
+        else:
+            raise e
