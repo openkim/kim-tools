@@ -10,9 +10,9 @@ def test_get_isolated_energy_per_atom():
     for model in [
         LennardJones(),
         "LJ_ElliottAkerson_2015_Universal__MO_959249795837_003",
-        "Sim_LAMMPS_Table_GrogerVitekDlouhy_2020_CoCrFeMnNi__SM_786004631953_001",
+        "Sim_LAMMPS_ADP_StarikovGordeevLysogorskiy_2020_SiAuAl__SM_113843830602_000",
     ]:
-        for species in ["Fe", "Cr"]:
+        for species in ["Au", "Al"]:
             assert np.isclose(
                 get_isolated_energy_per_atom(model=model, symbol=species),
                 0,

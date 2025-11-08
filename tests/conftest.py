@@ -98,7 +98,7 @@ def install_models():
                 "kim-api-collections-management",
                 "install",
                 "CWD",
-                "Sim_LAMMPS_Table_GrogerVitekDlouhy_2020_CoCrFeMnNi__SM_786004631953_001",  # noqa:E501
+                "Sim_LAMMPS_ADP_StarikovGordeevLysogorskiy_2020_SiAuAl__SM_113843830602_000",  # noqa:E501
             ],
             check=True,
             capture_output=True,

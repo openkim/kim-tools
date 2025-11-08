@@ -260,10 +260,10 @@ def test_get_isolated_energy_per_atom():
     for model in [
         LennardJones(),
         "LJ_ElliottAkerson_2015_Universal__MO_959249795837_003",
-        "Sim_LAMMPS_LJcut_AkersonElliott_Alchemy_PbAu",
+        "Sim_LAMMPS_ADP_StarikovGordeevLysogorskiy_2020_SiAuAl__SM_113843830602_000",
     ]:
         td = TestIsolatedEnergyDriver(model)
-        for species in ["Pb", "Au"]:
+        for species in ["Al", "Au"]:
             td(species=species)
 
 
