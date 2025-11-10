@@ -1,4 +1,4 @@
-################################################################################
+###############################################################################
 #
 #  CDDL HEADER START
 #
@@ -30,7 +30,6 @@
 Helper classes for KIM Test Drivers
 
 """
-import glob
 import json
 import logging
 import os
@@ -38,6 +37,8 @@ import shutil
 import tarfile
 from abc import ABC, abstractmethod
 from copy import deepcopy
+from fnmatch import fnmatch
+from glob import glob
 from pathlib import Path
 from secrets import token_bytes
 from tempfile import NamedTemporaryFile, TemporaryDirectory
@@ -113,6 +114,21 @@ PROP_SEARCH_PATHS_INFO = (
 )
 TOKEN_NAME = "kim-tools.token"
 TOKENPATH = os.path.join("output", TOKEN_NAME)
+PIPELINE_EXCEPTIONS = ["output/pipeline.*"]
+
+
+def _glob_with_exceptions(
+    pattern: str, exceptions: List[str], recursive: bool = False
+) -> List[os.PathLike]:
+    """
+    Return a list of paths that match the glob "pattern" but not
+    the glob "exceptions"
+    """
+    match = glob(pattern, recursive=recursive)
+    # If we are willing to make Python 3.14 minimum, can use filterfalse
+    for exception in exceptions:
+        match = [n for n in match if not fnmatch(n, exception)]
+    return match
 
 
 def get_supported_lammps_atom_style(model: str) -> str:
@@ -565,10 +581,18 @@ class KIMTestDriver(ABC):
             List of files that were written by this class explicitly, that we won't
             touch when cleaning and backing up the output directory. Specified
             relative to 'output' directory.
+        __files_to_ignore_in_output (List[PathLike]):
+            List of globs of files to ignore when handling the output directory.
+            By default, this is set to the constant PIPELINE_EXCEPTIONS,
+            which contains files that need to be left untouched for the
+            OpenKIM pipeline. Top-level dotfiles are always ignored.
         __token (Optional[bytes]):
             Token that is written to TOKENPATH upon first evaluation. This
             is used to check that multiple Test Drivers are not being called
             concurrently, causing potential conflicts in the output directory
+        __times_called (Optional[int]):
+            Count of number of times the instance has been __call__'ed,
+            for numbering aux file archives
     """
 
     class NonKIMModelError(Exception):
@@ -579,7 +603,10 @@ class KIMTestDriver(ABC):
         """
 
     def __init__(
-        self, model: Union[str, Calculator], suppr_sm_lmp_log: bool = False
+        self,
+        model: Union[str, Calculator],
+        suppr_sm_lmp_log: bool = False,
+        files_to_ignore_in_output: List[str] = PIPELINE_EXCEPTIONS,
     ) -> None:
         """
         Args:
@@ -587,6 +614,9 @@ class KIMTestDriver(ABC):
                 ASE calculator or KIM model name to use
             suppr_sm_lmp_log:
                 Suppress writing a lammps.log
+            files_to_ignore_in_output (List[PathLike]):
+                List of globs of files to ignore when handling the output directory.
+                Top-level dotfiles are always ignored.
         """
         if isinstance(model, Calculator):
             self.__calc = model
@@ -602,7 +632,9 @@ class KIMTestDriver(ABC):
 
         self.__output_property_instances = "[]"
         self.__files_to_keep_in_output = []
+        self.__files_to_ignore_in_output = files_to_ignore_in_output
         self.__token = None
+        self.__times_called = None
 
     def _setup(self, material, **kwargs) -> None:
         """
@@ -617,19 +649,25 @@ class KIMTestDriver(ABC):
         if self.__token is None:
             # First time we've called this instance of the class
             assert len(self.property_instances) == 0
+            assert self.__times_called is None
+
+            self.__times_called = 0
 
             os.makedirs("output", exist_ok=True)
 
             # Move all top-level non-hidden files and directories
             # to backup
-            output_glob = glob.glob("output/*")
+            output_glob = _glob_with_exceptions(
+                "output/*", self.__files_to_ignore_in_output
+            )
             if len(output_glob) > 0:
                 i = 0
                 while os.path.exists(f"output.{i}"):
                     i += 1
                 output_bak_name = f"output.{i}"
                 msg = (
-                    "'output' directory is non-empty, backing up all "
+                    "'output' directory has files besides dotfiles and allowed "
+                    "exceptions, backing up all "
                     f"non-hidden files and directories to {output_bak_name}"
                 )
                 print(msg)
@@ -661,10 +699,13 @@ class KIMTestDriver(ABC):
                             " prevent conflicts in the output directory, this is not "
                             "allowed."
                         )
+            self.__times_called += 1
 
         # We should have a record of all non-hidden files in output. If any
         # untracked files are present, raise an error
-        output_glob = glob.glob("output/**", recursive=True)
+        output_glob = _glob_with_exceptions(
+            "output/**", self.__files_to_ignore_in_output, True
+        )
         for filepath in output_glob:
             if os.path.isfile(filepath):  # not tracking directories
                 if (
@@ -682,30 +723,38 @@ class KIMTestDriver(ABC):
         Archive aux files after a run
         """
         # Archive untracked files as aux files
-        i = 0
-        while f"aux_files.{i}.txz" in self.__files_to_keep_in_output:
-            assert os.path.isfile(f"output/aux_files.{i}.txz")
-            i += 1
-        tar_prefix = f"aux_files.{i}"
-        output_glob = glob.glob("output/**", recursive=True)
-        archived_files = []  # For deleting them later
-        with tarfile.open(f"output/{tar_prefix}.txz", "w:xz") as tar:
-            for filepath in output_glob:
-                if os.path.isfile(filepath):  # not tracking directories
+        tar_prefix = f"aux_files.{self.__times_called}"
+        archive_name = f"output/{tar_prefix}.txz"
+        assert not os.path.isfile(tar_prefix)
+        output_glob = _glob_with_exceptions(
+            "output/**", self.__files_to_ignore_in_output, True
+        )
+        archived_files = []  # For deleting them later, and checking that any exist
+        for filepath in output_glob:
+            if os.path.isfile(filepath):  # not tracking directories
+                output_relpath = os.path.relpath(filepath, "output")
+                if output_relpath not in self.__files_to_keep_in_output:
+                    archived_files.append(filepath)
+
+        if len(archived_files) > 0:
+            msg = f"Auxiliary files found after call, archiving them to {archive_name}"
+            print(msg)
+            logger.info(msg)
+
+            with tarfile.open(archive_name, "w:xz") as tar:
+                for filepath in archived_files:
                     output_relpath = os.path.relpath(filepath, "output")
-                    if output_relpath not in self.__files_to_keep_in_output:
-                        tar.add(
-                            os.path.join(filepath),
-                            os.path.join(tar_prefix, output_relpath),
-                        )
-                        archived_files.append(filepath)
-        self.__files_to_keep_in_output.append(f"{tar_prefix}.txz")
-        for filepath in archived_files:
-            os.remove(filepath)
-            try:
-                os.removedirs(os.path.dirname(filepath))
-            except OSError:
-                pass  # might not be empty yet
+                    tar.add(
+                        os.path.join(filepath),
+                        os.path.join(tar_prefix, output_relpath),
+                    )
+            self.__files_to_keep_in_output.append(f"{tar_prefix}.txz")
+            for filepath in archived_files:
+                os.remove(filepath)
+                try:
+                    os.removedirs(os.path.dirname(filepath))
+                except OSError:
+                    pass  # might not be empty yet
 
         # should not have removed output dir in any situation
         assert os.path.isdir("output")
@@ -722,9 +771,9 @@ class KIMTestDriver(ABC):
 
         Main operation of a Test Driver:
 
+            * Call :func:`~KIMTestDriver._init_output_dir`
             * Run :func:`~KIMTestDriver._setup` (the base class provides a barebones
               version, derived classes may override)
-            * Call :func:`~KIMTestDriver._init_output_dir`
             * Call :func:`~KIMTestDriver._calculate` (implemented by each individual
               Test Driver)
             * Call :func:`~KIMTestDriver._archive_aux_files`
@@ -744,14 +793,15 @@ class KIMTestDriver(ABC):
         # Set up the output directory
         self._init_output_dir()
 
-        # _setup is likely overridden by an derived class
-        self._setup(material, **kwargs)
+        try:
+            # _setup is likely overridden by an derived class
+            self._setup(material, **kwargs)
 
-        # implemented by each individual Test Driver
-        self._calculate(**kwargs)
-
-        # Postprocess output directory for this invocation
-        self._archive_aux_files()
+            # implemented by each individual Test Driver
+            self._calculate(**kwargs)
+        finally:
+            # Postprocess output directory for this invocation
+            self._archive_aux_files()
 
         # The current invocation returns a Python list of dictionaries containing all
         # properties computed during this run

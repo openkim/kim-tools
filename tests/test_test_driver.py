@@ -78,7 +78,7 @@ class TestStructureDetectionTestDriver(SingleCrystalTestDriver):
 
 
 class FileWritingTestDriver(KIMTestDriver):
-    def _calculate(self):
+    def _calculate(self, write_aux_files: bool = True):
         """
         Mock calculate for file writing testing. Will result in the following
         files being created under the output directory and listed in the property
@@ -93,6 +93,10 @@ class FileWritingTestDriver(KIMTestDriver):
         aux_files.{n}/foo
         aux_files.{n}/bar/bar
         aux_files.{n}/baz/baz
+
+        Args:
+            write_aux_files:
+                Whether to write the above-mentioned aux files
         """
         self._add_property_instance("file-prop")
         with open("output/foo_prop.txt", "w") as f:
@@ -122,14 +126,15 @@ class FileWritingTestDriver(KIMTestDriver):
             # _calculate has been previously called)
             self._add_file_to_current_property_instance("textfile", tempfilepath)
 
-        # Now, write some auxiliary files
-        with open("output/foo", "w") as f:
-            f.write("foo")
-        with open("output/bar/bar", "w") as f:
-            f.write("bar")
-        os.makedirs("output/baz", exist_ok=True)
-        with open("output/baz/baz", "w") as f:
-            f.write("baz")
+        if write_aux_files:
+            # Now, write some auxiliary files
+            with open("output/foo", "w") as f:
+                f.write("foo")
+            with open("output/bar/bar", "w") as f:
+                f.write("bar")
+            os.makedirs("output/baz", exist_ok=True)
+            with open("output/baz/baz", "w") as f:
+                f.write("baz")
 
 
 def test_kimtest(monkeypatch):
@@ -306,64 +311,39 @@ def test_file_writing():
     aux_files.{n}/baz/baz
     """
     oldcwd = os.getcwd()
-    with TemporaryDirectory() as d:
-        shutil.copytree("local-props", os.path.join(d, "local-props"))
-        os.chdir(d)
-        os.mkdir("output")
-        dotfile_path = "output/.dotfile"
+    try:
+        with TemporaryDirectory() as d:
+            shutil.copytree("local-props", os.path.join(d, "local-props"))
+            os.chdir(d)
+            os.mkdir("output")
+            dotfile_path = "output/.dotfile"
+            pipelinefile_path = "output/pipeline.foo"
 
-        with open(dotfile_path, "w") as f:
-            f.write("foo")
-        # Nothing happens when instantiating, only when calling
-        td = FileWritingTestDriver(LennardJones())
+            with open(dotfile_path, "w") as f:
+                f.write("foo")
+            with open(pipelinefile_path, "w") as f:
+                f.write("foo")
 
-        # Simply instantiating a second TD shouldn't break anything
-        td2 = FileWritingTestDriver(LennardJones())
+            # Nothing happens when instantiating, only when calling
+            td = FileWritingTestDriver(LennardJones())
 
-        # Call the TD once. Now the output directory should be established
-        td()
-        # Dotfile should not get touched or flagged for a nonnempty directory,
-        # so nothing should have been backed up
-        assert not os.path.isdir("output.0")
+            # Simply instantiating a second TD shouldn't break anything
+            td2 = FileWritingTestDriver(LennardJones())
 
-        assert os.path.isfile(dotfile_path)
-        assert os.path.isfile(TOKENPATH)
+            # Call the TD once. Now the output directory should be established
+            td()
+            # Dotfile should not get touched or flagged for a nonnempty directory,
+            # so nothing should have been backed up
+            assert not os.path.isdir("output.0")
 
-        # Should not go in output directory
-        td.write_property_instances_to_file("results.edn")
-        assert os.path.isfile("results.edn")
-        n = 0
-        assert os.path.isfile(f"output/foo_prop-{3*n+1}.txt")
-        assert os.path.isfile(f"output/bar/bar_prop-{3*n+2}.txt")
-        assert os.path.isfile(f"output/baz_prop-{3*n+3}")
-        with tarfile.open(f"output/aux_files.{n}.txz") as tar:
-            assert len(tar.getmembers()) == 3
-            for member in tar.getmembers():
-                assert member.name in [
-                    f"aux_files.{n}/foo",
-                    f"aux_files.{n}/bar/bar",
-                    f"aux_files.{n}/baz/baz",
-                ]
-        # Baz should have been cleaned up
-        assert not os.path.isdir("output/baz")
+            assert os.path.isfile(dotfile_path)
+            assert os.path.isfile(pipelinefile_path)
+            assert os.path.isfile(TOKENPATH)
 
-        # For checking later that after switching to a different instance,
-        # output looks the same
-        num_files_after_one_run = len(glob.glob("output/**"))
-
-        # Remake baz and put a dotfile in there. Should not create a problem
-        os.mkdir("output/baz")
-        with open("output/baz/.dotfile", "w") as f:
-            f.write("foo")
-
-        # Run the TD again
-        td()
-        td.write_property_instances_to_file()
-        assert os.path.isfile("output/results.edn")
-        # Dotfiles should not have been touched
-        assert os.path.isfile(dotfile_path)
-        assert os.path.isfile("output/baz/.dotfile")
-        for n in range(2):
+            # Should not go in output directory
+            td.write_property_instances_to_file("results.edn")
+            assert os.path.isfile("results.edn")
+            n = 0
             assert os.path.isfile(f"output/foo_prop-{3*n+1}.txt")
             assert os.path.isfile(f"output/bar/bar_prop-{3*n+2}.txt")
             assert os.path.isfile(f"output/baz_prop-{3*n+3}")
@@ -375,58 +355,100 @@ def test_file_writing():
                         f"aux_files.{n}/bar/bar",
                         f"aux_files.{n}/baz/baz",
                     ]
+            # Baz should have been cleaned up
+            assert not os.path.isdir("output/baz")
 
-        # make a non-dot file under baz. Now TD should detect the issue and crash
-        with open("output/baz/nondotfile", "w") as f:
-            f.write("foo")
+            # For checking later that after switching to a different instance,
+            # output looks the same
+            num_files_after_one_run = len(glob.glob("output/**"))
 
-        try:
-            td()
-            assert False
-        except KIMTestDriverError:
-            assert True
+            # Remake baz and put a dotfile in there. Should not create a problem
+            os.mkdir("output/baz")
+            with open("output/baz/.dotfile", "w") as f:
+                f.write("foo")
 
-        os.mkdir("output.0")
+            # Run the TD again, without aux files this time
+            td(write_aux_files=False)
+            td.write_property_instances_to_file()
+            assert os.path.isfile("output/results.edn")
+            # Dotfiles should not have been touched
+            assert os.path.isfile(dotfile_path)
+            assert os.path.isfile(pipelinefile_path)
+            assert os.path.isfile("output/baz/.dotfile")
+            for n in range(2):
+                assert os.path.isfile(f"output/foo_prop-{3*n+1}.txt")
+                assert os.path.isfile(f"output/bar/bar_prop-{3*n+2}.txt")
+                assert os.path.isfile(f"output/baz_prop-{3*n+3}")
+                if n == 0:
+                    with tarfile.open(f"output/aux_files.{n}.txz") as tar:
+                        assert len(tar.getmembers()) == 3
+                        for member in tar.getmembers():
+                            assert member.name in [
+                                f"aux_files.{n}/foo",
+                                f"aux_files.{n}/bar/bar",
+                                f"aux_files.{n}/baz/baz",
+                            ]
+                elif n == 1:
+                    assert not os.path.exists(f"output/aux_files.{n}.txz")
 
-        # Call the second Test Driver for the first time. It should find the lowest
-        # output.{n} available and back up the existing output there
-        td2()
-        # Root dotfiles should not have been touched
-        assert not os.path.exists("output.1/.dotfile")
+            # make a non-dot file under baz. Now TD should detect the issue and crash
+            with open("output/baz/nondotfile", "w") as f:
+                f.write("foo")
 
-        # Non-root dotfiles should have been moved
-        assert os.path.isfile("output.1/baz/.dotfile")
+            try:
+                td()
+                assert False
+            except KIMTestDriverError:
+                assert True
 
-        # Other files
-        assert os.path.isfile("output.1/baz/nondotfile")
-        assert os.path.isfile("output.1/results.edn")
-        assert os.path.isfile(TOKENPATH.replace("output", "output.1"))
+            os.mkdir("output.0")
 
-        # Files written inside calculate
-        for n in range(2):
-            assert os.path.isfile(f"output.1/foo_prop-{3*n+1}.txt")
-            assert os.path.isfile(f"output.1/bar/bar_prop-{3*n+2}.txt")
-            assert os.path.isfile(f"output.1/baz_prop-{3*n+3}")
-            with tarfile.open(f"output.1/aux_files.{n}.txz") as tar:
-                assert len(tar.getmembers()) == 3
-                for member in tar.getmembers():
-                    assert member.name in [
-                        f"aux_files.{n}/foo",
-                        f"aux_files.{n}/bar/bar",
-                        f"aux_files.{n}/baz/baz",
-                    ]
+            # Call the second Test Driver for the first time. It should find the lowest
+            # output.{n} available and back up the existing output there
+            td2()
+            # Root dotfiles should not have been touched
+            assert os.path.isfile(dotfile_path)
+            assert os.path.isfile(pipelinefile_path)
+            assert not os.path.exists("output.1/.dotfile")
+            assert not os.path.exists("output.1/pipeline.foo")
 
-        assert num_files_after_one_run == len(glob.glob("output/**"))
+            # Non-root dotfiles should have been moved
+            assert os.path.isfile("output.1/baz/.dotfile")
 
-        # Try calling the first Test Driver again. Should fail
-        # due to a token mismatch.
-        try:
-            td()
-            assert False
-        except KIMTestDriverError:
-            assert True
+            # Other files
+            assert os.path.isfile("output.1/baz/nondotfile")
+            assert os.path.isfile("output.1/results.edn")
+            assert os.path.isfile(TOKENPATH.replace("output", "output.1"))
 
-    os.chdir(oldcwd)
+            # Files written inside calculate
+            for n in range(2):
+                assert os.path.isfile(f"output.1/foo_prop-{3*n+1}.txt")
+                assert os.path.isfile(f"output.1/bar/bar_prop-{3*n+2}.txt")
+                assert os.path.isfile(f"output.1/baz_prop-{3*n+3}")
+                if n == 0:
+                    with tarfile.open(f"output.1/aux_files.{n}.txz") as tar:
+                        assert len(tar.getmembers()) == 3
+                        for member in tar.getmembers():
+                            assert member.name in [
+                                f"aux_files.{n}/foo",
+                                f"aux_files.{n}/bar/bar",
+                                f"aux_files.{n}/baz/baz",
+                            ]
+                elif n == 1:
+                    assert not os.path.exists(f"output.1/aux_files.{n}.txz")
+
+            assert num_files_after_one_run == len(glob.glob("output/**"))
+
+            # Try calling the first Test Driver again. Should fail
+            # due to a token mismatch.
+            try:
+                td()
+                assert False
+            except KIMTestDriverError:
+                assert True
+
+    finally:
+        os.chdir(oldcwd)
 
 
 def test_atom_style():

@@ -11,7 +11,7 @@ from kim_tools import detect_unique_crystal_structures, query_crystal_structures
 # range of symmetries
 TEST_CASES = [572, 365, 1729, 1194, 1473, 166, 1205, 1357, 915, 212, 641, 22]
 MATERIALS_FILE = "test_structures.json"
-QUERY_DUMP = "output/query_result.json"
+QUERY_DUMP = "log.query_result.json"
 
 
 def get_test_crystal_structures(
