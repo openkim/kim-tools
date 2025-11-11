@@ -30,7 +30,9 @@ although you may include as many other Python files as you wish for utility func
 You must create a class named ``TestDriver`` inheriting from :class:`~kim_tools.test_driver.core.SingleCrystalTestDriver`.
 In your ``TestDriver`` class, you must overload the function :func:`~kim_tools.test_driver.core.KIMTestDriver._calculate`.
 Besides ``self``, the function must also accept ``**kwargs``. Before ``**kwargs``, you may add any additional arguments that
-you wish users or the OpenKIM Pipeline to be able to vary.
+you wish users or the OpenKIM Pipeline to be able to vary. Try to have default values for as many arguments as possible.
+Ideally, only physically meaningful variables without a reasonable default should be mandatory to specify.
+
 
 .. note::
 
@@ -94,8 +96,8 @@ the usage of the following functions. Click the links below for more information
 
 .. _doc.example_test_driver:
 
-Example ``test_driver.py``
-==========================
+Example ``test_driver.py`` written with ASE
+===========================================
 
 .. literalinclude:: ../../examples/CrystalGenomeASEExample__TD_000000654321_000/test_driver/test_driver.py
     :language: Python
@@ -109,21 +111,26 @@ Functionality not covered in the above example
 - ``self.``:attr:`~kim_tools.test_driver.core.KIMTestDriver.kim_model_name`:
   The KIM Model Name (if present). You should only use this if exporting data to a non-ASE simulator (see below).
 
-Molecular Dynamics
-------------------
+Writting Test Drivers using LAMMPS
+----------------------------------
+
+.. todo::
+
+  Write detailed documentation for writing LAMMPS Test Drivers instead of just an overview and example
+
+In general, using ASE to perform the computations is preferable, but you may need access to LAMMPS functionality, for example to run a large parallel MD or static
+calculation with domain decomposition. You may use LAMMPS in whichever way is most convenient for you as long as it is wrapped within the ``_calculate`` Python
+method. For example, one way to run a LAMMPS simulation in this framework is to export your atomic configuration using :func:`ase.io.write`, create LAMMPS input file(s)
+with `kim commands <https://docs.lammps.org/kim_commands.html>`_ using the KIM model stored in the base class' attribute ``self.``:attr:`~kim_tools.test_driver.core.KIMTestDriver.kim_model_name`, run your simulation(s), and read the configuration back in using :func:`ase.io.read` (for example, to re-detect the changed crystal structure).
 
 If you are running an MD simulation, the structure you report should be time-averaged and averaged over the supercell folded back into the unit cell.
 This will give you more robust averages assuming the translational symmetry of the unit cell was not broken. At this time, the function
 :func:`kim_tools.symmetry_util.core.reduce_and_avg` will perform the averaging assuming your supercell is built from contiguous repeats of the unit cell
 (i.e. atoms 0 to *N*-1 in the supercell are the original unit cell, atoms
 *N* to 2 *N*-1 are a the original unit cell shifted by an integer multiple of the lattice vectors, and so on). If the translational symmetry
-is broken, this function will detect it and raise an error. See
-https://github.com/openkim/kim-tools/blob/main/tests/test_symmetry_util.py for an example of how to use this function.
+is broken, this function will detect it and raise an error. See https://github.com/openkim/kim-tools/blob/main/tests/test_symmetry_util.py for an example of how to use this function.
 
-Additionally, if you are performing an NPT simulation, you may as well write an instance of the
-`crystal-structure-npt <https://openkim.org/properties/show/crystal-structure-npt>`_ property for future re-use. Note the optional ``restart-file`` key.
-It is recommended that you save a restart file (for example, ``restart.dump``).
-You can then add it using ``self.``:func:`~kim_tools.test_driver.core.KIMTestDriver._add_file_to_current_property_instance`.
+Additionally, if you are performing an NPT simulation, you may as well write an instance of the `crystal-structure-npt <https://openkim.org/properties/show/crystal-structure-npt>`_ property for future re-use. Note the optional ``restart-file`` key. It is recommended that you save a restart file (for example, ``restart.dump``). You can then add it using ``self.``:func:`~kim_tools.test_driver.core.KIMTestDriver._add_file_to_current_property_instance`.
 
 .. note::
 
@@ -138,17 +145,9 @@ You can then add it using ``self.``:func:`~kim_tools.test_driver.core.KIMTestDri
 
   Update :func:`kim_tools.symmetry_util.core.change_of_basis_atoms` to incorporate the functionality of :func:`kim_tools.symmetry_util.core.reduce_and_avg`, without the restriction on how the supercell is built.
 
-Writting Test Drivers using LAMMPS
-----------------------------------
+Listed below are some additional considerations for writing LAMMPS MD test drivers. See https://github.com/openkim-hackathons/NPTCrystalStructure for an example Test Driver that uses LAMMPS to compute an equilibrium crystal structure under NPT conditions. We thank Philipp Hoellmer, Guanming Zhang, Tom Egg (NYU), Jason Ogbebor, and Killian Sheriff (MIT) for developing this example.
 
-In general, using ASE to perform the computations is preferable, but you may need access to LAMMPS functionality, for example to run a large parallel MD or static
-calculation with domain decomposition. You may use LAMMPS in whichever way is most convenient for you as long as it is wrapped within the ``_calculate`` Python
-method. For example, one way to run a LAMMPS simulation in this framework is to export your atomic configuration using :func:`ase.io.write`, create LAMMPS input file(s)
-with `kim commands <https://docs.lammps.org/kim_commands.html>`_ using the KIM model stored in the base class' attribute ``self.``:attr:`~kim_tools.test_driver.core.KIMTestDriver.kim_model_name`, run your simulation(s), and read the configuration back in using :func:`ase.io.read` (for example, to re-detect the changed crystal structure).
-
-There are some special considerations when using LAMMPS to write KIM Test Drivers. See https://github.com/openkim-hackathons/CrystalGenomeLAMMPSExample__TD_000000654322_000
-for a trivial Crystal Genome LAMMPS example.
-
+* The example shows how to use an MSD check to quickly fail if a phase transition occurs, and uses the ``kim-convergence`` package to ensure the simulation is equilibrated.
 * Not all models support all LAMMPS systems of units. To work around this, use the ``unit_conversion_mode`` option for the ``kim init`` command and use the
   LAMMPS variables created by this command to convert to a single set of units. See https://docs.lammps.org/kim_commands.html#openkim-im-initialization-kim-init
   for more info.

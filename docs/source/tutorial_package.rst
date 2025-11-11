@@ -13,34 +13,12 @@ configuration.
 
 The testing workflow will run your Test Driver on FCC gold (prototype label ``A_cF4_225_a``) using 3 models:
 
-  * a KIM Portable Model: ``LennardJones612_UniversalShifted__MO_959249795837_003``
-  * a KIM Simulator Model: ``Sim_LAMMPS_LJcut_AkersonElliott_Alchemy_PbAu``
+  * a KIM Portable Model: ``LJ_ElliottAkerson_2015_Universal__MO_959249795837_003``
+  * a KIM Simulator Model: ``Sim_LAMMPS_ADP_StarikovGordeevLysogorskiy_2020_SiAuAl__SM_113843830602_000``
   * a non-KIM ASE Calculator: ``ase.calculators.lj.LennardJones(sigma=2.42324, epsilon=2.30580, rc=9.69298)``
 
 Make sure your Test Driver is able to run these simulations in the first place before beginning this process (except
-for the non-KIM calculator if your Test Driver uses LAMMPS). The two KIM models are example models included in all
-builds of the KIM API by default, except the conda-forge distribution for Apple Silicon Mac.
-
-Note that because these models are example models that are not on OpenKIM.org, querying for their equilibrium structures
-will not work. Instead you should start with the relaxed structure using ``kimvv.EquilibriumCrystalStructure``. This is what
-the testing workflow will do:
-
-.. code-block:: python
-
-  from ase.build import bulk
-  from kimvv import EquilibriumCrystalStructure
-
-  atoms_init = bulk('Au')
-
-  # Instantiate the Equilibrium Driver with your model
-  kim_model_name = "Sim_LAMMPS_LJcut_AkersonElliott_Alchemy_PbAu"
-  ecs = EquilibriumCrystalStructure(kim_model_name)
-
-  # Relax the structure. ECS will return multiple properties, any of them will do as they all contain the
-  # crystal description
-  relaxed_structure = ecs(atoms_init)[0]
-
-  # Run your TD with `relaxed_structure` as the input
+for the non-KIM calculator if your Test Driver uses LAMMPS).
 
 
 Forking the ``kimvv`` repo

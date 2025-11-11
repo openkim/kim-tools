@@ -20,7 +20,7 @@ Once your property is finalized, you will need to request a member of the OpenKI
 package containing your new definition, making it automatically usable by your Test Driver if ``kim-property`` is up to date.
 
 If you prefer to keep your property as a local file during development, ``kim-tools`` will automatically look for property definitions in the ``local-props`` and ``local_props`` subdirectories of the current working directory. If you wish to put them somewhere else,
-you can point the environment variable ``KIM_PROPERTY_PATH`` to their location. ``kim-tools`` will expand any globs, including recursive ``**``.
+you can point the environment variable ``KIM_PROPERTY_PATH`` to their location. ``kim-tools`` will expand any globs, including recursive ``**``. If you are using new or existing properties after they have been added to OpenKIM, you should not use local definition files.
 
 
 Tips

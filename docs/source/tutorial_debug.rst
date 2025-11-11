@@ -17,7 +17,8 @@ or alternatively will be installed if you follow the :ref:`doc.standalone_instal
 ``pip install kimvv``.
 
 If you have not requested your new properties to be added to OpenKIM, remember that ``kim-tools`` will automatically look for property definitions in the ``local-props`` and ``local_props`` subdirectories of the current working directory. If you wish to put them somewhere else,
-you can point the environment variable ``KIM_PROPERTY_PATH`` to their location. ``kim-tools`` will expand any globs, including recursive ``**``.
+you can point the environment variable ``KIM_PROPERTY_PATH`` to their location. ``kim-tools`` will expand any globs, including recursive ``**``. Conversely, if the properties
+you are using are already in OpenKIM, do not use local property definition files.
 
 .. _doc.example_script:
 
@@ -34,52 +35,36 @@ Curated Set of Test Cases
 Because your Test Driver will run on a wide variety of crystals and interatomic potentials,
 it is important to test it on a diverse selection of both. Below is a curated table
 of test cases that you can query for. These are arranged in increasing symmetry order
-(from triclinic to cubic).
+(from triclinic to cubic). Here are some important considerations when choosing test cases for your
+Driver:
+
+* Make sure your driver runs with both Simulator Models and Portable Models. If your Test Driver uses LAMMPS,
+  make sure it runs with models that use both ``atom_style atomic`` and ``atom_style charge``. A good way to
+  do this is to test with any Portable Model, and a Buckingham or ReaxFF Simulator Model. Note that both of
+  these are idiosyncratic -- ReaxFF are very slow and not great at reaching a low tolerance in static minimizaton,
+  while Buckingham are much faster, but are even worse at static relaxation.
+* Try to test on a variety of symmetries. If your Test Driver only computes scalar properties, it is less important
+  to test on every crystal family, while for tensor properties, you should test robustness across symmetries
+  more thoroughly.
+* Note the unstable example using ``EAM_Dynamo_AcklandMendelevSrolovitz_2004_FeP__MO_884343146310_006`` in the table.
+  If your computational protocol is such that a phase transition is possible, you should test with this example.
+  Because ``kim-tools`` does not allow phase transitions at this time, the symmetry check should raise an error.
+
 
 You can explore more prototypes at
 http://aflow.org/prototype-encyclopedia/, but it is not guaranteed that OpenKIM
 will have results or a compatible interatomic potential
 (https://openkim.org/browse/models/by-species).
 
-Every time you use a new model, you will need to install the model and re-instantiate
-your ``TestDriver`` class.
+All models must be istalled before being used. Note that in a script using multiple models, you will need to re-instantiate
+your ``TestDriver`` class with a new model each time.
+
+.. todo::
+
+   Find a good monoclinic example to add
 
 .. csv-table::
    :header-rows: 1
    :file: structure_table.csv
    :widths: 10, 10, 40, 40
    :delim: tab
-
-Commands to install all required models in the KDP using ``kimitems``, or outside the KDP using ``kim-api-collections-management``:
-
-.. code-block:: console
-
-   kimitems install -D Sim_LAMMPS_Buckingham_FreitasSantosColaco_2015_SiCaOAl__SM_154093256665_000
-   kimitems install -D EDIP_LAMMPS_Marks_2000_C__MO_374144505645_000
-   kimitems install -D MEAM_LAMMPS_FernandezPascuet_2014_U__MO_399431830125_002
-   kimitems install -D SNAP_LiHuChen_2018_NiMo__MO_468686727341_000
-   kimitems install -D Sim_LAMMPS_Buckingham_MatsuiAkaogi_1991_TiO__SM_690504433912_000
-   kimitems install -D MEAM_LAMMPS_JeongParkDo_2018_PdAl__MO_616482358807_002
-   kimitems install -D Tersoff_LAMMPS_MunetohMotookaMoriguchi_2007_SiO__MO_501246546792_000
-   kimitems install -D Sim_LAMMPS_Vashishta_BroughtonMeliVashishta_1997_SiO__SM_422553794879_000
-   kimitems install -D EAM_Dynamo_AcklandMendelevSrolovitz_2004_FeP__MO_884343146310_005
-   kimitems install -D MEAM_LAMMPS_KoJimLee_2012_FeP__MO_179420363944_002
-   kimitems install -D Sim_LAMMPS_BOP_MurdickZhouWadley_2006_GaAs__SM_104202807866_001
-   kimitems install -D Sim_LAMMPS_ReaxFF_BrugnoliMiyataniAkaji_SiCeNaClHO_2023__SM_282799919035_000
-   kimitems install -D EAM_Dynamo_ErcolessiAdams_1994_Al__MO_123629422045_005
-
-.. code-block:: console
-
-   kim-api-collections-management install user Sim_LAMMPS_Buckingham_FreitasSantosColaco_2015_SiCaOAl__SM_154093256665_000
-   kim-api-collections-management install user EDIP_LAMMPS_Marks_2000_C__MO_374144505645_000
-   kim-api-collections-management install user MEAM_LAMMPS_FernandezPascuet_2014_U__MO_399431830125_002
-   kim-api-collections-management install user SNAP_LiHuChen_2018_NiMo__MO_468686727341_000
-   kim-api-collections-management install user Sim_LAMMPS_Buckingham_MatsuiAkaogi_1991_TiO__SM_690504433912_000
-   kim-api-collections-management install user MEAM_LAMMPS_JeongParkDo_2018_PdAl__MO_616482358807_002
-   kim-api-collections-management install user Tersoff_LAMMPS_MunetohMotookaMoriguchi_2007_SiO__MO_501246546792_000
-   kim-api-collections-management install user Sim_LAMMPS_Vashishta_BroughtonMeliVashishta_1997_SiO__SM_422553794879_000
-   kim-api-collections-management install user EAM_Dynamo_AcklandMendelevSrolovitz_2004_FeP__MO_884343146310_005
-   kim-api-collections-management install user MEAM_LAMMPS_KoJimLee_2012_FeP__MO_179420363944_002
-   kim-api-collections-management install user Sim_LAMMPS_BOP_MurdickZhouWadley_2006_GaAs__SM_104202807866_001
-   kim-api-collections-management install user Sim_LAMMPS_ReaxFF_BrugnoliMiyataniAkaji_SiCeNaClHO_2023__SM_282799919035_000
-   kim-api-collections-management install user EAM_Dynamo_ErcolessiAdams_1994_Al__MO_123629422045_005

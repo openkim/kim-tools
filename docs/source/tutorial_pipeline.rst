@@ -21,8 +21,7 @@ First, let's go over the files you will need to change.
 =======================
 
 This is the file that specifies the inputs to your Test Driver. Each line is a JSON dictionary.
-Each line corresponds to a separate `KIM Test <https://openkim.org/doc/evaluation/kim-tests/>`_
-that will be created using your Test Driver. The provided file contains the :ref:`doc.curated_tests`.
+Each line corresponds to a separate `KIM Test <https://openkim.org/doc/evaluation/kim-tests/>`_.
 
 .. literalinclude:: ../../examples/CrystalGenomeASEExample__TD_000000654321_000/test_generator.json
     :language: json
@@ -80,12 +79,15 @@ Below is the file in from the example Test Driver. Compare with one of the rende
 .. literalinclude:: ../../examples/CrystalGenomeASEExample__TD_000000654321_000/test_template/kimspec.edn.genie
     :language: jinja
 
+An example of a ``kimspec.edn.genie`` for a molecular dynamics Test Driver templating temperature and pressure:
+https://github.com/openkim-hackathons/NPTCrystalStructure/blob/main/test_template/kimspec.edn.genie
+
 Here are the keys you will need to edit. You can leave the templating involving ``TEST_DRIVER_NAME``, ``prototype_label``, ``stoichiometric_species`` and ``kimnum`` as-is,
 but you will need to change descriptive prose, as well as render the arguments specific to your Test Driver (if any). Note, for example, how the ``max_volume_scale`` argument is templated
-in the fields below. See https://openkim.org/doc/schema/kimspec/ for a detailed definition of each field.
+in the fields below. At the very least, you will have to remove the logic involving ``max_volume_scale`` (assuming your Test Driver doesn't incidentally have the same argument). See https://openkim.org/doc/schema/kimspec/ for a detailed definition of each field.
 
-    * ``title`` and ``description``: change these to be relevant to your Test Driver and descriptive of the individual Tests.
-    * ``extended-id``: See https://openkim.org/doc/schema/kim-ids/ for recommendations. Note how a ``replace`` operation is used on ``crystal_genome_test_args.max_volume_scale``, as ``.`` is not an allowed character.
+    * ``title`` and ``description``: change these to be relevant to your Test Driver and descriptive of the individual Tests, including rendering any non-default physical arguments using Jinja.
+    * ``extended-id``: See https://openkim.org/doc/schema/kim-ids/ for recommendations. The extended-id should also specify any non-default physical arguments. Note how a ``replace`` operation is used on ``crystal_genome_test_args.max_volume_scale``, as ``.`` is not an allowed character. You may have to get creative with templating if your non-default arguments are arrays.
 
 In most cases, this should be all you need to change. Use ``kimgenie`` to generate some Tests and check that ``kimspec.edn`` looks correct.
 
@@ -96,8 +98,8 @@ These are the other required files in a Test Driver. In most cases, you can copy
 
     * ``kimspec.edn``: This is the metadata for the Test Driver itself. You may leave this in the minimal form provided in the example Test Driver, or you can fill in some of the fields following https://openkim.org/doc/schema/kimspec/. Any missing fields will be populated by the Web form when you :ref:`submit your Driver <doc.submit>`.
     * ``Makefile``: Unless your Test Driver requires compilation, leave this dummy Makefile untouched.
-    * ``runner``: This is the executable that invokes the ``TestDriver`` class when running in the KIM Pipeline.
-    * ``test_template/runner``: This is a wrapper executable in each Test that invokes the Test Driver's ``runner``. You should never have to change this file.
+    * ``runner``: This is the executable that invokes the ``TestDriver`` class when running in the KIM Pipeline. Its executable bit should be set.
+    * ``test_template/runner``: This is a wrapper executable in each Test that invokes the Test Driver's ``runner``. Its executable bit should be set. You should never have to change this file.
     * ``test_template/pipeline.stdin.tpl.genie``: This is the Jinja2 template file for passing inputs to the ``runner``.
     * ``test_template/dependencies.edn.genie``: This Jinja2 template file specifies the Tests that the generated Tests are dependent on.
     * ``test_template/LICENSE``: By default, this is LGPL2. Change it if you want a different license. You will be able to choose
