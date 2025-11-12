@@ -46,9 +46,6 @@ Driver:
 * Try to test on a variety of symmetries. If your Test Driver only computes scalar properties, it is less important
   to test on every crystal family, while for tensor properties, you should test robustness across symmetries
   more thoroughly.
-* Note the unstable example using ``EAM_Dynamo_AcklandMendelevSrolovitz_2004_FeP__MO_884343146310_006`` in the table.
-  If your computational protocol is such that a phase transition is possible, you should test with this example.
-  Because ``kim-tools`` does not allow phase transitions at this time, the symmetry check should raise an error.
 
 
 You can explore more prototypes at
