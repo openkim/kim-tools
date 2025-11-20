@@ -53,6 +53,7 @@ __all__ = [
     "check_if_atoms_interacting",
     "get_isolated_energy_per_atom",
     "get_model_energy_cutoff",
+    "get_model_species_minimum_cutoff",
     "fractional_coords_transformation",
     "perturb_until_all_forces_sizeable",
     "randomize_positions",
@@ -684,6 +685,53 @@ def perturb_until_all_forces_sizeable(
                     "Maximum iterations ({}) exceeded in call to "
                     "function perturb_until_all_forces_sizeable()".format(max_iter)
                 )
+
+
+################################################################################
+def get_model_species_minimum_cutoff(
+    model: str,
+    species: list,
+    xtol=1e-8,
+    etol_coarse=1e-6,
+    etol_fine=1e-15,
+    max_bisect_iters=1000,
+    max_upper_cutoff_bracket=20.0,
+) -> float:
+    """
+    Given a model and a list of species, construct all permutations of dimers and
+    compute their energy-cutoff i.e the distance at which their interaction becomes
+    non-trivial. Return the smallest such distance among all pairs of species.
+    This method calls get_model_energy_cutoff
+    """
+    min_cutoff = np.inf
+    for i in range(len(species)):
+        si: str = species[i]
+        Rii: float = get_model_energy_cutoff(
+            model,
+            [si, si],
+            xtol,
+            etol_coarse,
+            etol_fine,
+            max_bisect_iters,
+            max_upper_cutoff_bracket,
+        )
+        min_cutoff = min(min_cutoff, Rii)
+        for j in range(i + 1, len(species)):
+            sj: str = species[j]
+            try:
+                Rij: float = get_model_energy_cutoff(
+                    model,
+                    [sj, si],
+                    xtol,
+                    etol_coarse,
+                    etol_fine,
+                    max_bisect_iters,
+                    max_upper_cutoff_bracket,
+                )
+                min_cutoff = min(min_cutoff, Rij)
+            except Exception:
+                pass
+    return min_cutoff
 
 
 ################################################################################
