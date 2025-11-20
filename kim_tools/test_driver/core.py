@@ -40,7 +40,7 @@ from copy import deepcopy
 from fnmatch import fnmatch
 from glob import glob
 from pathlib import Path
-from secrets import token_bytes
+from secrets import token_hex
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import IO, Any, Dict, List, Optional, Union
 
@@ -677,8 +677,8 @@ class KIMTestDriver(ABC):
                     shutil.move(file_in_output, output_bak_name)
 
             # Create token
-            self.__token = token_bytes(16)
-            with open(TOKENPATH, "wb") as f:
+            self.__token = token_hex(16)
+            with open(TOKENPATH, "w") as f:
                 f.write(self.__token)
             self.__files_to_keep_in_output.append(TOKEN_NAME)
         else:
@@ -690,7 +690,7 @@ class KIMTestDriver(ABC):
                     "edit the 'output' directory between calls to this Test Driver?"
                 )
             else:
-                with open(TOKENPATH, "rb") as f:
+                with open(TOKENPATH, "r") as f:
                     if self.__token != f.read():
                         raise KIMTestDriverError(
                             f"Token file at {TOKENPATH} does not match this object's "
