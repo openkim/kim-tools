@@ -33,6 +33,7 @@ Helper routines for KIM Tests and Verification Checks
 
 import itertools
 import logging
+import math
 import random
 
 import numpy as np
@@ -40,6 +41,7 @@ from ase import Atoms
 from ase.calculators.calculator import Calculator
 from ase.calculators.kim.kim import KIM
 from ase.data import chemical_symbols
+from ase.lattice.cubic import FaceCenteredCubic
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(filename="kim-tools.log", level=logging.INFO, force=True)
@@ -54,6 +56,7 @@ __all__ = [
     "get_isolated_energy_per_atom",
     "get_model_energy_cutoff",
     "get_model_species_minimum_cutoff",
+    "find_working_configuration_FCC",
     "fractional_coords_transformation",
     "perturb_until_all_forces_sizeable",
     "randomize_positions",
@@ -906,6 +909,162 @@ def get_model_energy_cutoff(
         )
     else:
         return rcut
+
+
+def find_working_configuration_FCC(
+    model: str, species: list, energy_bound=[5e-2, 5e2], led_tol=1.0
+):
+    """
+    Find an FCC configuration for the given model and list of species having
+    energies within bounds and smoothness of energy-alat relation
+    model:          model name
+    species :       list of atomic species to be incorporated into FCC
+    energy_bound :  filter for configurations for which the absolute value of
+                    energy-per-atom is within this range
+    led_tol :       filter for configurations for which the absolute value of LED
+                    is less than this tolerance
+    """
+
+    def generate_fcc_compute_energy(model, species, alat):
+        """
+        Construct an FCC lattice large enough to acomodate all species.
+        Evaluate it's energy and return the energy and size of the supercell
+        """
+        ncells_per_side = 2
+        while True:
+            atoms = FaceCenteredCubic(
+                size=(ncells_per_side, ncells_per_side, ncells_per_side),
+                latticeconstant=alat,
+                symbol="H",
+                pbc=False,
+            )
+            if len(atoms) < len(species):
+                ncells_per_side += 1
+            else:
+                break
+        randomize_species(atoms, species)
+        calc = KIM(model)
+        atoms.set_calculator(calc)
+
+        # compute energy
+        try:
+            pe = atoms.get_potential_energy()
+            return pe, ncells_per_side
+        except Exception as e:
+            raise (e)
+
+    def local_edge_detection(model: str, species: list):
+        """
+        Use local-edge-detection algorithm to identify discontinuities
+        in the energy-alat curve
+        Based on: A. Gelb and E. Tadmor, J. Sci. Comp., 28:279-306, 2006.
+        Returns the energy-alat curve and the LED-alat curve
+        """
+
+        min_cutoff = get_model_species_minimum_cutoff(model, species)
+        amax = 1.0 * min_cutoff
+        amin = 0.3 * min_cutoff
+        del_a = 0.01
+        na = int(math.ceil((amax - amin) / del_a))
+
+        # data gathered for all derivatives [alat, energy, n_atoms, led]
+        data = []
+        alats = []
+        energies = []
+        ncells = []  # will be used for filtering by energy-per-atom
+
+        # generate energy curve
+        for j in range(0, na + 1):
+            a = amin + j * del_a
+            try:
+                val = generate_fcc_compute_energy(model, species, a)
+                alats.append(a)
+                energies.append(val[0])  # first value is energy
+                ncells.append(val[1])  # second value is number of atoms
+
+            except Exception:
+                continue
+
+        # in case some energy-computations failed, then the true number
+        # of data-points would be different from na
+        na = len(energies)
+
+        fact = 1.0 / 6.0
+        for j in range(2, na - 3):
+            # use 5-th order local difference formula
+            led = fact * (
+                -energies[j - 2]
+                + 5 * energies[j - 1]
+                - 10 * energies[j]
+                + 10 * energies[j + 1]
+                - 5 * energies[j + 2]
+                + energies[j + 3]
+            )
+
+            # data gathered for all derivatives [alat, energy, n_atoms, led]
+            data.append(
+                {
+                    "alat": alats[j],
+                    "energy": energies[j],
+                    "ncells": ncells[j],
+                    "led": led,
+                }
+            )
+
+        return data
+
+    def fcc_atoms_in_supercell(n_cells_per_side):
+        """Compute the number of atoms in an FCC supercell"""
+        atoms_per_unit_cell = 4
+        total_unit_cells = n_cells_per_side**3
+        total_atoms = total_unit_cells * atoms_per_unit_cell
+        return (int)(total_atoms)
+
+    FILTER_ENERGY_MIN = energy_bound[0]  # minimum energy per atom
+    FILTER_ENERGY_MAX = energy_bound[1]  # maximum energy per atom
+    LED_TOL = led_tol  # LED tolerance
+
+    def filter_good_alat(data: list) -> float:
+        """
+        Filter for good values from the energy-alat curve and LED-alat curve
+        FILTER_ENERGY_MIN < abs(energy) < FILTER_ENERGY_MAX
+        abs(led) < LED_TOLERANCE
+        """
+        min_led = np.inf
+        good_alat = None
+        good_ncells: int = 0
+        min_cutoff = data[-1]["alat"]
+
+        for i in range(len(data)):
+            d = data[i]
+            alat = d["alat"]
+            energy = d["energy"]
+            ncells = d["ncells"]
+            led = d["led"]
+
+            # species, order_d, alat, energy, ncells, led = data[i]
+            natoms: int = fcc_atoms_in_supercell(ncells)
+            if alat > 0.8 * min_cutoff or alat < 0.2 * min_cutoff:
+                continue
+            if abs(led) > LED_TOL or abs(led) > min_led:
+                continue
+            if (
+                abs(energy) < FILTER_ENERGY_MIN * natoms
+                or abs(energy) > FILTER_ENERGY_MAX * natoms
+            ):
+                continue
+            good_alat = alat
+            good_ncells = ncells
+            min_led = abs(led)
+
+        return {
+            "good_alat": good_alat,
+            "min_led": min_led,
+            "good_ncells": good_ncells,
+        }
+
+    led_data = local_edge_detection(model, species)
+    return filter_good_alat(led_data)
 
 
 # If called directly, do nothing
