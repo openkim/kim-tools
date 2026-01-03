@@ -226,7 +226,7 @@ def get_isolated_energy_per_atom(
     All separations are in Angstroms.
 
     Args:
-        model: KIM model to use for calculations
+        model: KIM model or ASE calculator to use for calculations
         symbol: Chemical symbol
         initial_separation: Initial separation for dimer calculations
         max_separation: maximum separation for dimer calculations
