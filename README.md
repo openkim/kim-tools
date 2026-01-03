@@ -14,4 +14,6 @@ All contributed functions and methods should be documented with Google style doc
 
 The code has a simple test suite using [pytest](https://docs.pytest.org/en/stable/). See the various files named `test_*` in `tests/` for examples and add tests for any code you write.
 
-When contributing to `kim-tools/ase`, all new functions should support being passed both a KIM Model as a string, and an ASE `Calculator` object. See `kim-tools/ase/core.py::get_isolated_energy_per_atom` for an example. If you are working on an existing function in this module, try to upgrade it to this functionality.
+To confirm that your code will pass the linter and style checks, install pre-commit as in this guide: https://pre-commit.com/#quick-start. The checks will run every time you make a commit.
+
+`kim-tools/ase` contains utility functions that can be used for interatomic calculations. It is inherited from merging https://github.com/openkim/kim-python-utils into this repo. Previously, it worked only with KIM Models. All new functions added to this module should support being passed both a KIM Model as a string, and an ASE `Calculator` object. See `kim-tools/ase/core.py::get_isolated_energy_per_atom` for an example. If you are working on an existing function in this module, try to upgrade it to this functionality.
