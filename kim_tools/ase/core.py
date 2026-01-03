@@ -34,6 +34,7 @@ Helper routines for KIM Tests and Verification Checks
 import itertools
 import logging
 import random
+from typing import Union
 
 import numpy as np
 from ase import Atoms
@@ -208,14 +209,14 @@ def randomize_positions(atoms, pert_amp, seed=None):
 
 ################################################################################
 def get_isolated_energy_per_atom(
-    model,
-    symbol,
-    initial_separation=1.0,
-    max_separation=15.0,
-    separation_neg_exponent=4,
-    quit_early_after_convergence=True,
-    energy_tolerance=1e-12,
-):
+    model: Union[str, Calculator],
+    symbol: str,
+    initial_separation: float = 1.0,
+    max_separation: float = 15.0,
+    separation_neg_exponent: float = 4,
+    quit_early_after_convergence: bool = True,
+    energy_tolerance: float = 1e-12,
+) -> float:
     """
     Construct a non-periodic cell containing a single atom and compute its energy.
     It tries to iteratively finetune the atomic separation for a dimer up to a
@@ -232,6 +233,9 @@ def get_isolated_energy_per_atom(
         separation_neg_exponent: Number of decimal places to refine the separation
         quit_early_after_convergence: Whether to stop early if energy converges
         energy_tolerance: Energy difference tolerance for convergence check
+
+    Returns:
+        The isolated energy per atom for the requested chemical symbol
     """
     try:
         single_atom = Atoms(
@@ -248,11 +252,21 @@ def get_isolated_energy_per_atom(
         single_atom.calc = calc
         energy_per_atom = single_atom.get_potential_energy()
 
-        # Clean up
-        if hasattr(calc, "clean"):
-            calc.clean()
-        if hasattr(calc, "__del__"):
-            calc.__del__()
+        # Clean up KIM calculators that are able to be cleaned
+        # up. This is necessary for LAMMPS ReaxFF simulators
+        # encapsulated in a KIM SM,
+        # as they preallocate arrays based on neighbors and
+        # can crash if the lengths of neighborlists change.
+        # This should only be done when a model name was passed
+        # and the calculator was instantiated using KIM() in
+        # this function. For example, if instead a LAMMPSLib
+        # calculator was passed in directly, cleaning it
+        # can break things.
+        if isinstance(model, str):
+            if hasattr(calc, "clean"):
+                calc.clean()
+            if hasattr(calc, "__del__"):
+                calc.__del__()
         del single_atom
 
         return energy_per_atom
@@ -267,26 +281,31 @@ def get_isolated_energy_per_atom(
                     cell=(max(20, separation + 10), 20, 20),
                     pbc=(False, False, False),
                 )
-                calc = KIM(model)
+                if isinstance(model, str):
+                    calc = KIM(model)
+                elif isinstance(model, Calculator):
+                    calc = model
                 dimer.calc = calc
 
                 total_energy = dimer.get_potential_energy()
                 energy_per_atom = total_energy / 2.0
 
-                if hasattr(calc, "clean"):
-                    calc.clean()
-                if hasattr(calc, "__del__"):
-                    calc.__del__()
+                if isinstance(model, str):
+                    if hasattr(calc, "clean"):
+                        calc.clean()
+                    if hasattr(calc, "__del__"):
+                        calc.__del__()
                 del dimer
 
                 return energy_per_atom
 
             except Exception:
                 try:
-                    if hasattr(calc, "clean"):
-                        calc.clean()
-                    if hasattr(calc, "__del__"):
-                        calc.__del__()
+                    if isinstance(model, str):
+                        if hasattr(calc, "clean"):
+                            calc.clean()
+                        if hasattr(calc, "__del__"):
+                            calc.__del__()
                     if "dimer" in locals():
                         del dimer
                 except Exception:
