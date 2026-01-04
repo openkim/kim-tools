@@ -10,7 +10,7 @@ KIM Tests and Verification Checks. Documentation at https://kim-tools.readthedoc
 
 ## Contributing Guide (Under Construction)
 
-All contributed functions and methods should be documented with Google style docstrings (https://google.github.io/styleguide/pyguide.html#383-functions-and-methods) and should have type hints for all arguments and return values (https://docs.python.org/3/library/typing.html).
+All contributed functions, classes and methods should be documented with Google style docstrings (https://google.github.io/styleguide/pyguide.html#383-functions-and-methods) and should have type hints for all arguments and return values (https://docs.python.org/3/library/typing.html). The docstrings are automatically rendered into the API documentation. To check that this is working correctly, install the Python packages in `docs/requirements-docs.txt` and run `make html` in `docs/`. There are some warnings, but there should be no errors, and the rendered docstring in the appropriate module html (e.g., `docs/build/html/kim_tools.ase.html`) should have a properly rendered section for the functions, classes and methods you wrote. See `kim_tools/test_driver/core.py` for a variety of examples of docstrings.
 
 The code has a simple test suite using [pytest](https://docs.pytest.org/en/stable/). See the various files named `test_*` in `tests/` for examples and add tests for any code you write.
 
