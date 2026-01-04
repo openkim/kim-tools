@@ -602,6 +602,12 @@ class KIMTestDriver(ABC):
         requires a KIM model (e.g. a LAMMPS TD) with a non-KIM Calculator
         """
 
+    class MissingModelError(Exception):
+        """
+        Raised when a model is requested but neither a self._calc nor
+        self.kim_model_name are defined
+        """
+
     def __init__(
         self,
         model: Union[str, Calculator],
@@ -988,6 +994,20 @@ class KIMTestDriver(ABC):
                 self.__calc = KIM(self.__kim_model_name)
         return self.__calc
 
+    @property
+    def model(self) -> Union[str, Calculator]:
+        """
+        Return the KIM model name, if present, otherwise
+        return the ASE calculator. Useful for, for example,
+        calling a Test Driver from another (e.g. _resolve_dependencies)
+        """
+        if self.__kim_model_name is not None:
+            return self.__kim_model_name
+        elif self._calc is not None:
+            return self._calc
+        else:
+            raise self.MissingModelError()
+
     def _get_serialized_property_instances(self) -> str:
         """
         Get the property instances computed so far in serialized EDN format
@@ -1032,11 +1052,7 @@ class KIMTestDriver(ABC):
         Returns:
             The isolated energy of a single atom
         """
-        try:
-            model = self.kim_model_name
-        except self.NonKIMModelError:
-            model = self._calc
-        return get_isolated_energy_per_atom(model=model, symbol=symbol)
+        return get_isolated_energy_per_atom(model=self.model, symbol=symbol)
 
 
 def _add_common_crystal_genome_keys_to_current_property_instance(

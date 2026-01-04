@@ -460,5 +460,12 @@ def test_atom_style():
     assert td._get_supported_lammps_atom_style() == "charge"
 
 
+def test_model():
+    td = TestInitKIMTestDriver("LJ_ElliottAkerson_2015_Universal__MO_959249795837_003")
+    assert isinstance(td.model, str)
+    td = TestInitKIMTestDriver(LennardJones())
+    assert isinstance(td.model, LennardJones)
+
+
 if __name__ == "__main__":
     test_atom_style()
