@@ -56,10 +56,6 @@ will have results or a compatible interatomic potential
 All models must be istalled before being used. Note that in a script using multiple models, you will need to re-instantiate
 your ``TestDriver`` class with a new model each time.
 
-.. todo::
-
-   Find a good monoclinic example to add
-
 .. csv-table::
    :header-rows: 1
    :file: structure_table.csv

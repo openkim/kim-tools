@@ -46,7 +46,8 @@ Examples of all of them exist in the example Test Driver: |example_url|
       `kimvv <https://github.com/openkim/kimvv>`_ package. We recommend using `.rst format <https://docutils.sourceforge.io/rst.html>`_ to make this task
       easier. Think about what you would like users to know about the usage of your Test Driver.
     * ``requirements.txt``: This is the requirements file for Python dependencies. It should include ``kim-tools`` at the minimum, as well as any other packages
-      your Python code imports directly. It will be included in the ``kimvv`` project as
+      your Python code imports directly. Note that this does NOT include Python Standard Library imports (if you can find it on
+      https://docs.python.org/3/library/index.html, it does not need to be in ``requirements.txt``). It will be included in the ``kimvv`` project as
       `dynamic metadata <https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html#dynamic-metadata>`_, which supports a subset of the
       `PyPI Requirements File Format <https://pip.pypa.io/en/stable/reference/requirements-file-format/>`_ (``-c/-r/-e`` and other flags are not supported).
     * ``MANIFEST.in``: if your Test Driver requires non-Python files to operate (e.g. data files, pre-made images, etc.), you must declare them in this file
