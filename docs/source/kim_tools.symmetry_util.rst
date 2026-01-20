@@ -12,6 +12,14 @@ kim\_tools.symmetry\_util.core module
    :undoc-members:
    :show-inheritance:
 
+kim\_tools.symmetry\_util.elasticity module
+-------------------------------------------
+
+.. automodule:: kim_tools.symmetry_util.elasticity
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Module contents
 ---------------
 
