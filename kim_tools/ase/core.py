@@ -93,14 +93,13 @@ def remove_species_not_supported_by_ASE(species):
 
 
 ################################################################################
-def randomize_species(atoms, species, seed=None):
+def randomize_species(atoms, species, seed: Union[int, None] = 13):
     """
     Given an ASE 'atoms' object, set random element for each atom selected
     from the list of available 'species' in a way that ensures all are
     represented with the same probabilities.
     """
-    if seed is not None:
-        random.seed(seed)
+    random.seed(seed)
 
     # Indefinitely iterate through species putting them at random
     # unoccupied sites until all atoms are exhausted.
@@ -165,7 +164,7 @@ def atom_outside_cell_along_nonperiodic_dim(T, atom_coord, pbc, tol=1e-12):
 
 
 ################################################################################
-def randomize_positions(atoms, pert_amp, seed=None):
+def randomize_positions(atoms, pert_amp, seed: Union[int, None] = 13):
     """
     Given an ASE 'atoms' object, displace all atomic coordinates by a random amount in
     the range [-pert_amp, pert_amp] along *each* dimension.  Note that all atomic
@@ -175,8 +174,7 @@ def randomize_positions(atoms, pert_amp, seed=None):
     (displacing outside the cell along periodic dimensions is allowed, although it's up
     to the calling function to wrap the positions if they need to be).
     """
-    if seed is not None:
-        random.seed(seed)
+    random.seed(seed)
 
     pbc = atoms.get_pbc()
     if all(pbc):
@@ -936,7 +934,10 @@ def get_model_energy_cutoff(
 
 ################################################################################
 def generate_fcc_compute_energy(
-    model: Union[str, Calculator], species: list, alat: float, seed: int = None
+    model: Union[str, Calculator],
+    species: list,
+    alat: float,
+    seed: Union[int, None] = 13,
 ) -> tuple[float, int]:
     """
     Construct an FCC lattice large enough to accommodate all species,
@@ -946,7 +947,7 @@ def generate_fcc_compute_energy(
         model: The model name or calculator object.
         species: List of atomic species to be incorporated into the FCC lattice.
         alat: The lattice constant for the FCC lattice.
-        seed: The random seed for species randomization.
+        seed: Optional random seed for reproducibility during species randomization.
 
     Returns:
         A tuple containing:
@@ -966,8 +967,7 @@ def generate_fcc_compute_energy(
             ncells_per_side += 1
         else:
             break
-    if seed is not None:
-        random.seed(seed)
+    random.seed(seed)
     randomize_species(atoms, species)
     if isinstance(model, str):
         calc = KIM(model)
@@ -1126,7 +1126,7 @@ def find_working_configuration_FCC(
     species: list,
     energy_bound: list = [5e-2, 5e2],
     led_tol: float = 1.0,
-    seed: int = None,
+    seed: Union[int, None] = 13,
 ) -> dict:
     """
     Find an FCC configuration for a model and species with energy and LED constraints.
@@ -1173,11 +1173,7 @@ def find_working_configuration_FCC(
     for j in range(0, na + 1):
         a = amin + j * del_a
         try:
-            val = None
-            if seed is None:
-                val = generate_fcc_compute_energy(model, species, a)
-            else:
-                val = generate_fcc_compute_energy(model, species, a, seed)
+            val = generate_fcc_compute_energy(model, species, a, seed)
             if val is not None:
                 alats.append(a)
                 energies.append(val[0])  # first value is energy
