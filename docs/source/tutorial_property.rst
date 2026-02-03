@@ -27,6 +27,7 @@ Tips
 ====
 
 * Property definitions should *not* include computational details. This should be included in the README and metadata of your Test Driver. The definition should strictly be a description of a physical material property and should apply to as many possible ways of calculating or measusing the property as possible.
+* Do not specify exact units (e.g. "J/kg") in the property definition. You may specify dimensionality (e.g. "energy per unit mass").
 * The `KIM Properties Framework <https://openkim.org/doc/schema/properties-framework/>`_ allows for flexible (optional) reporting of uncertainty information for every key, so you do not need to add uncertainties as separate keys. See how to do so at the end of the :ref:`doc.example_test_driver`.
 * Do not add pressure as a key for constant-pressure simulations, report it as a hydrostatic stress state in the ``cell-cauchy-stress`` key.
 
