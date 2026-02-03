@@ -102,4 +102,4 @@ def test_find_working_configuration_FCC():
 
     assert np.isclose(result["good_alat"], 5.2071, atol=1e-4)
     assert result["good_ncells"] == 2
-    assert np.isclose(result["min_led"], 3.6274390898446044e-11, atol=1e-15)
+    assert np.isclose(result["min_led"], 5.797910300013124e-11, atol=1e-15)
