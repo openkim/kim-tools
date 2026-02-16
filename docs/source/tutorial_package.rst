@@ -76,8 +76,8 @@ file is correctly configured to ignore any files and directories that should be 
         :width: 500px
 
 Next, you need to add the URL of the ``.tar.gz`` to the ``pre_setup.py`` script in your fork of ``kimvv``. An example fork for testing the example Test Driver is available,
-and here is where you add the URL: `pre_setup.py <https://github.com/openkim-hackathons/kimvv-example-driver-testing-fork/blob/main/pre_setup.py>`_.
-Alternatively, you may add the archive directly to your fork, and add the filename to ``pre_setup.py``, like in this example: https://github.com/openkim-hackathons/kimvv-example-LAMMPS-driver-testing-fork/blob/main/pre_setup.py (the archive is simply in the top level of the repo). Note that ``DEVEL_TEST_DRIVERS`` is a dictionary
+and here is where you add the URL: `pre_setup.py <https://github.com/openkim-hackathons/kimvv-example-driver-testing-fork/blob/main/pre_setup.py>`_. This will only work if your
+development repo is public. Alternatively, you may add the archive directly to your fork, and add the filename to ``pre_setup.py``, like in this example: https://github.com/openkim-hackathons/kimvv-example-LAMMPS-driver-testing-fork/blob/main/pre_setup.py (the archive is simply in the top level of the repo). Note that ``DEVEL_TEST_DRIVERS`` is a dictionary
 with the path or URL as a key. The values are the dictionary of additional non-default arguments you wish to pass to your Test Driver for testing. For example, for a molecular dynamics
 TD, you will likely want to specify a small system size so it can run in reasonable time on a free GitHub runner.
 
