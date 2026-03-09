@@ -37,6 +37,7 @@ import textwrap
 import time
 
 import jinja2
+import kimpy
 import numpy as np
 from ase import Atoms
 
@@ -46,7 +47,123 @@ __all__ = [
     "setup_and_run_vc",
     "vc_stripall",
     "vc_letter_grade_machine_precision",
+    "check_kimpy_call",
+    "get_kim_model_supported_species_and_codes",
 ]
+
+
+############################################################################
+class KimpyError(Exception):
+    """
+    A call to a kimpy function resulted in a RuntimeError being raised
+    """
+
+    pass
+
+
+############################################################################
+def check_kimpy_call(vc, func, *args):
+    """
+    Call a kimpy function using its arguments and, if a RuntimeError is raised,
+    catch it and raise a KimpyError with the exception's message.  A VC object
+    is optionally passed in so that, if an exception occurs, it can be echoed to
+    the VC report as well.
+
+    (Starting with kimpy 2.0.0, a RuntimeError is the only exception type raised
+    when something goes wrong.)
+
+    Parameters
+    ----------
+    vc : VerificationCheck or None
+        An instance of the VerificationCheck class defined in kim_python_utils.vc.  If
+        None, then any error messages are printed to stdout alone without being written
+        to the report.txt file the verification check creates.
+    f : function
+        The kimpy function that is to be called.
+
+    Raises
+    ------
+    KimpyError
+        If the kimpy function raises a RuntimeError when called.
+    """
+    try:
+        return func(*args)
+    except RuntimeError as e:
+        formatted_message = (
+            f'Calling kimpy function "{func.__name__}" failed:\n  {str(e)}'
+        )
+        if vc is None:
+            print(formatted_message)
+        else:
+            vc.rwrite(formatted_message)
+
+        raise KimpyError(formatted_message)
+
+
+############################################################################
+def get_kim_model_supported_species_and_codes(vc, kim_model):
+    """
+    Get all the supported species of a KIM model and the corresponding codes used by
+    the model.  The codes are required
+
+    Parameters
+    ----------
+    vc : VerificationCheck
+        An instance of the VerificationCheck class defined in kim_python_utils.vc
+
+    kim_model : str
+        The KIM ID of the model
+
+    Returns
+    -------
+    species_map : dict
+        Keys are chemical symbol strings (e.g. "Ar") and the corresponding
+        values are the corresponding integer codes that the model uses
+        internally to represent these
+    """
+
+    def get_kim_model_supported_species(vc, kim_model):
+        """
+        Get all the supported species by a KIM model
+
+        Parameters
+        ----------
+        vc : VerificationCheck
+            An instance of the VerificationCheck class defined in kim_python_utils.vc
+
+        kim_model : str
+            The KIM ID of the model
+
+        Returns
+        -------
+        species: list of str
+            a list of chemical symbols (e.g. ["Mo", "S"])
+        """
+        species = []
+        num_kim_species = kimpy.species_name.get_number_of_species_names()
+
+        for i in range(num_kim_species):
+            species_name = check_kimpy_call(vc, kimpy.species_name.get_species_name, i)
+
+            species_support, _ = check_kimpy_call(
+                vc, kim_model.get_species_support_and_code, species_name
+            )
+            if species_support:
+                species.append(str(species_name))
+
+        return species
+
+    supported_species = get_kim_model_supported_species(vc, kim_model)
+    species_map = dict()
+    for s in supported_species:
+        _, code = check_kimpy_call(
+            vc,
+            kim_model.get_species_support_and_code,
+            kimpy.species_name.SpeciesName(s),
+        )
+        species_map[s] = code
+
+    return species_map
 
 
 ################################################################################
