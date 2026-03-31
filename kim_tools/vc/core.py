@@ -37,7 +37,6 @@ import textwrap
 import time
 
 import jinja2
-import kimpy
 import numpy as np
 from ase import Atoms
 
@@ -121,6 +120,7 @@ def get_kim_model_supported_species_and_codes(vc, kim_model):
         values are the corresponding integer codes that the model uses
         internally to represent these
     """
+    import kimpy
 
     def get_kim_model_supported_species(vc, kim_model):
         """
@@ -139,6 +139,7 @@ def get_kim_model_supported_species_and_codes(vc, kim_model):
         species: list of str
             a list of chemical symbols (e.g. ["Mo", "S"])
         """
+
         species = []
         num_kim_species = kimpy.species_name.get_number_of_species_names()
 
