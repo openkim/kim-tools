@@ -64,7 +64,7 @@ autodoc_default_options = {
     "private-members": True,
     "ignore-module-all": True,
 }
-autodoc_mock_imports = ["lammps"]
+autodoc_mock_imports = ["lammps", "kimpy"]
 
 templates_path = ["_templates"]
 exclude_patterns = []
