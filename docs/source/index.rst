@@ -50,14 +50,14 @@ If you wish to use this package to develop an OpenKIM Test Driver, after setting
 KIM Developer Platform
 ======================
 
-The `KIM Developer Platform (KDP) <https://openkim.org/doc/evaluation/kim-developer-platform/>`_ is a Docker image providing an emulation of the KIM Processing Pipeline. It is the recommended environment for developing OpenKIM content, and is required to fully test integration of Test Drivers into the pipeline before they are submitted to `openkim.org <https://openkim.org/>`_. ``kim-tools`` and all requirements are included in KDP version 1.4.0 and higher.
+The `KIM Developer Platform (KDP) <https://openkim.org/doc/evaluation/kim-developer-platform/>`_ is a Docker image providing an emulation of the KIM Processing Pipeline. It is the recommended environment for developing OpenKIM content, and is required to fully test integration of Test Drivers into the pipeline before they are submitted to `openkim.org <https://openkim.org/>`_. ``kim-tools`` and all requirements are included in KDP version 1.4.0 and higher. The KDP is also able to run using Singularity/Apptainer or Podman, making it compatib. For more info on running using Singularity, see `here <https://github.com/openkim/developer-platform?tab=readme-ov-file#using-other-container-systems-singularityapptainer-podman-etc>`_.
 
 .. _doc.standalone_installation:
 
 Standalone Installation
 =======================
 
-Standalone usage of ``kim-tools`` is possible and makes sense if you wish to use the package on an HPC resource, as most do not support running Docker images.
+For standalone usage of ``kim-tools`` outside of the KDP, some requirements must be satisfied first.
 
 -------------
 Prerequisites
@@ -89,7 +89,7 @@ GNU Units
 
 Installation
 ------------
-Once the above prerequisites are satisfiied, you can install using ``pip``:
+Once the above prerequisites are satisfied, you can install using ``pip``:
 
 .. code-block:: bash
 
