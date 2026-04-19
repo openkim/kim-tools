@@ -735,7 +735,8 @@ def reduce_and_avg(atoms: Atoms, repeat: Tuple[int, int, int]) -> Atoms:
         assert r.shape == (M, M)
         if r.max() > cutoff:
             raise PeriodExtensionException(
-                f"At least one image of atom {i} is outside of tolerance"
+                f"Found image of atom {i} is at a distance {r.max()}, "
+                f"outside of tolerance {cutoff}."
             )
     return new_atoms
 
