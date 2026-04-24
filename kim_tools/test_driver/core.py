@@ -1512,6 +1512,7 @@ class SingleCrystalTestDriver(KIMTestDriver):
         self,
         material: Union[Atoms, Dict],
         cell_cauchy_stress_eV_angstrom3: Optional[List[float]] = None,
+        pressure_eV_angstrom3: Optional[float] = None,
         temperature_K: float = 0,
         **kwargs,
     ) -> None:
@@ -1560,9 +1561,18 @@ class SingleCrystalTestDriver(KIMTestDriver):
 
             cell_cauchy_stress_eV_angstrom3:
                 Cauchy stress on the cell in eV/angstrom^3 (ASE units) in
-                [xx, yy, zz, yz, xz, xy] format. This is a nominal variable, and this
-                class simply provides recordkeeping of it. It is up to derived classes
-                to implement actually imposing this stress on the system.
+                [xx, yy, zz, yz, xz, xy] format. The base SingleCrystalTestDriver
+                provides recordkeeping of this variable, and derived classes
+                must implement actually imposing this stress on the system if
+                the simulation they perform is stress-dependent. If this is
+                specified, `pressure_eV_angstrom3` must not be specified.
+            pressure_eV_angstrom3:
+                Hydrostatic pressure in eV/angstrom^3 (ASE units).
+                This is an alternative way of specifying the imposed stress,
+                it will set the normal stresses to the provided value,
+                and shear stresses to zero. If this is
+                specified, `cell_cauchy_stress_eV_angstrom3`
+                must not be specified.
             temperature_K:
                 The temperature in Kelvin. This is a nominal variable, and this class
                 simply provides recordkeeping of it. It is up to derived classes to
@@ -1570,7 +1580,27 @@ class SingleCrystalTestDriver(KIMTestDriver):
         """
 
         if cell_cauchy_stress_eV_angstrom3 is None:
-            cell_cauchy_stress_eV_angstrom3 = [0, 0, 0, 0, 0, 0]
+            if pressure_eV_angstrom3 is None:
+                cell_cauchy_stress_eV_angstrom3 = [0, 0, 0, 0, 0, 0]
+            else:
+                cell_cauchy_stress_eV_angstrom3 = [
+                    -pressure_eV_angstrom3,
+                    -pressure_eV_angstrom3,
+                    -pressure_eV_angstrom3,
+                    0,
+                    0,
+                    0,
+                ]
+        elif pressure_eV_angstrom3 is not None:
+            raise KIMTestDriverError(
+                "Specify either `cell_cauchy_stress_eV_angstrom3` "
+                "or `pressure_eV_angstrom3`, not both."
+            )
+        if len(cell_cauchy_stress_eV_angstrom3) != 6:
+            raise KIMTestDriverError(
+                "`cell_cauchy_stress_eV_angstrom3` must be specified"
+                "as an array of length 6 in order [xx, yy, zz, yz, xz, xy]"
+            )
 
         if isinstance(material, Atoms):
             crystal_structure = get_crystal_structure_from_atoms(
@@ -1995,7 +2025,7 @@ class SingleCrystalTestDriver(KIMTestDriver):
 
     def _get_cell_cauchy_stress(self, unit: str = "eV/angstrom^3") -> List[float]:
         """
-        Get the nominal stress
+        Get the nominal stress in [xx,yy,zz,yz,xz,xy] format
 
         Args:
             unit:
@@ -2013,6 +2043,43 @@ class SingleCrystalTestDriver(KIMTestDriver):
         else:
             stress = source_value
         return stress
+
+    def _get_pressure(
+        self, unit: str = "eV/angstrom^3", enforce_hydrostatic: bool = True
+    ) -> float:
+        """
+        Get the nominal pressure (negative 1/3 trace of the cauchy stress)
+
+        Args:
+            unit:
+                The requested unit for the output. Must be understood by the GNU
+                ``units`` utility
+            enforce_hydrostatic:
+                If true, then calling this function when the nominal stress
+                is non-hydrostatic will raise an error
+
+        Raises:
+            KIMTestDriverError:
+                When `enforce_hydrostatic=True` and the nominal stress
+                isn't hydrostatic
+
+        """
+        stress = self._get_cell_cauchy_stress(unit=unit)
+
+        if enforce_hydrostatic:
+            if not (
+                np.isclose(stress[0], stress[1])
+                and np.isclose(stress[0], stress[2])
+                and np.isclose(stress[3], 0)
+                and np.isclose(stress[4], 0)
+                and np.isclose(stress[5], 0)
+            ):
+                raise KIMTestDriverError(
+                    "The nominal stress is not hydrostatic and "
+                    "_get_pressure() was called with enforce_hydrostatic=True"
+                )
+
+        return -(stress[0] + stress[1] + stress[2]) / 3.0
 
     def _get_mass_density(self, unit: str = "amu/angstrom^3") -> float:
         """

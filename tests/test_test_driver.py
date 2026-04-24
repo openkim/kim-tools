@@ -467,5 +467,56 @@ def test_model():
     assert isinstance(td.model, LennardJones)
 
 
+def test_stress_and_pressure_variables():
+    # Test incorrectly specifying both stress and pressure
+    atoms = bulk("Mg")
+    td = TestInitSingleCrystalTestDriver(LennardJones())
+    try:
+        td(
+            atoms,
+            cell_cauchy_stress_eV_angstrom3=[0] * 6,
+            pressure_eV_angstrom3=0,
+        )
+        assert False
+    except KIMTestDriverError:
+        pass
+
+    # Test incorrect length
+    td = TestInitSingleCrystalTestDriver(LennardJones())
+    try:
+        td(
+            atoms,
+            cell_cauchy_stress_eV_angstrom3=[0] * 5,
+            pressure_eV_angstrom3=0,
+        )
+        assert False
+    except KIMTestDriverError:
+        pass
+
+    # Test setting and retrieving stress
+    td = TestInitSingleCrystalTestDriver(LennardJones())
+    td(
+        atoms,
+        cell_cauchy_stress_eV_angstrom3=[1] * 6,
+    )
+    assert np.allclose(td._get_cell_cauchy_stress(unit="GPa"), [160.21766] * 6)
+    # Confirm that non-hydrostatic stress causes an error
+    try:
+        td._get_pressure()
+        assert False
+    except KIMTestDriverError:
+        pass
+    # Get the pressure anyway
+    assert td._get_pressure(enforce_hydrostatic=False) == -1
+
+    # Test setting and retrieving pressure
+    td = TestInitSingleCrystalTestDriver(LennardJones())
+    td(
+        atoms,
+        pressure_eV_angstrom3=1,
+    )
+    assert td._get_cell_cauchy_stress() == [-1, -1, -1, 0, 0, 0]
+
+
 if __name__ == "__main__":
     test_atom_style()
