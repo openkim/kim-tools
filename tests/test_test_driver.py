@@ -468,12 +468,16 @@ def test_model():
 
 
 def test_stress_and_pressure_variables():
+    # Just need a crystal structure dictionary. Faster
+    # than calling with atoms, becaus calling with atoms
+    # always performs symmetry analysis
+    structure = kim_edn.load("structures/OSi.edn")
     # Test incorrectly specifying both stress and pressure
-    atoms = bulk("Mg")
+
     td = TestInitSingleCrystalTestDriver(LennardJones())
     try:
         td(
-            atoms,
+            structure,
             cell_cauchy_stress_eV_angstrom3=[0] * 6,
             pressure_eV_angstrom3=0,
         )
@@ -485,7 +489,7 @@ def test_stress_and_pressure_variables():
     td = TestInitSingleCrystalTestDriver(LennardJones())
     try:
         td(
-            atoms,
+            structure,
             cell_cauchy_stress_eV_angstrom3=[0] * 5,
             pressure_eV_angstrom3=0,
         )
@@ -496,7 +500,7 @@ def test_stress_and_pressure_variables():
     # Test setting and retrieving stress
     td = TestInitSingleCrystalTestDriver(LennardJones())
     td(
-        atoms,
+        structure,
         cell_cauchy_stress_eV_angstrom3=[1] * 6,
     )
     assert np.allclose(td._get_cell_cauchy_stress(unit="GPa"), [160.21766] * 6)
@@ -512,7 +516,7 @@ def test_stress_and_pressure_variables():
     # Test setting and retrieving pressure
     td = TestInitSingleCrystalTestDriver(LennardJones())
     td(
-        atoms,
+        structure,
         pressure_eV_angstrom3=1,
     )
     assert td._get_cell_cauchy_stress() == [-1, -1, -1, 0, 0, 0]
