@@ -491,7 +491,6 @@ def test_stress_and_pressure_variables():
         td(
             structure,
             cell_cauchy_stress_eV_angstrom3=[0] * 5,
-            pressure_eV_angstrom3=0,
         )
         assert False
     except KIMTestDriverError:
