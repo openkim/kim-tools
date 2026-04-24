@@ -1569,8 +1569,8 @@ class SingleCrystalTestDriver(KIMTestDriver):
             pressure_eV_angstrom3:
                 Hydrostatic pressure in eV/angstrom^3 (ASE units).
                 This is an alternative way of specifying the imposed stress,
-                it will set the normal stresses to the provided value,
-                and shear stresses to zero. If this is
+                it will set the normal stresses to
+                -pressure_eV_angstrom3, and shear stresses to zero. If this is
                 specified, `cell_cauchy_stress_eV_angstrom3`
                 must not be specified.
             temperature_K:
