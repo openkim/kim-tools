@@ -1511,8 +1511,8 @@ class SingleCrystalTestDriver(KIMTestDriver):
     def _setup(
         self,
         material: Union[Atoms, Dict],
-        cell_cauchy_stress_eV_angstrom3: Optional[List[float]] = None,
         pressure_eV_angstrom3: Optional[float] = None,
+        cell_cauchy_stress_eV_angstrom3: Optional[List[float]] = None,
         temperature_K: float = 0,
         **kwargs,
     ) -> None:
@@ -1559,13 +1559,11 @@ class SingleCrystalTestDriver(KIMTestDriver):
                     instance of any specific KIM Property, only that
                     the keys required to build a crystal are present.
 
-            cell_cauchy_stress_eV_angstrom3:
-                Cauchy stress on the cell in eV/angstrom^3 (ASE units) in
-                [xx, yy, zz, yz, xz, xy] format. The base SingleCrystalTestDriver
-                provides recordkeeping of this variable, and derived classes
-                must implement actually imposing this stress on the system if
-                the simulation they perform is stress-dependent. If this is
-                specified, `pressure_eV_angstrom3` must not be specified.
+
+            temperature_K:
+                The temperature in Kelvin. This is a nominal variable, and this class
+                simply provides recordkeeping of it. It is up to derived classes to
+                implement actually setting the temperature of the system.
             pressure_eV_angstrom3:
                 Hydrostatic pressure in eV/angstrom^3 (ASE units).
                 This is an alternative way of specifying the imposed stress,
@@ -1573,10 +1571,13 @@ class SingleCrystalTestDriver(KIMTestDriver):
                 -pressure_eV_angstrom3, and shear stresses to zero. If this is
                 specified, `cell_cauchy_stress_eV_angstrom3`
                 must not be specified.
-            temperature_K:
-                The temperature in Kelvin. This is a nominal variable, and this class
-                simply provides recordkeeping of it. It is up to derived classes to
-                implement actually setting the temperature of the system.
+            cell_cauchy_stress_eV_angstrom3:
+                Cauchy stress on the cell in eV/angstrom^3 (ASE units) in
+                [xx, yy, zz, yz, xz, xy] format. The base SingleCrystalTestDriver
+                provides recordkeeping of this variable, and derived classes
+                must implement actually imposing this stress on the system if
+                the simulation they perform is stress-dependent. If this is
+                specified, `pressure_eV_angstrom3` must not be specified.
         """
 
         if cell_cauchy_stress_eV_angstrom3 is None:
