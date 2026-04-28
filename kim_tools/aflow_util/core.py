@@ -7,8 +7,9 @@ import subprocess
 from curses.ascii import isalpha, isdigit
 from dataclasses import dataclass
 from itertools import permutations
-from math import acos, cos, degrees, radians, sqrt
+from math import acos, cos, degrees, radians, sin, sqrt
 from os import PathLike
+from random import random
 from tempfile import NamedTemporaryFile
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -1432,10 +1433,61 @@ class AFLOW:
                 - const_terms_list: A list of 3 x 1 columns of constant terms in the
                   coordinates.
         """
-        equation_poscar = self.write_poscar_from_prototype(
-            prototype_label,
-            addtl_args="--equations_only",
-        )
+        # If parameters are not given, newer versions of AFLOW will
+        # change the prototype for you if a different, but equivalent
+        # prototype is available in the library, for example
+        # AB_mC8_15_c_e -> AB_mC8_15_a_e. To force AFLOW to stick
+        # to the prototype you provided, you must give parameters.
+        # Since we don't know the parameters when we are just getting
+        # equations, we must guess a set. The retries
+        # might not be necessary anymore due to --webpage option, but no
+        # harm in doing so.
+        param_names = self.get_param_names_from_prototype(prototype_label)
+        MAX_ATTEMPTS = 20
+        ANGLE_NAMES = ["alpha", "beta", "gamma"]
+        for i in range(MAX_ATTEMPTS):
+            param_values = []
+            triclinic = False
+            if all([angle_name in param_names for angle_name in ANGLE_NAMES]):
+                triclinic = True
+                beta = 5 + random() * 165
+                gamma = 5 + random() * 165
+                beta_rad = radians(beta)
+                gamma_rad = radians(gamma)
+                max_cosalpha = abs(sin(beta_rad) * sin(gamma_rad)) + cos(
+                    beta_rad
+                ) * cos(gamma_rad)
+                min_cosalpha = -abs(sin(beta_rad) * sin(gamma_rad)) + cos(
+                    beta_rad
+                ) * cos(gamma_rad)
+                cosalpha = min_cosalpha + random() * (max_cosalpha - min_cosalpha)
+                alpha = degrees(acos(cosalpha))
+                angles_dict = {"alpha": alpha, "beta": beta, "gamma": gamma}
+
+            for pname in param_names:
+                if pname in ANGLE_NAMES:
+                    if triclinic:
+                        param_values.append(angles_dict[pname])
+                    else:
+                        param_values.append(180.0 * random())
+                else:
+                    param_values.append(random())
+
+            try:
+                equation_poscar = self.write_poscar_from_prototype(
+                    prototype_label,
+                    parameter_values=param_values,
+                    addtl_args="--equations_only --webpage",
+                )
+                break
+            except subprocess.CalledProcessError:
+                if i == MAX_ATTEMPTS - 1:
+                    raise RuntimeError(
+                        "Random parameters failed to pass "
+                        "AFLOW checks 20 times in a row"
+                    )
+                else:
+                    pass
 
         # get a string with one character per Wyckoff position
         # (with possible repeated letters for positions with free params)
