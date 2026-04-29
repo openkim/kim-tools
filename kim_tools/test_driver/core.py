@@ -1654,7 +1654,12 @@ class SingleCrystalTestDriver(KIMTestDriver):
 
         # Warn if atoms appear unrelaxed
         atoms_tmp = self._get_atoms()
-        force_max = np.max(atoms_tmp.get_forces())
+        try:
+            force_max = np.max(atoms_tmp.get_forces())
+        except Exception as e:
+            raise KIMTestDriverError(
+                "Failed to evaluate forces at provided initial configuration."
+            ) from e
         if force_max > FMAX_INITIAL:
             msg = (
                 "The configuration you provided has a maximum force component "
@@ -1664,7 +1669,12 @@ class SingleCrystalTestDriver(KIMTestDriver):
             print(f"\nNOTE: {msg}\n")
             logger.info(msg)
         if cell_cauchy_stress_eV_angstrom3 == [0, 0, 0, 0, 0, 0]:
-            stress_max = np.max(atoms_tmp.get_stress())
+            try:
+                stress_max = np.max(atoms_tmp.get_stress())
+            except Exception as e:
+                raise KIMTestDriverError(
+                    "Failed to evaluate stress at provided initial configuration."
+                ) from e
             if stress_max > FMAX_INITIAL:
                 msg = (
                     "The configuration you provided has a maximum stress component "
