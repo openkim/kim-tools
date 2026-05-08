@@ -447,6 +447,12 @@ def test_file_writing():
             except KIMTestDriverError:
                 assert True
 
+            # Test non-archiving of aux files (debug feature)
+            td2(archive_aux_files=False)
+            assert os.path.isfile("output/foo")
+            assert os.path.isfile("output/bar/bar")
+            assert os.path.isfile("output/baz/baz")
+
     finally:
         os.chdir(oldcwd)
 
