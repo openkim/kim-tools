@@ -772,9 +772,7 @@ class KIMTestDriver(ABC):
         """
         raise NotImplementedError("Subclasses must implement the _calculate method.")
 
-    def __call__(
-        self, material: Any = None, archive_aux_files: bool = True, **kwargs
-    ) -> List[Dict]:
+    def __call__(self, material: Any = None, **kwargs) -> List[Dict]:
         """
 
         Main operation of a Test Driver:
@@ -790,10 +788,6 @@ class KIMTestDriver(ABC):
             material:
                 Placeholder object for arguments describing the material to run
                 the Test Driver on
-            archive_aux_files:
-                By default, auxiliary computational files that are not
-                reported in a property are compressed into a .txz file.
-                Set this to False to turn this off for debugging.
 
         Returns:
             The property instances calculated during the current run
@@ -812,15 +806,8 @@ class KIMTestDriver(ABC):
             # implemented by each individual Test Driver
             self._calculate(**kwargs)
         finally:
-            if archive_aux_files:
-                # Postprocess output directory for this invocation
-                self._archive_aux_files()
-            else:
-                print(
-                    "WARNING: Not archiving auxiliary files. This can cause conflicts "
-                    "if an instance of this class is called multiple times. "
-                    "Use with caution for debugging only."
-                )
+            # Postprocess output directory for this invocation
+            self._archive_aux_files()
 
         # The current invocation returns a Python list of dictionaries containing all
         # properties computed during this run
