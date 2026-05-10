@@ -956,9 +956,13 @@ class KIMTestDriver(ABC):
         return get_supported_lammps_atom_style(self.kim_model_name)
 
     @property
-    def kim_model_name(self) -> Optional[str]:
+    def kim_model_name(self) -> str:
         """
-        Get the KIM model name, if present
+        Get the KIM model name
+
+        Raises:
+            KIMTestDriver.NonKIMModelError:
+                If the Test Driver is being run with a non-KIM calculator
         """
         if self.__kim_model_name is not None:
             return self.__kim_model_name

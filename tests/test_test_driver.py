@@ -9,6 +9,7 @@ from tempfile import TemporaryDirectory
 import kim_edn
 import numpy as np
 import numpy.typing as npt
+import pytest
 from ase.atoms import Atoms
 from ase.build import bulk
 from ase.calculators.lj import LennardJones
@@ -395,11 +396,8 @@ def test_file_writing():
             with open("output/baz/nondotfile", "w") as f:
                 f.write("foo")
 
-            try:
+            with pytest.raises(KIMTestDriverError):
                 td()
-                assert False
-            except KIMTestDriverError:
-                assert True
 
             os.mkdir("output.0")
 
@@ -441,11 +439,8 @@ def test_file_writing():
 
             # Try calling the first Test Driver again. Should fail
             # due to a token mismatch.
-            try:
+            with pytest.raises(KIMTestDriverError):
                 td()
-                assert False
-            except KIMTestDriverError:
-                assert True
 
     finally:
         os.chdir(oldcwd)
@@ -475,26 +470,20 @@ def test_stress_and_pressure_variables():
     # Test incorrectly specifying both stress and pressure
 
     td = TestInitSingleCrystalTestDriver(LennardJones())
-    try:
+    with pytest.raises(KIMTestDriverError):
         td(
             structure,
             cell_cauchy_stress_eV_angstrom3=[0] * 6,
             pressure_eV_angstrom3=0,
         )
-        assert False
-    except KIMTestDriverError:
-        pass
 
     # Test incorrect length
     td = TestInitSingleCrystalTestDriver(LennardJones())
-    try:
+    with pytest.raises(KIMTestDriverError):
         td(
             structure,
             cell_cauchy_stress_eV_angstrom3=[0] * 5,
         )
-        assert False
-    except KIMTestDriverError:
-        pass
 
     # Test setting and retrieving stress
     td = TestInitSingleCrystalTestDriver(LennardJones())
@@ -504,11 +493,9 @@ def test_stress_and_pressure_variables():
     )
     assert np.allclose(td._get_cell_cauchy_stress(unit="GPa"), [160.21766] * 6)
     # Confirm that non-hydrostatic stress causes an error
-    try:
+    with pytest.raises(KIMTestDriverError):
         td._get_pressure()
-        assert False
-    except KIMTestDriverError:
-        pass
+
     # Get the pressure anyway
     assert td._get_pressure(enforce_hydrostatic=False) == -1
 
@@ -519,6 +506,15 @@ def test_stress_and_pressure_variables():
         pressure_eV_angstrom3=1,
     )
     assert td._get_cell_cauchy_stress() == [-1, -1, -1, 0, 0, 0]
+
+
+def test_kim_model_name():
+    modelname = "LJ_ElliottAkerson_2015_Universal__MO_959249795837_003"
+    td = TestInitKIMTestDriver(modelname)
+    assert td.kim_model_name == modelname
+    td = TestInitKIMTestDriver(LennardJones())
+    with pytest.raises(KIMTestDriver.NonKIMModelError):
+        td.kim_model_name
 
 
 if __name__ == "__main__":
