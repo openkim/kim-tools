@@ -521,5 +521,17 @@ def test_stress_and_pressure_variables():
     assert td._get_cell_cauchy_stress() == [-1, -1, -1, 0, 0, 0]
 
 
+def test_kim_model_name():
+    modelname = "LJ_ElliottAkerson_2015_Universal__MO_959249795837_003"
+    td = TestInitKIMTestDriver(modelname)
+    assert td.kim_model_name == modelname
+    td = TestInitKIMTestDriver(LennardJones())
+    try:
+        td.kim_model_name
+        assert False
+    except KIMTestDriver.NonKIMModelError:
+        assert True
+
+
 if __name__ == "__main__":
     test_atom_style()
