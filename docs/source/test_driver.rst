@@ -36,14 +36,12 @@ Ideally, only physically meaningful variables without a reasonable default shoul
 
 .. note::
 
-  Temperature and stress are commonly used, so they do not need to be added as additional arguments. If needed,
-  your Test Driver will automatically accept arguments ``temperature_K`` and ``cell_cauchy_stress_eV_angstrom3``. See the
+  Temperature and stress/pressure are commonly used, so they do not need to be added as additional arguments. If needed,
+  your Test Driver will automatically accept arguments ``temperature_K`` and ``cell_cauchy_stress_eV_angstrom3`` or
+  ``pressure_eV_angstrom3``. Stress and pressure are mutually exclusive -- the pressure argument is simply
+  a convenient way to specify a hydrostatic stress state. The base class only provides recordkeeping of these
+  variables, it is up to your code to actually impose these conditions on the simulation. See the
   :ref:`doc.example_test_driver` for an example of how to access them from inside your ``_calculate`` function.
-
-.. todo::
-
-  Replace ``temperature_K`` and ``cell_cauchy_stress_eV_angstrom3`` with ``temperature`` and ``cell_cauchy_stress``, and
-  allow the user to specify units?
 
 An example ``test_driver.py`` from |example_url| is shown below. The ``_calculate`` function computes the energy vs. volume
 curve for isotropic expansion and compression of a crystal at zero temperature. You can use it as a starting point for your Test Driver.
@@ -132,14 +130,14 @@ is broken, this function will detect it and raise an error. See https://github.c
 
 Additionally, if you are performing an NPT simulation, you may as well write an instance of the `crystal-structure-npt <https://openkim.org/properties/show/crystal-structure-npt>`_ property for future re-use. Note the optional ``restart-file`` key. It is recommended that you save a restart file (for example, ``restart.dump``). You can then add it using ``self.``:func:`~kim_tools.test_driver.core.KIMTestDriver._add_file_to_current_property_instance`.
 
-.. note::
-
-  Your Test Driver should take a fixed seed with a default value as an argument. The user can randomize this input if needed. If you run multiple simulations in your Test Driver, please derive additional seeds deterministically from the input seed.
-
 .. code-block:: Python
 
   self._add_property_instance_and_common_crystal_genome_keys("crystal-structure-npt",write_temp=True,write_stress=True)
   self._add_file_to_current_property_instance("restart-file","restart.dump")
+
+.. note::
+
+  Your Test Driver should take a fixed seed with a default value as an argument. The user can randomize this input if needed. If you run multiple simulations in your Test Driver, please derive additional seeds deterministically from the input seed.
 
 .. todo::
 
@@ -157,7 +155,8 @@ Listed below are some additional considerations for writing LAMMPS MD test drive
 * By default, LAMMPS will un-skew the box if it gets too tilted. This can cause :func:`~kim_tools.test_driver.core.SingleCrystalTestDriver._update_nominal_parameter_values`
   to fail. To suppress this LAMMPS behavior, use the ``flip no`` option with ``fix npt`` or ``fix deform``. See
   https://docs.lammps.org/Howto_triclinic.html#periodicity-and-tilt-factors-for-triclinic-simulation-boxes for more info.
-* If you are running the LAMMPS executable (e.g. using ``subprocess``), your Test Driver should take the name of the LAMMPS executable as an argument with the default value ``"lmp"``.
+* If you are running the LAMMPS executable (e.g. using ``subprocess``), your Test Driver should take the name of the LAMMPS executable as an argument
+  named ``lammps_command`` with the default value ``"lmp"``.
   In this case, there should not be internal logic in the Test Driver for running LAMMPS with MPI -- your Driver should support being passed e.g. ``"mpirun -np 2 lmp"``. This way,
   the user (or OpenKIM pipeline) can explicitly handle running in parallel on their machine.
 

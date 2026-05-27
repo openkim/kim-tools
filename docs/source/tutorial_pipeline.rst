@@ -27,7 +27,8 @@ Each line corresponds to a separate `KIM Test <https://openkim.org/doc/evaluatio
     :language: json
 
 As you can see, it specifies the crystal structure and optionally allows you to pass any additional arguments you defined in your ``_calculate()`` method as a sub-dictionary
-under ``crystal_genome_test_args``. If needed, edit this sub-dictionary to reflect the inputs your Test Driver uses. You can omit any
+under ``crystal_genome_test_args``, as well as the pre-defined arguments all XtalG Test Drivers take (temperature and stress/pressure).
+If needed, edit this sub-dictionary to reflect the inputs your Test Driver uses. You can omit any
 arguments you wish to set to their default value, and if your ``_calculate()`` takes no additional arguments, you can omit ``crystal_genome_test_args`` entirely. If your
 Test Driver does not use temperature and/or stress, you may omit these keys as well (the example Test Driver does not use them, but they are left for demonstration).
 
