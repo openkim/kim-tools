@@ -11,4 +11,7 @@ from .test_driver import __all__ as test_driver_all
 from .vc import *
 from .vc import __all__ as vc_all
 
+# TODO: Go through all other TODOs in code and make sure they've been
+# turned into issues
+
 __all__ = test_driver_all + aflow_all + symmetry_all + ase_all + vc_all
