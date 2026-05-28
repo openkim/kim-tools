@@ -9,7 +9,6 @@ dependencies = [
     "ase >= 3.23",
     "kim-property >= 2.6.8",
     "kim-edn >= 1.4.1",
-    "spglib >= 2.1.0",
     "kim-query >= 3.0.0",
     "sympy >= 1.13.2",
     "numpy >= 1.13.1",

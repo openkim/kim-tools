@@ -6,7 +6,6 @@ dependencies:
   - ase
   - kim-property
   - kim-edn
-  - spglib
   - kim-query
   - sympy
   - numpy
