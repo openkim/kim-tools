@@ -72,8 +72,8 @@ AFLOW_PROTOTYPE_ENCYCLOPEDIA_PATH = os.path.join(
 
 class IncorrectSpaceGroupException(Exception):
     """
-    Raised when spglib or aflow --sgdata detects a different space group than the one
-    specified in the prototype label
+    Raised when a different space group than the one specified in the prototype label
+    is detected
     """
 
 
