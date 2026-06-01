@@ -95,4 +95,11 @@
     "required"     true
     "description"  "A file scalar"
   }
+  "optional-key" {
+    "type"         "string"
+    "has-unit"     false
+    "extent"       []
+    "required"     false
+    "description"  "An optional string scalar"
+  }
 }

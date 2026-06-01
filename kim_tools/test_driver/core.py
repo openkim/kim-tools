@@ -2640,6 +2640,11 @@ def _compare_noncrystallographic_fields(prop_inst_1: Dict, prop_inst_2: Dict) ->
                             return False
                         if not np.allclose(map_1[numer_key], map_2[numer_key]):
                             return False
+    # Check that prop_inst_2 doesn't have extra keys not in prop_inst_1
+    for key in prop_inst_2:
+        if key not in BOILERPLATE_XTALG_PROPERTY_KEYS + PROPERTY_INSTANCE_METADATA_KEYS:
+            if key not in prop_inst_1:
+                return False
     return True
 
 

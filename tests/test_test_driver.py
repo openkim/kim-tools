@@ -155,6 +155,7 @@ class XtalGPropertyTestDriver(SingleCrystalTestDriver):
         float_value: float = 1.0,
         float_unit: str = "kg",
         string_value: str = "foo",
+        optional_value: Optional[str] = None,
         **kwargs,
     ) -> None:
         """
@@ -179,6 +180,8 @@ class XtalGPropertyTestDriver(SingleCrystalTestDriver):
         with open("foo", "w") as f:
             print("foo", file=f)
         self._add_file_to_current_property_instance("file-key", "foo")
+        if optional_value is not None:
+            self._add_key_to_current_property_instance("optional-key", optional_value)
 
 
 def test_kimtest(monkeypatch):
@@ -262,11 +265,12 @@ def test_get_deduplicated_property_instances():
             td(BULK_AL_CRYSTAL_STRUCTURE, float_value=2.0)
             td(BULK_AL_CRYSTAL_STRUCTURE, float_unit="g")
             td(BULK_AL_CRYSTAL_STRUCTURE, string_value="bar")
+            td(BULK_AL_CRYSTAL_STRUCTURE, optional_value="foo")
             td.deduplicate_property_instances()
 
             # Only one of these should remain
             DUPLICATE_INSTANCE_IDS = [1, 2]
-            NONDUPLICATE_INSTANCE_IDS = range(3, 7)
+            NONDUPLICATE_INSTANCE_IDS = range(3, 8)
             EXPECTED_LENGTH = len(NONDUPLICATE_INSTANCE_IDS) + 1
 
             # Check that files have been properly deleted or not
