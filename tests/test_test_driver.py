@@ -31,7 +31,6 @@ BULK_AL_CRYSTAL_STRUCTURE = {
         "source-value": 5.0461,
         "source-unit": "angstrom",
     },
-    "crystal-genome-source-structure-id": {"source-value": [["foo"]]},
 }
 
 
@@ -258,8 +257,16 @@ def test_get_deduplicated_property_instances():
             td = XtalGPropertyTestDriver(LennardJones())
             # Add the first property instance
             td(BULK_AL_CRYSTAL_STRUCTURE)
-            # Add the second identical property instance -- it should be deduplicated
-            td(BULK_AL_CRYSTAL_STRUCTURE)
+            # Add the second identical property instance -- it should be deduplicated.
+            # The first one was missing crystal-genome-source-structure-id, it should
+            # be initialized and this one should be concatenated
+            struc = BULK_AL_CRYSTAL_STRUCTURE.copy()
+            struc.update(
+                {
+                    "crystal-genome-source-structure-id": {"source-value": [["foo"]]},
+                }
+            )
+            td(struc)
             # Change various things that should cause the instance to be retained
             td(BULK_AL_CRYSTAL_STRUCTURE, a_scale=2.0)
             td(BULK_AL_CRYSTAL_STRUCTURE, float_value=2.0)
@@ -304,7 +311,7 @@ def test_get_deduplicated_property_instances():
             cgssi = duplicate_instance["crystal-genome-source-structure-id"][
                 "source-value"
             ]
-            assert cgssi == [["foo", "foo"]]
+            assert cgssi == [["foo"]]
     finally:
         os.chdir(oldcwd)
 

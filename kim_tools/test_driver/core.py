@@ -2752,7 +2752,7 @@ def get_deduplicated_property_instances(
                 ):
                     curr_candidate_group_deduplicated[-1][
                         "crystal-genome-source-structure-id"
-                    ] = [[]]
+                    ] = {"source-value": [[]]}
                 curr_candidate_group_deduplicated[-1][
                     "crystal-genome-source-structure-id"
                 ]["source-value"][0] += additional_source_structure_id
