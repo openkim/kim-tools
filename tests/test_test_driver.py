@@ -5,6 +5,7 @@ import os
 import shutil
 import tarfile
 from tempfile import TemporaryDirectory
+from typing import Optional
 
 import kim_edn
 import numpy as np
@@ -20,9 +21,17 @@ from kim_tools import (
     SingleCrystalTestDriver,
     cartesian_rotation_is_in_point_group,
     detect_unique_crystal_structures,
-    get_deduplicated_property_instances,
 )
 from kim_tools.test_driver.core import TOKENPATH, _get_optional_source_value
+
+BULK_AL_CRYSTAL_STRUCTURE = {
+    "prototype-label": {"source-value": "A_cF4_225_a"},
+    "stoichiometric-species": {"source-value": ["Al"]},
+    "a": {
+        "source-value": 5.0461,
+        "source-unit": "angstrom",
+    },
+}
 
 
 class TestInitSingleCrystalTestDriver(SingleCrystalTestDriver):
@@ -138,6 +147,42 @@ class FileWritingTestDriver(KIMTestDriver):
                 f.write("baz")
 
 
+class XtalGPropertyTestDriver(SingleCrystalTestDriver):
+    def _calculate(
+        self,
+        a_scale: Optional[float] = None,
+        float_value: float = 1.0,
+        float_unit: str = "kg",
+        string_value: str = "foo",
+        optional_value: Optional[str] = None,
+        **kwargs,
+    ) -> None:
+        """
+        Write the property defined in "output/xtalg-mock-prop.edn" for checking
+        that property deduplication is working correctly. Since the deduplication
+        function converts all fields to numpy arrays, it is OK that everything
+        it writes is a scalar, since scalars and arrays are treated identically
+
+        Args:
+            a_scale:
+                Scale the "a" crystal parameter of the input structure by this value
+            flaot_value:
+                Write this to the "float-key" property field
+        """
+        if a_scale is not None:
+            atoms = self._get_atoms()
+            atoms.set_cell(atoms.cell * a_scale, scale_atoms=True)
+            self._update_nominal_parameter_values(atoms)
+        self._add_property_instance_and_common_crystal_genome_keys("xtalg-mock-prop")
+        self._add_key_to_current_property_instance("float-key", float_value, float_unit)
+        self._add_key_to_current_property_instance("string-key", string_value)
+        with open("foo", "w") as f:
+            print("foo", file=f)
+        self._add_file_to_current_property_instance("file-key", "foo")
+        if optional_value is not None:
+            self._add_key_to_current_property_instance("optional-key", optional_value)
+
+
 def test_kimtest(monkeypatch):
     test = TestTestDriver(LennardJones())
     testing_property_names = [
@@ -203,41 +248,72 @@ def test_detect_unique_crystal_structures():
 
 
 def test_get_deduplicated_property_instances():
-    property_instances = kim_edn.load("structures/results.edn")
-    fully_deduplicated = get_deduplicated_property_instances(property_instances)
-    assert len(fully_deduplicated) == 6
-    inst_with_1_source = 0
-    inst_with_2_source = 0
-    for property_instance in fully_deduplicated:
-        n_inst = len(
-            property_instance["crystal-genome-source-structure-id"]["source-value"][0]
-        )
-        if n_inst == 1:
-            inst_with_1_source += 1
-        elif n_inst == 2:
-            inst_with_2_source += 1
-        else:
-            assert False
-    assert inst_with_1_source == 3
-    assert inst_with_2_source == 3
-    partially_deduplicated = get_deduplicated_property_instances(
-        property_instances, ["mass-density-crystal-npt"]
-    )
-    assert len(partially_deduplicated) == 8
-    inst_with_1_source = 0
-    inst_with_2_source = 0
-    for property_instance in partially_deduplicated:
-        n_inst = len(
-            property_instance["crystal-genome-source-structure-id"]["source-value"][0]
-        )
-        if n_inst == 1:
-            inst_with_1_source += 1
-        elif n_inst == 2:
-            inst_with_2_source += 1
-        else:
-            assert False
-    assert inst_with_1_source == 7
-    assert inst_with_2_source == 1
+    oldcwd = os.getcwd()
+    try:
+        with TemporaryDirectory() as d:
+            shutil.copytree("local-props", os.path.join(d, "local-props"))
+            os.chdir(d)
+            os.mkdir("output")
+            td = XtalGPropertyTestDriver(LennardJones())
+            # Add the first property instance
+            td(BULK_AL_CRYSTAL_STRUCTURE)
+            # Add the second identical property instance -- it should be deduplicated.
+            # The first one was missing crystal-genome-source-structure-id, it should
+            # be initialized and this one should be concatenated
+            struc = BULK_AL_CRYSTAL_STRUCTURE.copy()
+            struc.update(
+                {
+                    "crystal-genome-source-structure-id": {"source-value": [["foo"]]},
+                }
+            )
+            td(struc)
+            # Change various things that should cause the instance to be retained
+            td(BULK_AL_CRYSTAL_STRUCTURE, a_scale=2.0)
+            td(BULK_AL_CRYSTAL_STRUCTURE, float_value=2.0)
+            td(BULK_AL_CRYSTAL_STRUCTURE, float_unit="g")
+            td(BULK_AL_CRYSTAL_STRUCTURE, string_value="bar")
+            td(BULK_AL_CRYSTAL_STRUCTURE, optional_value="foo")
+            td.deduplicate_property_instances()
+
+            # Only one of these should remain
+            DUPLICATE_INSTANCE_IDS = [1, 2]
+            NONDUPLICATE_INSTANCE_IDS = range(3, 8)
+            EXPECTED_LENGTH = len(NONDUPLICATE_INSTANCE_IDS) + 1
+
+            # Check that files have been properly deleted or not
+            FNAME_TEMPLATES = [
+                "conventional.instance-{ind}.poscar",
+                "instance-{ind}.poscar",
+                "foo-{ind}",
+            ]
+            for fname in FNAME_TEMPLATES:
+                num_files_present = 0
+                for iid in DUPLICATE_INSTANCE_IDS:
+                    if os.path.isfile(os.path.join("output", fname.format(ind=iid))):
+                        num_files_present += 1
+                assert num_files_present == 1
+                for iid in NONDUPLICATE_INSTANCE_IDS:
+                    assert os.path.isfile(os.path.join("output", fname.format(ind=iid)))
+
+            pis = td.property_instances
+            assert len(pis) == EXPECTED_LENGTH
+            duplicate_instance = None
+            for pi in pis:
+                if pi["instance-id"] in DUPLICATE_INSTANCE_IDS:
+                    # Make sure we only have one duplicate
+                    assert duplicate_instance is None
+                    duplicate_instance = pi
+                else:
+                    assert pi["instance-id"] in NONDUPLICATE_INSTANCE_IDS
+
+            # Finally, check that crystal-genome-source-structure-id has
+            # been properly combined
+            cgssi = duplicate_instance["crystal-genome-source-structure-id"][
+                "source-value"
+            ]
+            assert cgssi == [["foo"]]
+    finally:
+        os.chdir(oldcwd)
 
 
 def test_structure_detection():
@@ -518,4 +594,4 @@ def test_kim_model_name():
 
 
 if __name__ == "__main__":
-    test_atom_style()
+    test_get_deduplicated_property_instances()
