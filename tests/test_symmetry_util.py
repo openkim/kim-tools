@@ -3,6 +3,7 @@
 import math
 
 import numpy as np
+import pytest
 from ase.build import bulk
 from ase.calculators.kim.kim import KIM
 from ase.geometry import get_duplicate_atoms
@@ -84,6 +85,9 @@ def test_test_reduced_distances():
             assert not has_period_extension
         except PeriodExtensionException:
             assert has_period_extension
+
+    with pytest.raises(ValueError, match=" is not a positive number"):
+        reduce_and_avg(atoms, repeat, tol=-1)
 
 
 def test_fit_voigt_tensor_to_cell_and_space_group():
