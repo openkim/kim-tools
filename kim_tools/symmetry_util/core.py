@@ -671,6 +671,8 @@ def reduce_and_avg(
         PeriodExtensionException:
             If an atom in the original supercell is found to be greater than `tol`
             away from its location as prescribed by the reduced unit cell
+        ValueError:
+            If tol is not a positive number
     """
     new_atoms = atoms.copy()
 
@@ -725,6 +727,9 @@ def reduce_and_avg(
 
     if tol is None:
         tol = get_smallest_nn_dist(atoms) * 0.01
+    else:
+        if not tol > 0:
+            raise ValueError(f"Provided tolerance {tol} is not a positive number")
 
     # Check that all atoms are within tolerance of their reduced position
     logger.info(f"Cutoff for period extension test is {tol}")
