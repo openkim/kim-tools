@@ -639,7 +639,9 @@ def transform_atoms(atoms: Atoms, op: Dict) -> Atoms:
     return atoms_transformed
 
 
-def reduce_and_avg(atoms: Atoms, repeat: Tuple[int, int, int]) -> Atoms:
+def reduce_and_avg(
+    atoms: Atoms, repeat: Tuple[int, int, int], tol: Optional[float] = None
+) -> Atoms:
     """
     TODO: Upgrade :func:`change_of_basis_atoms` to provide the distances
     array, obviating this function
@@ -656,15 +658,19 @@ def reduce_and_avg(atoms: Atoms, repeat: Tuple[int, int, int]) -> Atoms:
         repeat:
             The number of repeats of each unit cell vector in the
             provided supercell
+        tol:
+            Tolerance for translational periodicity. If an atom in the original
+            supercell is found to be greater than this distance away from its location
+            as prescribed by the reduced unit cell, raise an error.
+            Default is 0.01*NN distance.
 
     Returns:
         The reduced unit cell
 
     Raises:
         PeriodExtensionException:
-            If two atoms that should be identical by translational symmetry
-            are further than 0.01*(smallest NN distance) apart when
-            reduced to the unit cell
+            If an atom in the original supercell is found to be greater than `tol`
+            away from its location as prescribed by the reduced unit cell
     """
     new_atoms = atoms.copy()
 
@@ -712,31 +718,30 @@ def reduce_and_avg(atoms: Atoms, repeat: Tuple[int, int, int]) -> Atoms:
             position_i = positions[i]
         # Average
         avg_positions_in_prim_cell[reference_atom_index] += position_i / M
+        # Save for checking for period-extension phase transition
         positions_in_prim_cell[i] = position_i
 
     new_atoms.set_positions(avg_positions_in_prim_cell)
 
-    # Check that all atoms are within tolerance of their translational images
-    cutoff = get_smallest_nn_dist(new_atoms) * 0.01
-    logger.info(f"Cutoff for period extension test is {cutoff}")
+    if tol is None:
+        tol = get_smallest_nn_dist(atoms) * 0.01
+
+    # Check that all atoms are within tolerance of their reduced position
+    logger.info(f"Cutoff for period extension test is {tol}")
     for i in range(original_number_atoms):
         positions_of_all_images_of_atom_i = [
             positions_in_prim_cell[j * original_number_atoms + i] for j in range(M)
         ]
         _, r = get_distances(
             positions_of_all_images_of_atom_i,
+            avg_positions_in_prim_cell[i],
             cell=new_atoms.get_cell(),
             pbc=True,
         )
-        # Checking full MxM matrix, could probably speed up by
-        # checking upper triangle only. Could also save memory
-        # by looping over individual distances instead of
-        # checking the max of a giant matrix
-        assert r.shape == (M, M)
-        if r.max() > cutoff:
+        if r.max() > tol:
             raise PeriodExtensionException(
                 f"Found image of atom {i} is at a distance {r.max()}, "
-                f"outside of tolerance {cutoff}."
+                f"outside of tolerance {tol}."
             )
     return new_atoms
 
