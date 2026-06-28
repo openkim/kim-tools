@@ -35,6 +35,7 @@ import itertools
 import logging
 import math
 import multiprocessing as mp
+import queue as queue_module
 import random
 import signal
 import traceback
@@ -1011,12 +1012,12 @@ def generate_fcc_compute_energy(
         return None
     finally:
         try:
-            if hasattr(calc, "clean"):
+            if calc is not None and hasattr(calc, "clean"):
                 calc.clean()
         except Exception:
             pass
         try:
-            if hasattr(calc, "__del__"):
+            if calc is not None and hasattr(calc, "__del__"):
                 calc.__del__()
         except Exception:
             pass
@@ -1054,56 +1055,96 @@ def generate_fcc_compute_energy_safe(
     timeout: float = 600.0,
 ) -> Union[Tuple[float, int], None]:
     """Run one energy evaluation in a child process."""
-
     ctx = mp.get_context("spawn")
-    queue = ctx.Queue()
-    proc = ctx.Process(target=_energy_worker, args=(model, species_list, alat, queue))
-    proc.start()
-    proc.join(timeout)
+    result_queue = ctx.Queue(maxsize=1)
 
-    if proc.is_alive():
-        proc.terminate()
-        proc.join()
-        logger.info(
-            "generate_fcc_compute_energy_safe TIMEOUT for "
-            f"{model} {species_list} alat={alat}"
-        )
-        return None
+    proc = ctx.Process(
+        target=_energy_worker,
+        args=(model, species_list, alat, result_queue),
+    )
 
-    if proc.exitcode != 0:
-        if proc.exitcode < 0:
-            sig = -proc.exitcode
-            try:
-                sig_name = signal.Signals(sig).name
-            except Exception:
-                sig_name = f"signal {sig}"
+    try:
+        proc.start()
+        proc.join(timeout)
+
+        if proc.is_alive():
+            proc.terminate()
+            proc.join(5.0)
+
+            if proc.is_alive():
+                proc.kill()
+                proc.join()
+
             logger.info(
-                "generate_fcc_compute_energy_safe CRASH for "
-                f"{model} {species_list} alat={alat}: : child died with {sig_name}"
+                "generate_fcc_compute_energy_safe TIMEOUT for "
+                f"{model} {species_list} alat={alat}"
             )
-        else:
+            return None
+
+        if proc.exitcode != 0:
+            if proc.exitcode is not None and proc.exitcode < 0:
+                sig = -proc.exitcode
+                try:
+                    sig_name = signal.Signals(sig).name
+                except Exception:
+                    sig_name = f"signal {sig}"
+
+                logger.info(
+                    "generate_fcc_compute_energy_safe CRASH for "
+                    f"{model} {species_list} alat={alat}: child died with {sig_name}"
+                )
+            else:
+                logger.info(
+                    "generate_fcc_compute_energy_safe FAIL for "
+                    f"{model} {species_list} alat={alat}: "
+                    f"child exit code {proc.exitcode}"
+                )
+            return None
+
+        try:
+            result = result_queue.get(timeout=1.0)
+        except queue_module.Empty:
             logger.info(
                 "generate_fcc_compute_energy_safe FAIL for "
-                f"{model} {species_list} alat={alat}: : child exit code {proc.exitcode}"
+                f"{model} {species_list} alat={alat}: "
+                "child exited but returned no result"
             )
-        return None
+            return None
 
-    if queue.empty():
-        logger.info(
-            "generate_fcc_compute_energy_safe FAIL for "
-            f"{model} {species_list} alat={alat}: child exited but returned no results"
-        )
-        return None
+        if not isinstance(result, dict):
+            logger.info(
+                "generate_fcc_compute_energy_safe FAIL for "
+                f"{model} {species_list} alat={alat}: "
+                "child returned invalid result type "
+                f"{type(result).__name__}"
+            )
+            return None
 
-    result = queue.get()
-    if not result.get("ok", False):
-        logger.info(
-            "generate_fcc_compute_energy_safe PYTHON ERROR for "
-            f"{model} {species_list} alat={alat}: {result.get('error')}"
-        )
-        return None
+        if not result.get("ok", False):
+            logger.info(
+                "generate_fcc_compute_energy_safe PYTHON ERROR for "
+                f"{model} {species_list} alat={alat}: "
+                f"{result.get('error')}"
+            )
+            return None
 
-    return float(result["energy"]), int(result["ncells"])
+        try:
+            return float(result["energy"]), int(result["ncells"])
+        except Exception as exc:
+            logger.info(
+                "generate_fcc_compute_energy_safe FAIL for "
+                f"{model} {species_list} alat={alat}: "
+                f"malformed success result {result!r}; "
+                f"conversion error: {exc!r}"
+            )
+            return None
+
+    finally:
+        try:
+            result_queue.close()
+            result_queue.join_thread()
+        except Exception:
+            pass
 
 
 def _round_alat(alat: float) -> float:
@@ -1515,54 +1556,159 @@ def scipy_nelder_mead_safe(
     energy_bound: list[float],
     timeout: float = 600.0,
 ) -> dict:
-    ctx = mp.get_context("spawn")
-    queue = ctx.Queue()
-    proc = ctx.Process(
-        target=_nelder_mead_worker,
-        args=(model, species_list, start_alat, a_min, a_max, energy_bound, queue),
-    )
-    proc.start()
-    proc.join(timeout)
+    """Run scipy Nelder-Mead in a child process.
 
-    if proc.is_alive():
-        proc.terminate()
-        proc.join()
+    This isolates crashes/segfaults from model energy evaluations.
+    """
+
+    def fail_result(status: str, message: str) -> dict:
         return {
             "ok": False,
-            "status": "timeout",
-            "message": f"Nelder-Mead timed out after {timeout} seconds",
-            "start_alat": float(start_alat),
-            "evaluations": [],
-        }
-
-    if proc.exitcode != 0:
-        if proc.exitcode < 0:
-            sig = -proc.exitcode
-            try:
-                sig_name = signal.Signals(sig).name
-            except Exception:
-                sig_name = f"signal {sig}"
-            message = f"child died with {sig_name}"
-        else:
-            message = f"child exit code {proc.exitcode}"
-        return {
-            "ok": False,
-            "status": "crash",
+            "status": status,
             "message": message,
             "start_alat": float(start_alat),
             "evaluations": [],
         }
 
-    if queue.empty():
-        return {
-            "ok": False,
-            "status": "no_result",
-            "message": "child exited but returned no result",
-            "start_alat": float(start_alat),
-            "evaluations": [],
-        }
+    ctx = mp.get_context("spawn")
+    result_queue = ctx.Queue(maxsize=1)
 
-    return queue.get()
+    proc = ctx.Process(
+        target=_nelder_mead_worker,
+        args=(
+            model,
+            species_list,
+            start_alat,
+            a_min,
+            a_max,
+            energy_bound,
+            result_queue,
+        ),
+    )
+
+    try:
+        proc.start()
+        proc.join(timeout)
+
+        if proc.is_alive():
+            proc.terminate()
+            proc.join(5.0)
+
+            if proc.is_alive():
+                proc.kill()
+                proc.join()
+
+            logger.info(
+                "scipy_nelder_mead_safe TIMEOUT for "
+                f"{model} {species_list} start_alat={start_alat}"
+            )
+
+            return fail_result(
+                "timeout",
+                f"Nelder-Mead timed out after {timeout} seconds",
+            )
+
+        if proc.exitcode != 0:
+            if proc.exitcode is not None and proc.exitcode < 0:
+                sig = -proc.exitcode
+                try:
+                    sig_name = signal.Signals(sig).name
+                except Exception:
+                    sig_name = f"signal {sig}"
+
+                message = f"child died with {sig_name}"
+
+                logger.info(
+                    "scipy_nelder_mead_safe CRASH for "
+                    f"{model} {species_list} start_alat={start_alat}: {message}"
+                )
+            else:
+                message = f"child exit code {proc.exitcode}"
+
+                logger.info(
+                    "scipy_nelder_mead_safe FAIL for "
+                    f"{model} {species_list} start_alat={start_alat}: {message}"
+                )
+
+            return fail_result("crash", message)
+
+        try:
+            result = result_queue.get(timeout=1.0)
+        except queue_module.Empty:
+            logger.info(
+                "scipy_nelder_mead_safe FAIL for "
+                f"{model} {species_list} start_alat={start_alat}: "
+                "child exited but returned no result"
+            )
+
+            return fail_result(
+                "no_result",
+                "child exited but returned no result",
+            )
+
+        if not isinstance(result, dict):
+            message = f"child returned invalid result type {type(result).__name__}"
+
+            logger.info(
+                "scipy_nelder_mead_safe FAIL for "
+                f"{model} {species_list} start_alat={start_alat}: {message}"
+            )
+
+            return fail_result("invalid_result", message)
+
+        if "ok" not in result:
+            message = "child result dictionary is missing required key 'ok'"
+
+            logger.info(
+                "scipy_nelder_mead_safe FAIL for "
+                f"{model} {species_list} start_alat={start_alat}: {message}; "
+                f"result={result!r}"
+            )
+
+            return fail_result("invalid_result", message)
+
+        if not result.get("ok", False):
+            # Preserve the worker's failure result if it already has the expected shape.
+            result.setdefault("status", "worker_error")
+            result.setdefault("message", "Nelder-Mead worker returned ok=False")
+            result.setdefault("start_alat", float(start_alat))
+            result.setdefault("evaluations", [])
+
+            logger.info(
+                "scipy_nelder_mead_safe WORKER ERROR for "
+                f"{model} {species_list} start_alat={start_alat}: "
+                f"{result.get('message')}"
+            )
+
+            return result
+
+        # Optional but useful: normalize successful result shape.
+        result.setdefault("status", "success")
+        result.setdefault("message", "")
+        result.setdefault("start_alat", float(start_alat))
+        result.setdefault("evaluations", [])
+
+        return result
+
+    finally:
+        if proc.is_alive():
+            proc.terminate()
+            proc.join(5.0)
+
+            if proc.is_alive():
+                proc.kill()
+                proc.join()
+
+        try:
+            result_queue.close()
+            result_queue.join_thread()
+        except Exception:
+            pass
+
+        try:
+            proc.close()
+        except Exception:
+            pass
 
 
 def _failure_config_result(
