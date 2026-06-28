@@ -57,39 +57,6 @@ def test_generate_fcc_compute_energy():
     assert np.isclose(ncells, 2)
 
 
-# def test_local_edge_detection():
-#     x = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-#     y = [1, 2, 1, 2, 1, 50, 1, 2, 1, 2]
-#     leds = local_edge_detection(x, y)
-#     expected_leds = [10.666, -42.666, 82.666, -82.666, 42.666]
-#     assert np.allclose(leds, expected_leds, atol=1e-3)
-
-#     y = np.sin(np.array(x))
-#     leds = local_edge_detection(x, y)
-#     expected_leds = [-0.1265, -0.0284, 0.0957, 0.1319, 0.0468]
-#     assert np.allclose(leds, expected_leds, atol=1e-3)
-
-
-# def test_filter_good_alat():
-#     alats = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-#     energies = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5, 9.5]
-#     ncells = [2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
-#     leds = [0.1, 0.5, 1.5, 0.8, 0.3, 2.0, 0.4, 0.2, 1.2, 0.6]
-#     min_cutoff = 0.5
-#     energy_bound = [5e-2, 5e2]
-#     led_tol = 1.0
-#     result = filter_good_alat(
-#         alats, energies, ncells, leds, min_cutoff, energy_bound, led_tol
-#     )
-
-#     # check that the return type is dict and contains expected keys
-#     assert isinstance(result, dict)
-#     assert len(result) == 3
-#     assert "good_alat" in result
-#     assert "min_led" in result
-#     assert "good_ncells" in result
-
-
 # end-to-end test
 def test_find_working_configuration_FCC():
     model = "LJ_ElliottAkerson_2015_Universal__MO_959249795837_003"
@@ -97,6 +64,6 @@ def test_find_working_configuration_FCC():
     result = find_equilibrium_config_FCC(model, species)
 
     assert np.isclose(result["mono_species_equilibrium_alats"]["Al"], 3.3281, atol=1e-4)
-    assert np.isclose(result["mono_species_equilibrium_alats"]["Au"], 3, 740, atol=1e-4)
+    assert np.isclose(result["mono_species_equilibrium_alats"]["Au"], 3.7407, atol=1e-4)
     assert np.isclose(result["equilibrium_alat"], 3.5768, atol=1e-4)
     assert result["ncells_per_side"] == 2
