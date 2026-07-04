@@ -67,3 +67,27 @@ def test_find_equilibrium_configuration_FCC():
     assert np.isclose(result["mono_species_equilibrium_alats"]["Au"], 3.7407, atol=1e-4)
     assert np.isclose(result["equilibrium_alat"], 3.5768, atol=1e-4)
     assert result["ncells_per_side"] == 2
+
+
+# expected to fail due to coarse-scanning timeout
+def test_find_equilibrium_configuration_FCC_coarseTimeout():
+    model = "LJ_ElliottAkerson_2015_Universal__MO_959249795837_003"
+    species = ["Au", "Al"]
+    result = find_equilibrium_config_FCC(model, species, coarse_timeout=1e-16)
+
+    assert result["mono_species_equilibrium_alats"]["Al"] == -1.0
+    assert result["mono_species_equilibrium_alats"]["Au"] == -1.0
+    assert result["equilibrium_alat"] == -1.0
+    assert result["ncells_per_side"] == 2
+
+
+# expected to fail due to nelder-mead timeout
+def test_find_equilibrium_configuration_FCC_nelderMeadTimeout():
+    model = "LJ_ElliottAkerson_2015_Universal__MO_959249795837_003"
+    species = ["Au", "Al"]
+    result = find_equilibrium_config_FCC(model, species, nelder_mead_timeout=1e-16)
+
+    assert result["mono_species_equilibrium_alats"]["Al"] == -1.0
+    assert result["mono_species_equilibrium_alats"]["Au"] == -1.0
+    assert result["equilibrium_alat"] == -1.0
+    assert result["ncells_per_side"] == 2
