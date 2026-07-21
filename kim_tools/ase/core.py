@@ -952,6 +952,17 @@ def _round_alat(alat: float) -> float:
 
 
 def fcc_atoms_in_supercell(ncells_per_side: int) -> int:
+    """
+    Calculate the total number of atoms in an FCC supercell.
+
+    Args:
+        ncells_per_side: The number of primitive unit cells aligned along
+          a single axis of the supercell box.
+
+    Returns:
+        The total count of atom sites within the specified supercell as an
+        integer.
+    """
     return int(4 * int(ncells_per_side) ** 3)
 
 
@@ -962,6 +973,20 @@ def make_fcc_template(
     """
     Create a generic FCC template large enough to contain at least
     len(species_list) atoms. The actual species are assigned later.
+
+    Args:
+        species_list: Chemical symbols of the target elements to be added later,
+          used here strictly to determine the minimum required atom count.
+        ncells_per_side: Initial number of unit cells along each axis to define
+          the supercell size. Dynamically increments if the resulting supercell
+          is too small. Defaults to DEFAULT_FCC_NCELLS_PER_SIDE.
+
+    Returns:
+        A tuple containing:
+            - atoms: An ASE Atoms object representing the generated hydrogen-based
+              Face-Centered Cubic supercell template.
+            - ncells_per_side: The final integer number of unit cells per side
+              used to satisfy the atom count constraint.
     """
 
     while True:
@@ -991,6 +1016,18 @@ def make_fcc_reference_config(
     All later energy evaluations use this same atom ordering, same species
     assignment, same scaled positions, and same number of unit cells. Only
     the lattice constant changes.
+
+    Args:
+        species_list: Chemical symbols of the elements to assign to the lattice
+          sites.
+        ncells_per_side: Number of unit cells along each axis to define the
+          supercell dimensions. Defaults to DEFAULT_FCC_NCELLS_PER_SIDE.
+        seed: Random seed used to determine reproducible chemical species
+          ordering and fractional atom site placements. Defaults to 13.
+
+    Returns:
+        A dictionary representation of the reference configuration, specifying
+        atom positions, species mappings, and structural configuration bounds.
     """
 
     atoms, actual_ncells_per_side = make_fcc_template(
@@ -1019,6 +1056,18 @@ def generate_fcc_compute_energy_from_reference(
     """
     Return (total_energy, ncells_per_side) for the same FCC reference
     configuration scaled to the requested lattice constant.
+
+    Args:
+        model: Name or path of the machine learning potential model
+        reference_config: The baseline crystal structure configuration used as the
+          scaling template.
+        alat: The target lattice parameter 'a' (in Angstroms) to scale the
+          reference cell configuration to.
+
+    Returns:
+        A tuple containing the calculated total potential energy (float) and the
+        number of unit cells per side (int) for the scaled system, or None if
+        the energy calculation fails or encounters invalid state constraints.
     """
 
     symbols = reference_config["symbols"]
@@ -1090,6 +1139,18 @@ def _coarse_scan_worker(
     Scans from a_start down to a_stop. Each successful point is sent to the
     parent immediately. If this child segfaults, the parent keeps all points
     already sent.
+
+    Args:
+        model: Name or path of the machine learning potential model
+        reference_config: The baseline crystal structure configuration used as the
+          starting template.
+        a_start: Starting lattice parameter 'a' (in Angstroms) for the reverse
+          scan.
+        a_stop: Ending lattice parameter 'a' (in Angstroms) for the reverse scan.
+        del_a: Step size decrement used to step through the lattice parameters.
+        result_queue: A multiprocessing.Queue object used to stream successful
+          energy-lattice points back to the parent process immediately upon
+          evaluation.
     """
 
     if del_a <= 0.0:
@@ -1181,6 +1242,23 @@ def coarse_scan_reverse_safe(
 
     If the child crashes or segfaults, do not restart it.
     Return all successful energy-alat points collected before the crash.
+
+    Args:
+        model: Name or path of the machine learning potential model
+        reference_config: The baseline crystal structure configuration used as the
+          starting template.
+        a_start: Starting lattice parameter 'a' (in Angstroms) for the scan.
+          Defaults to 12.0.
+        a_stop: Ending lattice parameter 'a' (in Angstroms) for the scan.
+          Defaults to 1.5.
+        del_a: Absolute step size decrement for the lattice parameter grid points.
+          Defaults to 0.1.
+        timeout: Maximum execution time in seconds for the entire subprocess
+          run before forcing termination. Defaults to 600.0.
+
+    Returns:
+        A dictionary containing partial or complete results up until process exit,
+        including successful lattice parameters ('alats') and matched energy steps.
     """
 
     ctx = mp.get_context("spawn")
@@ -1321,6 +1399,22 @@ def coarse_scan_reverse_safe(
 
 
 def _local_minima_indices(energies_per_atom: list[float]) -> list[int]:
+    """
+    Find the array indices of local energy minima using peak detection.
+
+    Inverts the energy values to transform local minima into local maxima peaks,
+    then locates them using SciPy's peak finder while discarding any non-finite
+    results.
+
+    Args:
+        energies_per_atom: A sequence of calculated energy values per atom over
+          the scan grid.
+
+    Returns:
+        A list of integer indices pinpointing the locations of valid local minima
+        within the input sequence.
+    """
+
     y = np.asarray(energies_per_atom, dtype=float)
 
     if len(y) == 0 or np.sum(np.isfinite(y)) == 0:
@@ -1335,6 +1429,22 @@ def _energy_is_within_bounds(
     energy_per_atom: float,
     energy_bound: tuple[float, float],
 ) -> bool:
+    """
+    Check if the magnitude of the given energy value falls within specific bounds.
+
+    Ensures that the parsed energy value is a finite numerical value before
+    comparing its absolute magnitude against the minimum and maximum limits.
+
+    Args:
+        energy_per_atom: The calculated energy value per atom to evaluate.
+        energy_bound: A tuple containing the (minimum, maximum) acceptable absolute
+          energy thresholds.
+
+    Returns:
+        True if the absolute energy magnitude is finite and within the bounds,
+        otherwise False.
+    """
+
     energy_per_atom = float(energy_per_atom)
 
     if not np.isfinite(energy_per_atom):
@@ -1350,6 +1460,26 @@ def _starting_points_from_scan(
     max_starting_points: int,
     energy_bound: tuple[float, float],
 ) -> list[dict]:
+    """
+    Identify and sort viable starting points for optimization from a coarse scan.
+
+    Finds local energy minima from scan data, filters them by energy limits,
+    and ranks them from lowest to highest energy to prioritize the most stable
+    configurations.
+
+    Args:
+        scan: Dictionary containing lists of lattice parameters ('alats') and
+          corresponding 'energies_per_atom' from the coarse sweep.
+        max_starting_points: Maximum number of candidate minima to return after
+          sorting.
+        energy_bound: Valid range (min, max) for acceptable configuration
+          energies per atom.
+
+    Returns:
+        A list of dictionaries, where each item contains the original index,
+        lattice parameter ('alat'), and energy value of a valid starting point.
+    """
+
     minima_indices = _local_minima_indices(scan["energies_per_atom"])
 
     minima_indices = [
@@ -1390,6 +1520,19 @@ def _nelder_mead_worker(
     """
     Run Nelder-Mead in a child process using the same reference FCC
     configuration as the coarse scan.
+
+    Args:
+        model_name: Name or path of the machine learning potential model
+        reference_config: The baseline crystal structure configuration used as the
+          starting template.
+        start_alat: Initial lattice parameter 'a' value (in Angstroms) to begin the
+          optimization.
+        a_min: Minimum allowable bounding value for the lattice parameter 'a'.
+        a_max: Maximum allowable bounding value for the lattice parameter 'a'.
+        energy_bound: Valid range (min, max) for acceptable configuration
+          energies.
+        queue: A multiprocessing.Queue object used to safely pass the optimization
+          results back to the parent process.
     """
 
     try:
@@ -1512,6 +1655,23 @@ def scipy_nelder_mead_safe(
     Run Nelder-Mead in a child process.
 
     This isolates crashes/segfaults from the parent process.
+
+    Args:
+        model: Name or path of the machine learning potential model
+        reference_config: The baseline crystal structure configuration used as the
+          starting template.
+        start_alat: Initial lattice parameter 'a' value (in Angstroms) to begin the
+          optimization.
+        a_min: Minimum allowable bounding value for the lattice parameter 'a'.
+        a_max: Maximum allowable bounding value for the lattice parameter 'a'.
+        energy_bound: Valid range (min, max) for acceptable configuration
+          energies.
+        timeout: Maximum execution time in seconds before terminating the child
+          process worker. Defaults to 600.0.
+
+    Returns:
+        A dictionary containing the optimization outcome status, evaluations, and
+        the refined equilibrium lattice coordinates if successful.
     """
 
     def fail_result(status: str, message: str) -> dict:
@@ -1638,6 +1798,32 @@ def _failure_config_result(
     reason: str,
     bounds: dict,
 ) -> dict:
+    """Generate a uniform dictionary summary for a failed configuration search.
+
+    Populates default error indicators like negative dimensions or None values for
+    missing measurements while preserving logs, boundaries, and historical attempts
+    for later diagnosis.
+
+    Args:
+        species_list: Chemical symbols of the elements included in the system
+        configuration_type: A label indicating the structural type
+        reference_config: The generated baseline crystal structure, or None if
+          generation failed.
+        scan: Historical trace of the initial energy-versus-lattice coarse scan,
+          or None if skipped.
+        starting_points: Local energy minima detected during the coarse scan to
+          be used for optimization.
+        attempts: List of optimization traces produced by downstream Nelder-Mead
+          subprocess workers.
+        reason: A string identifier explaining why the search workflow halted.
+        bounds: Dictionary defining coordinate search window ranges and step delta
+          sizes.
+
+    Returns:
+        A dictionary containing error statuses, tracking identifiers, and any
+        partial execution traces collected before the failure occurred.
+    """
+
     result = {
         "ok": False,
         "status": "failed",
@@ -1678,6 +1864,40 @@ def _equilibrate_one_config(
     coarse_a_start: float = 12.0,
     coarse_a_stop: float = 1.5,
 ) -> dict:
+    """Equilibrate a single FCC atomic configuration using a sequential protocol.
+
+    Executes a high-level orchestration that generates a reference crystal,
+    scans lattice constants to find energy minima, and applies a Nelder-Mead
+    simplex search to optimize structure bounds.
+
+    Args:
+        model: Name or path of the machine learning potential model
+        species_list: Chemical symbols of the elements to include in the system
+        configuration_type: A label indicating the structural type
+        energy_bound: Valid range (min, max) for acceptable configuration
+          energies.
+        coarse_del_a: Step size for the lattice parameter 'a' during coarse
+          scans.
+        coarse_timeout: Maximum execution time in seconds for the coarse scan
+          subprocess.
+        nelder_mead_timeout: Maximum execution time in seconds for each
+          Nelder-Mead optimization subprocess.
+        max_starting_points: Maximum number of local minima to evaluate using
+          Nelder-Mead relaxation.
+        ncells_per_side: Number of unit cells along each axis to define the
+          supercell size.
+        seed: Random seed for reproducible structure generation and atom
+          placement.
+        coarse_a_start: Starting lattice parameter 'a' (in Angstroms) for the
+          reverse scan.
+        coarse_a_stop: Ending lattice parameter 'a' (in Angstroms) for the
+          reverse scan.
+
+    Returns:
+        A dictionary containing the metadata, execution history, and details of
+        either a successful equilibrium search or a recorded failure.
+    """
+
     logger.info(
         f"_equilibrate_one_config {_species_label(species_list)} "
         f"config_type={configuration_type} "
@@ -1803,6 +2023,18 @@ def _equilibrate_one_config(
 
 
 def _finite_positive_mean(values: list[float]) -> float:
+    """Calculate the mean of finite, positive numbers in a list.
+
+    Filters out non-finite numbers (NaN, Inf) and values less than or equal to
+    zero before computing the average.
+
+    Args:
+        values: A list of floats to be filtered and averaged.
+
+    Returns:
+        The arithmetic mean of the remaining valid values as a float, or -1.0
+        if no values survive the filtering process.
+    """
     arr = np.asarray(values, dtype=float)
     arr = arr[np.isfinite(arr)]
     arr = arr[arr > 0.0]
@@ -1814,6 +2046,18 @@ def _finite_positive_mean(values: list[float]) -> float:
 
 
 def _minimal_success_result(full_result: dict) -> dict:
+    """Extract a minimal summary from a successful full result dictionary.
+
+    Args:
+        full_result: The complete dictionary of results containing metadata,
+          scan details, and final optimization outputs.
+
+    Returns:
+        A dictionary containing parsed information about the equilibrium
+        configuration, including energy values, cell parameters, and structural
+        metadata.
+    """
+
     final_result = full_result["final_result"]
 
     return {
@@ -1863,6 +2107,34 @@ def find_equilibrium_config_FCC(
       6. Return after the first successful Nelder-Mead result.
       7. For mixed species, repeat the same protocol using one fixed mixed
          reference configuration.
+
+    Args:
+        model: Name or path of the machine learning potential model.
+        species_list: Chemical symbols of the elements to include in the system
+        energy_bound: Valid range (min, max) for configuration energies.
+        coarse_del_a: Step size for the lattice parameter 'a' for monospecies
+          coarse scans.
+        mixed_coarse_del_a: Step size for the lattice parameter 'a' for
+          mixed-species coarse scans.
+        coarse_timeout: Maximum execution time in seconds for the coarse scan
+          subprocess.
+        nelder_mead_timeout: Maximum execution time in seconds for each
+          Nelder-Mead optimization subprocess.
+        max_starting_points: Maximum number of local minima to evaluate using
+          Nelder-Mead relaxation.
+        ncells_per_side: Number of unit cells along each axis to define the
+          supercell size.
+        seed: Random seed for reproducible structure generation and atom
+          placement.
+        coarse_a_start: Starting lattice parameter 'a' (in Angstroms) for the
+          reverse scan.
+        coarse_a_stop: Ending lattice parameter 'a' (in Angstroms) for the
+          reverse scan.
+
+    Returns:
+        A dictionary containing the successful equilibrium configuration results
+        and metadata.
+
     """
 
     mono_results = []
@@ -1883,7 +2155,6 @@ def find_equilibrium_config_FCC(
             coarse_a_stop=coarse_a_stop,
         )
 
-        print("MONO REF CONFIG", mono["reference_config"])
         mono_results.append(mono)
 
     mono_good_alats = [row.get("good_alat", -1.0) for row in mono_results]
@@ -1909,8 +2180,6 @@ def find_equilibrium_config_FCC(
             coarse_a_start=coarse_a_start,
             coarse_a_stop=coarse_a_stop,
         )
-
-        print("MIXED REF CONFIG", mixed_result["reference_config"])
 
         mixed_result["approx_mixed_equilibrium_alat"] = approx_mixed_equilibrium_alat
 
