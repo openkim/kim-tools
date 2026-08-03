@@ -1050,7 +1050,7 @@ def make_fcc_reference_config(
 
 
 def generate_fcc_compute_energy_from_reference(
-    model: str,
+    model_name: str,
     reference_config: dict,
     alat: float,
 ) -> Union[Tuple[float, int], None]:
@@ -1059,7 +1059,7 @@ def generate_fcc_compute_energy_from_reference(
     configuration scaled to the requested lattice constant.
 
     Args:
-        model: Name or path of the machine learning potential model
+        model_name: Name of interatomic potential model
         reference_config: The baseline crystal structure configuration used as the
           scaling template.
         alat: The target lattice parameter 'a' (in Angstroms) to scale the
@@ -1082,7 +1082,7 @@ def generate_fcc_compute_energy_from_reference(
         pbc=True,
     )
 
-    calc = KIM(model)
+    calc = KIM(model_name)
     atoms.calc = calc
 
     try:
@@ -1116,7 +1116,7 @@ def generate_fcc_compute_energy_from_reference(
 
 
 def _coarse_scan_worker(
-    model: str,
+    model_name: str,
     reference_config: dict,
     a_start: float,
     a_stop: float,
@@ -1131,7 +1131,7 @@ def _coarse_scan_worker(
     already sent.
 
     Args:
-        model: Name or path of the machine learning potential model
+        model_name: Name of interatomic potential model
         reference_config: The baseline crystal structure configuration used as the
           starting template.
         a_start: Starting lattice parameter 'a' (in Angstroms) for the reverse
@@ -1157,7 +1157,7 @@ def _coarse_scan_worker(
             alat = _round_alat(a_start - j * del_a)
 
             energy_config = generate_fcc_compute_energy_from_reference(
-                model=model,
+                model_name=model_name,
                 reference_config=reference_config,
                 alat=alat,
             )
@@ -1220,7 +1220,7 @@ def _format_child_exit_reason(exitcode: Union[int, None]) -> str:
 
 
 def coarse_scan_reverse_safe(
-    model: str,
+    model_name: str,
     reference_config: dict,
     a_start: float = 12.0,
     a_stop: float = 1.5,
@@ -1234,7 +1234,7 @@ def coarse_scan_reverse_safe(
     Return all successful energy-alat points collected before the crash.
 
     Args:
-        model: Name or path of the machine learning potential model
+        model_name: Name of interatomic potential model
         reference_config: The baseline crystal structure configuration used as the
           starting template.
         a_start: Starting lattice parameter 'a' (in Angstroms) for the scan.
@@ -1257,7 +1257,7 @@ def coarse_scan_reverse_safe(
     proc = ctx.Process(
         target=_coarse_scan_worker,
         args=(
-            model,
+            model_name,
             reference_config,
             float(a_start),
             float(a_stop),
@@ -1512,7 +1512,7 @@ def _nelder_mead_worker(
     configuration as the coarse scan.
 
     Args:
-        model_name: Name or path of the machine learning potential model
+        model_name: Name of interatomic potential model
         reference_config: The baseline crystal structure configuration used as the
           starting template.
         start_alat: Initial lattice parameter 'a' value (in Angstroms) to begin the
@@ -1536,7 +1536,7 @@ def _nelder_mead_worker(
                 return 1.0e100
 
             val = generate_fcc_compute_energy_from_reference(
-                model=model_name,
+                model_name=model_name,
                 reference_config=reference_config,
                 alat=alat,
             )
@@ -1633,7 +1633,7 @@ def _nelder_mead_worker(
 
 
 def scipy_nelder_mead_safe(
-    model: str,
+    model_name: str,
     reference_config: dict,
     start_alat: float,
     a_min: float,
@@ -1647,7 +1647,7 @@ def scipy_nelder_mead_safe(
     This isolates crashes/segfaults from the parent process.
 
     Args:
-        model: Name or path of the machine learning potential model
+        model_name: Name of the interatomic potential model
         reference_config: The baseline crystal structure configuration used as the
           starting template.
         start_alat: Initial lattice parameter 'a' value (in Angstroms) to begin the
@@ -1679,7 +1679,7 @@ def scipy_nelder_mead_safe(
     proc = ctx.Process(
         target=_nelder_mead_worker,
         args=(
-            model,
+            model_name,
             reference_config,
             start_alat,
             a_min,
@@ -1703,7 +1703,7 @@ def scipy_nelder_mead_safe(
 
             logger.info(
                 "scipy_nelder_mead_safe TIMEOUT for "
-                f"{model} {reference_config['species_list']} "
+                f"{model_name} {reference_config['species_list']} "
                 f"start_alat={start_alat}"
             )
 
@@ -1717,7 +1717,7 @@ def scipy_nelder_mead_safe(
 
             logger.info(
                 "scipy_nelder_mead_safe CRASH/EXIT for "
-                f"{model} {reference_config['species_list']} "
+                f"{model_name} {reference_config['species_list']} "
                 f"start_alat={start_alat}: {message}"
             )
 
@@ -1841,7 +1841,7 @@ def _failure_config_result(
 
 
 def _equilibrate_one_config(
-    model: str,
+    model_name: str,
     species_list: list[str],
     configuration_type: str,
     energy_bound: tuple[float, float],
@@ -1861,7 +1861,7 @@ def _equilibrate_one_config(
     simplex search to optimize structure bounds.
 
     Args:
-        model: Name or path of the machine learning potential model
+        model_name: Name of the interatomic potential model
         species_list: Chemical symbols of the elements to include in the system
         configuration_type: A label indicating the structural type
         energy_bound: Valid range (min, max) for acceptable configuration
@@ -1902,7 +1902,7 @@ def _equilibrate_one_config(
     )
 
     scan = coarse_scan_reverse_safe(
-        model=model,
+        model_name=model_name,
         reference_config=reference_config,
         a_start=coarse_a_start,
         a_stop=coarse_a_stop,
@@ -1960,7 +1960,7 @@ def _equilibrate_one_config(
 
     for start_index, start in enumerate(starting_points):
         attempt = scipy_nelder_mead_safe(
-            model=model,
+            model_name=model_name,
             reference_config=reference_config,
             start_alat=start["alat"],
             a_min=bounds["nelder_mead_a_min"],
@@ -2071,7 +2071,7 @@ def _minimal_success_result(full_result: dict) -> dict:
 
 
 def find_equilibrium_config_FCC(
-    model: str,
+    model_name: str,
     species_list: list[str],
     energy_bound: tuple[float, float] = (5.0e-2, 5.0e2),
     coarse_del_a: float = 0.1,
@@ -2099,7 +2099,7 @@ def find_equilibrium_config_FCC(
          reference configuration.
 
     Args:
-        model: Name or path of the machine learning potential model.
+        model_name: Name of interatomic potential model.
         species_list: Chemical symbols of the elements to include in the system
         energy_bound: Valid range (min, max) for configuration energies.
         coarse_del_a: Step size for the lattice parameter 'a' for monospecies
@@ -2131,7 +2131,7 @@ def find_equilibrium_config_FCC(
 
     for species in species_list:
         mono = _equilibrate_one_config(
-            model=model,
+            model_name=model_name,
             species_list=[species],
             configuration_type="mono_species_fcc",
             energy_bound=energy_bound,
@@ -2157,7 +2157,7 @@ def find_equilibrium_config_FCC(
 
     else:
         mixed_result = _equilibrate_one_config(
-            model=model,
+            model_name=model_name,
             species_list=species_list,
             configuration_type="mixed_species_fcc",
             energy_bound=energy_bound,
@@ -2181,7 +2181,7 @@ def find_equilibrium_config_FCC(
         "status": (
             "success" if final_result and final_result.get("ok", False) else "failed"
         ),
-        "model": model,
+        "model": model_name,
         "species_list": list(species_list),
         "species_label": _species_label(species_list),
         "ncells_per_side": ncells_per_side,
