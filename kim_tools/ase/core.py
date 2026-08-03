@@ -1110,12 +1110,6 @@ def generate_fcc_compute_energy_from_reference(
             pass
 
         try:
-            if calc is not None and hasattr(calc, "__del__"):
-                calc.__del__()
-        except Exception:
-            pass
-
-        try:
             del calc
         except Exception:
             pass
