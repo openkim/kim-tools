@@ -1110,11 +1110,6 @@ def generate_fcc_compute_energy_from_reference(
             pass
 
         try:
-            del calc
-        except Exception:
-            pass
-
-        try:
             del atoms
         except Exception:
             pass
