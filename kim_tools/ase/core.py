@@ -31,6 +31,7 @@ Helper routines for KIM Tests and Verification Checks
 
 """
 
+from __future__ import annotations
 
 import itertools
 import logging
