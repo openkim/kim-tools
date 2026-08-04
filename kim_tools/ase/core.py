@@ -31,11 +31,18 @@ Helper routines for KIM Tests and Verification Checks
 
 """
 
+from __future__ import annotations
+
 import itertools
 import logging
 import math
+import multiprocessing as mp
+import queue as queue_module
 import random
-from typing import Union
+import signal
+import time
+import traceback
+from typing import Tuple, Union
 
 import numpy as np
 from ase import Atoms
@@ -43,6 +50,8 @@ from ase.calculators.calculator import Calculator
 from ase.calculators.kim.kim import KIM
 from ase.data import chemical_symbols
 from ase.lattice.cubic import FaceCenteredCubic
+from scipy.optimize import minimize
+from scipy.signal import find_peaks
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(filename="kim-tools.log", level=logging.INFO, force=True)
@@ -57,11 +66,7 @@ __all__ = [
     "get_isolated_energy_per_atom",
     "get_model_energy_cutoff",
     "get_model_species_minimum_cutoff",
-    "fcc_atoms_in_supercell",
-    "generate_fcc_compute_energy",
-    "local_edge_detection",
-    "filter_good_alat",
-    "find_working_configuration_FCC",
+    "find_equilibrium_config_FCC",
     "fractional_coords_transformation",
     "perturb_until_all_forces_sizeable",
     "randomize_positions",
@@ -933,260 +938,1271 @@ def get_model_energy_cutoff(
 
 
 ################################################################################
-def generate_fcc_compute_energy(
-    model: Union[str, Calculator],
-    species: list,
-    alat: float,
-    seed: Union[int, None] = 13,
-) -> tuple[float, int]:
+# FIND-EQUILIBRIUM-CONFIGURATION-FCC
+################################################################################
+
+DEFAULT_FCC_NCELLS_PER_SIDE = 1
+
+
+def _species_label(species_list: list[str]) -> str:
+    return "-".join(species_list)
+
+
+def _round_alat(alat: float) -> float:
+    return round(float(alat), 8)
+
+
+def fcc_atoms_in_supercell(ncells_per_side: int) -> int:
     """
-    Construct an FCC lattice large enough to accommodate all species,
-    evaluate its energy, and return the energy and size of the supercell.
+    Calculate the total number of atoms in an FCC supercell.
 
     Args:
-        model: The model name or calculator object.
-        species: List of atomic species to be incorporated into the FCC lattice.
-        alat: The lattice constant for the FCC lattice.
-        seed: Optional random seed for reproducibility during species randomization.
+        ncells_per_side: The number of primitive unit cells aligned along
+          a single axis of the supercell box.
+
+    Returns:
+        The total count of atom sites within the specified supercell as an
+        integer.
+    """
+    return int(4 * int(ncells_per_side) ** 3)
+
+
+def make_fcc_template(
+    species_list: list[str],
+    ncells_per_side: int = DEFAULT_FCC_NCELLS_PER_SIDE,
+):
+    """
+    Create a generic FCC template large enough to contain at least
+    len(species_list) atoms. The actual species are assigned later.
+
+    Args:
+        species_list: Chemical symbols of the target elements to be added later,
+          used here strictly to determine the minimum required atom count.
+        ncells_per_side: Initial number of unit cells along each axis to define
+          the supercell size. Dynamically increments if the resulting supercell
+          is too small. Defaults to DEFAULT_FCC_NCELLS_PER_SIDE.
 
     Returns:
         A tuple containing:
-            - The total potential energy of the lattice.
-            - The number of unit cells along each side of the supercell.
+            - atoms: An ASE Atoms object representing the generated hydrogen-based
+              Face-Centered Cubic supercell template.
+            - ncells_per_side: The final integer number of unit cells per side
+              used to satisfy the atom count constraint.
     """
 
-    ncells_per_side = 2
     while True:
         atoms = FaceCenteredCubic(
             size=(ncells_per_side, ncells_per_side, ncells_per_side),
-            latticeconstant=alat,
+            latticeconstant=1.0,
             symbol="H",
-            pbc=False,
+            pbc=True,
         )
-        if len(atoms) < len(species):
+
+        if len(atoms) < len(species_list):
             ncells_per_side += 1
         else:
             break
-    random.seed(seed)
-    randomize_species(atoms, species)
-    if isinstance(model, str):
-        calc = KIM(model)
-    else:
-        calc = model
-    atoms.set_calculator(calc)
 
-    # compute energy
+    return atoms, ncells_per_side
+
+
+def make_fcc_reference_config(
+    species_list: list[str],
+    ncells_per_side: int = DEFAULT_FCC_NCELLS_PER_SIDE,
+    seed: int = 13,
+) -> dict:
+    """
+    Create one fixed FCC reference configuration.
+
+    All later energy evaluations use this same atom ordering, same species
+    assignment, same scaled positions, and same number of unit cells. Only
+    the lattice constant changes.
+
+    Args:
+        species_list: Chemical symbols of the elements to assign to the lattice
+          sites.
+        ncells_per_side: Number of unit cells along each axis to define the
+          supercell dimensions. Defaults to DEFAULT_FCC_NCELLS_PER_SIDE.
+        seed: Random seed used to determine reproducible chemical species
+          ordering and fractional atom site placements. Defaults to 13.
+
+    Returns:
+        A dictionary representation of the reference configuration, specifying
+        atom positions, species mappings, and structural configuration bounds.
+    """
+
+    atoms, actual_ncells_per_side = make_fcc_template(
+        ncells_per_side=ncells_per_side,
+        species_list=species_list,
+    )
+    randomize_species(atoms, species_list, seed=seed)
+
+    reference_config = {
+        "species_list": list(species_list),
+        "species_label": _species_label(species_list),
+        "symbols": atoms.get_chemical_symbols(),
+        "scaled_positions": atoms.get_scaled_positions().copy(),
+        "ncells_per_side": int(actual_ncells_per_side),
+        "seed": int(seed),
+    }
+
+    return reference_config
+
+
+def generate_fcc_compute_energy_from_reference(
+    model_name: str,
+    reference_config: dict,
+    alat: float,
+) -> Union[Tuple[float, int], None]:
+    """
+    Return (total_energy, ncells_per_side) for the same FCC reference
+    configuration scaled to the requested lattice constant.
+
+    Args:
+        model_name: Name of interatomic potential model
+        reference_config: The baseline crystal structure configuration used as the
+          scaling template.
+        alat: The target lattice parameter 'a' (in Angstroms) to scale the
+          reference cell configuration to.
+
+    Returns:
+        A tuple containing the calculated total potential energy (float) and the
+        number of unit cells per side (int) for the scaled system, or None if
+        the energy calculation fails or encounters invalid state constraints.
+    """
+
+    symbols = reference_config["symbols"]
+    scaled_positions = np.asarray(reference_config["scaled_positions"], dtype=float)
+    ncells_per_side = int(reference_config["ncells_per_side"])
+
+    atoms = Atoms(
+        symbols=symbols,
+        scaled_positions=scaled_positions,
+        cell=[ncells_per_side * float(alat)] * 3,
+        pbc=True,
+    )
+
+    calc = KIM(model_name)
+    atoms.calc = calc
+
     try:
         pe = atoms.get_potential_energy()
-        return pe, ncells_per_side
+        return float(pe), ncells_per_side
+
     except Exception as e:
-        raise (e)
-
-
-################################################################################
-def fcc_atoms_in_supercell(n_cells_per_side: int) -> int:
-    """
-    Compute the number of atoms in an FCC supercell.
-
-    This function calculates the total number of atoms in a Face-Centered Cubic (FCC)
-    supercell based on the number of unit cells along each side. In an FCC structure,
-    each unit cell contains 4 atoms.
-
-    Args:
-        n_cells_per_side: Number of unit cells along each side of the supercell.
-                                This represents the size of the supercell.
-
-    Returns:
-        The total number of atoms in the FCC supercell.
-    """
-
-    atoms_per_unit_cell = 4
-    total_unit_cells = n_cells_per_side**3
-    total_atoms = total_unit_cells * atoms_per_unit_cell
-    return (int)(total_atoms)
-
-
-################################################################################
-def local_edge_detection(x: list, y: list) -> list:
-    """
-    Computes the Local Edge Detection (LED) values for the x-y curve.
-    The algorithm helps to identify discontinuities or abrupt changes in the curve.
-
-    Based on the paper:
-    A. Gelb and E. Tadmor, "Local edge detection for non-linear signals,"
-    Journal of Scientific Computing, 28:279-306, 2006.
-
-    Args:
-        x: A list of x-values representing the independent variable of the curve.
-        y: A list of y-values representing the dependent variable of the curve.
-
-    Returns:
-        A list of LED values of strength of discontinuities in the x-y curve.
-
-    Notes:
-        The LED[i] corresponds to the X[i+2]
-
-    """
-
-    led_values = []
-
-    fact = 1.0 / 6.0
-    for j in range(2, len(y) - 3):
-        # use 5-th order local difference formula
-        led = fact * (
-            -y[j - 2]
-            + 5 * y[j - 1]
-            - 10 * y[j]
-            + 10 * y[j + 1]
-            - 5 * y[j + 2]
-            + y[j + 3]
+        logger.info(
+            "generate_fcc_compute_energy_from_reference exception "
+            f"species={reference_config.get('species_label')} "
+            f"alat={alat}:\n{e}"
         )
-        led_values.append(led)
+        return None
 
-    return led_values
+    finally:
+        try:
+            atoms.calc = None
+        except Exception:
+            pass
+
+        try:
+            if calc is not None and hasattr(calc, "clean"):
+                calc.clean()
+        except Exception:
+            pass
+
+        try:
+            del atoms
+        except Exception:
+            pass
 
 
-################################################################################
-def filter_good_alat(
-    alats: list,
-    energies: list,
-    ncells: list,
-    leds: list,
-    min_cutoff: float,
-    etol: list = [5e-2, 5e2],
-    led_tol: float = 1.0,
-) -> dict:
+def _coarse_scan_worker(
+    model_name: str,
+    reference_config: dict,
+    a_start: float,
+    a_stop: float,
+    del_a: float,
+    result_queue,
+):
     """
-    Filter a good lattice constant (alat) based on the given criteria.
+    Child process for reverse coarse scan.
 
-    This function filters out a valid alat value from the provided lists of alats,
-    energies, number of cells, and LED values. The filtering is done based on several
-    conditions including the energy bounds, LED tolerance, and minimum cutoff distance.
+    Scans from a_start down to a_stop. Each successful point is sent to the
+    parent immediately. If this child segfaults, the parent keeps all points
+    already sent.
 
     Args:
-        alats: A list of lattice parameters (alat).
-        energies: A list of energy-per-atom values corresponding to each alat.
-                          Used to compute the total energy of the FCC structure
-                          for filtering.
-        ncells: A list of the number of cells corresponding to each alat.
-                        Used to compute the number of atoms for filtering by energy.
-        leds: A list of LED values corresponding to each alat.
-                     Note that leds[i] corresponds to alats[i+2]
-        min_cutoff: The minimum cutoff distance for the model-species
-                            combination. This is used to filter alats.
-        etol: A list containing the minimum and maximum energy-per-atom
-                               bounds for filtering. Default is [5e-2, 5e2].
-        led_tol: The maximum LED value for filtering. Default is 1.0.
-
-    Returns:
-        dict: A dictionary containing the filtered alat value and related properties:
-            - 'good_alat': The filtered alat value.
-            - 'min_led': The minimum LED value found.
-            - 'good_ncells': The number of cells corresponding to the selected alat.
-
-    Notes:
-        The following conditions are applied to filter the valid alat:
-        - `0.2 * min_cutoff < alat < 0.8 * min_cutoff`
-        - `etol[0] < |energy-per-atom| < etol[1]`
-        - `|LED| < led_tol`
-        - `0 < |LED| < min_led`
-
+        model_name: Name of interatomic potential model
+        reference_config: The baseline crystal structure configuration used as the
+          starting template.
+        a_start: Starting lattice parameter 'a' (in Angstroms) for the reverse
+          scan.
+        a_stop: Ending lattice parameter 'a' (in Angstroms) for the reverse scan.
+        del_a: Step size decrement used to step through the lattice parameters.
+        result_queue: A multiprocessing.Queue object used to stream successful
+          energy-lattice points back to the parent process immediately upon
+          evaluation.
     """
 
-    min_led = np.inf
-    good_alat = None
-    good_ncells: int = 0
+    if del_a <= 0.0:
+        raise ValueError("del_a must be positive")
 
-    N = len(alats)
+    if a_start < a_stop:
+        raise ValueError("reverse coarse scan requires a_start >= a_stop")
 
-    for i in range(2, N - 3):
-        alat = alats[i]
-        energy = energies[i]
-        ncell = ncells[i]
-        led = leds[i - 2]  # leds[0] corresponds to alats[2]
-        natoms = fcc_atoms_in_supercell(ncell)
+    n_steps = int(math.floor((a_start - a_stop) / del_a + 1.0e-9))
+    num_atoms = len(reference_config["symbols"])
 
-        if alat > 0.8 * min_cutoff or alat < 0.2 * min_cutoff:
-            continue
-        if abs(energy) > etol[1] * natoms or abs(energy) < etol[0] * natoms:
-            continue
-        if abs(led) > led_tol or abs(led) > min_led:
-            continue
+    try:
+        for j in range(n_steps + 1):
+            alat = _round_alat(a_start - j * del_a)
 
-        good_alat = alat
-        good_ncells = ncell
-        min_led = abs(led)
+            energy_config = generate_fcc_compute_energy_from_reference(
+                model_name=model_name,
+                reference_config=reference_config,
+                alat=alat,
+            )
 
-    return {"good_alat": good_alat, "min_led": min_led, "good_ncells": good_ncells}
+            if energy_config is None:
+                result_queue.put(
+                    {
+                        "type": "point",
+                        "ok": False,
+                        "alat": float(alat),
+                        "energy_total": None,
+                        "energy_per_atom": None,
+                        "ncells": None,
+                    }
+                )
+                continue
+
+            energy_total, ncells = energy_config
+            energy_per_atom = float(energy_total) / float(num_atoms)
+
+            result_queue.put(
+                {
+                    "type": "point",
+                    "ok": True,
+                    "alat": float(alat),
+                    "energy_total": float(energy_total),
+                    "energy_per_atom": float(energy_per_atom),
+                    "ncells": int(ncells),
+                }
+            )
+
+        result_queue.put({"type": "done", "ok": True})
+
+    except Exception:
+        result_queue.put(
+            {
+                "type": "done",
+                "ok": False,
+                "error": traceback.format_exc(),
+            }
+        )
 
 
-################################################################################
-def find_working_configuration_FCC(
-    model: Union[str, Calculator],
-    species: list,
-    energy_bound: list = [5e-2, 5e2],
-    led_tol: float = 1.0,
-    seed: Union[int, None] = 13,
+def _format_child_exit_reason(exitcode: Union[int, None]) -> str:
+    if exitcode is None:
+        return "child_exitcode_unknown"
+
+    if exitcode == 0:
+        return "completed_without_done_message"
+
+    if exitcode < 0:
+        sig = -exitcode
+        try:
+            sig_name = signal.Signals(sig).name
+        except Exception:
+            sig_name = f"signal_{sig}"
+        return f"child_died_with_{sig_name}"
+
+    return f"child_exited_with_code_{exitcode}"
+
+
+def coarse_scan_reverse_safe(
+    model_name: str,
+    reference_config: dict,
+    a_start: float = 12.0,
+    a_stop: float = 1.5,
+    del_a: float = 0.1,
+    timeout: float = 600.0,
 ) -> dict:
     """
-    Find an FCC configuration for a model and species with energy and LED constraints.
+    Run a reverse coarse scan in one child process.
 
-    This function constructs an FCC configuration for the specified species and model,
-    and filters the configurations based on energy-per-atom and smoothness of the
-    energy-alat relation. The energy values must lie within the specified bounds,
-    and the local edge detection (LED) must be below the given tolerance.
+    If the child crashes or segfaults, do not restart it.
+    Return all successful energy-alat points collected before the crash.
 
     Args:
-        model: The model name or calculator object used to
-                                        compute the energies of the configurations.
-        species: atomic species to be incorporated into the FCC structure.
-        energy_bound: A list of two values specifying the minimum
-                                       and maximum energy-per-atom bounds for filtering.
-                                       Default is [5e-2, 5e2].
-        led_tol: The tolerance for local edge detection filtering.
-                                   Default is 1.0.
-        seed: An optional random seed for reproducibility.
+        model_name: Name of interatomic potential model
+        reference_config: The baseline crystal structure configuration used as the
+          starting template.
+        a_start: Starting lattice parameter 'a' (in Angstroms) for the scan.
+          Defaults to 12.0.
+        a_stop: Ending lattice parameter 'a' (in Angstroms) for the scan.
+          Defaults to 1.5.
+        del_a: Absolute step size decrement for the lattice parameter grid points.
+          Defaults to 0.1.
+        timeout: Maximum execution time in seconds for the entire subprocess
+          run before forcing termination. Defaults to 600.0.
 
     Returns:
-        dict: A dictionary containing the working FCC configuration, including the
-              optimal lattice constant, number of cells per side, and the
-              corresponding LED value.
-
-    Notes:
-        - The function first computes the minimum cutoff distance for the species pair.
-        - It then attempts different lattice constants and filters the configurations
-          based on energy-per-atom and LED values.
-        - Only configurations that meet the energy and LED criteria are retained.
-
+        A dictionary containing partial or complete results up until process exit,
+        including successful lattice parameters ('alats') and matched energy steps.
     """
 
-    min_cutoff = get_model_species_minimum_cutoff(model, species)
-    amax = 1.0 * min_cutoff
-    amin = 0.3 * min_cutoff
-    del_a = 0.01
-    na = int(math.ceil((amax - amin) / del_a))
+    ctx = mp.get_context("spawn")
+    result_queue = ctx.Queue()
+
+    proc = ctx.Process(
+        target=_coarse_scan_worker,
+        args=(
+            model_name,
+            reference_config,
+            float(a_start),
+            float(a_stop),
+            float(del_a),
+            result_queue,
+        ),
+    )
 
     alats = []
-    energies = []
-    ncells = []  # will be used for filtering by energy-per-atom
+    energies_per_atom = []
+    energy_total = []
+    ncells = []
+    failed_alats = []
 
-    for j in range(0, na + 1):
-        a = amin + j * del_a
+    child_done = False
+    child_error = None
+    child_exitcode = None
+    stopped_reason = None
+
+    def pop_from_result_queue():
+        nonlocal child_done, child_error
+
+        while True:
+            try:
+                result = result_queue.get_nowait()
+            except queue_module.Empty:
+                break
+
+            if not isinstance(result, dict):
+                continue
+
+            if result.get("type") == "point":
+                if result.get("ok", False):
+                    alats.append(float(result["alat"]))
+                    energies_per_atom.append(float(result["energy_per_atom"]))
+                    energy_total.append(float(result["energy_total"]))
+                    ncells.append(int(result["ncells"]))
+                else:
+                    failed_alats.append(float(result["alat"]))
+
+            elif result.get("type") == "done":
+                child_done = True
+                if not result.get("ok", False):
+                    child_error = result.get("error")
+                break
+
+    proc.start()
+    deadline = time.monotonic() + float(timeout)
+
+    try:
+        while True:
+            pop_from_result_queue()
+
+            if child_done:
+                stopped_reason = (
+                    "completed" if child_error is None else "python_exception"
+                )
+                child_exitcode = proc.exitcode
+                break
+
+            child_exitcode = proc.exitcode
+
+            if child_exitcode is not None:
+                stopped_reason = _format_child_exit_reason(child_exitcode)
+
+                # One last drain after child has exited.
+                pop_from_result_queue()
+                break
+
+            if time.monotonic() > deadline:
+                stopped_reason = "timeout"
+
+                proc.terminate()
+                proc.join(5.0)
+
+                if proc.is_alive():
+                    proc.kill()
+                    proc.join()
+
+                child_exitcode = proc.exitcode
+
+                # Drain anything already sent before termination.
+                pop_from_result_queue()
+                break
+
+            time.sleep(0.05)
+
+    finally:
+        if proc.is_alive():
+            proc.terminate()
+            proc.join(5.0)
+
+            if proc.is_alive():
+                proc.kill()
+                proc.join()
+
         try:
-            val = generate_fcc_compute_energy(model, species, a, seed)
-            if val is not None:
-                alats.append(a)
-                energies.append(val[0])  # first value is energy
-                ncells.append(val[1])  # second value is number of atoms
-
+            proc.close()
         except Exception:
-            continue
+            pass
 
-    # these LED values correspond to alats[2] ... alats[na-3]
-    leds = local_edge_detection(alats, energies)
-    return filter_good_alat(
-        alats, energies, ncells, leds, min_cutoff, energy_bound, led_tol
+        try:
+            result_queue.close()
+            result_queue.join_thread()
+        except Exception:
+            pass
+
+    return {
+        "alats": alats,
+        "energies_per_atom": energies_per_atom,
+        "energy_total": energy_total,
+        "ncells": ncells,
+        "failed_alats": failed_alats,
+        "a_start": float(a_start),
+        "a_stop": float(a_stop),
+        "del_a": float(del_a),
+        "scan_direction": "reverse",
+        "stopped_reason": stopped_reason,
+        "child_exitcode": child_exitcode,
+        "child_error": child_error,
+        "reference_config_summary": {
+            "species_list": reference_config["species_list"],
+            "species_label": reference_config["species_label"],
+            "ncells_per_side": int(reference_config["ncells_per_side"]),
+            "natoms": len(reference_config["symbols"]),
+            "seed": int(reference_config["seed"]),
+        },
+    }
+
+
+def _local_minima_indices(energies_per_atom: list[float]) -> list[int]:
+    """
+    Find the array indices of local energy minima using peak detection.
+
+    Inverts the energy values to transform local minima into local maxima peaks,
+    then locates them using SciPy's peak finder while discarding any non-finite
+    results.
+
+    Args:
+        energies_per_atom: A sequence of calculated energy values per atom over
+          the scan grid.
+
+    Returns:
+        A list of integer indices pinpointing the locations of valid local minima
+        within the input sequence.
+    """
+
+    y = np.asarray(energies_per_atom, dtype=float)
+
+    if len(y) == 0 or np.sum(np.isfinite(y)) == 0:
+        return []
+
+    indices, _ = find_peaks(-y)
+
+    return [int(i) for i in indices if np.isfinite(y[i])]
+
+
+def _energy_is_within_bounds(
+    energy_per_atom: float,
+    energy_bound: tuple[float, float],
+) -> bool:
+    """
+    Check if the magnitude of the given energy value falls within specific bounds.
+
+    Ensures that the parsed energy value is a finite numerical value before
+    comparing its absolute magnitude against the minimum and maximum limits.
+
+    Args:
+        energy_per_atom: The calculated energy value per atom to evaluate.
+        energy_bound: A tuple containing the (minimum, maximum) acceptable absolute
+          energy thresholds.
+
+    Returns:
+        True if the absolute energy magnitude is finite and within the bounds,
+        otherwise False.
+    """
+
+    energy_per_atom = float(energy_per_atom)
+
+    if not np.isfinite(energy_per_atom):
+        return False
+
+    energy_magnitude = abs(energy_per_atom)
+
+    return float(energy_bound[0]) <= energy_magnitude <= float(energy_bound[1])
+
+
+def _starting_points_from_scan(
+    scan: dict,
+    max_starting_points: int,
+    energy_bound: tuple[float, float],
+) -> list[dict]:
+    """
+    Identify and sort viable starting points for optimization from a coarse scan.
+
+    Finds local energy minima from scan data, filters them by energy limits,
+    and ranks them from lowest to highest energy to prioritize the most stable
+    configurations.
+
+    Args:
+        scan: Dictionary containing lists of lattice parameters ('alats') and
+          corresponding 'energies_per_atom' from the coarse sweep.
+        max_starting_points: Maximum number of candidate minima to return after
+          sorting.
+        energy_bound: Valid range (min, max) for acceptable configuration
+          energies per atom.
+
+    Returns:
+        A list of dictionaries, where each item contains the original index,
+        lattice parameter ('alat'), and energy value of a valid starting point.
+    """
+
+    minima_indices = _local_minima_indices(scan["energies_per_atom"])
+
+    minima_indices = [
+        i
+        for i in minima_indices
+        if _energy_is_within_bounds(
+            scan["energies_per_atom"][i],
+            energy_bound,
+        )
+    ]
+
+    minima_indices = sorted(
+        minima_indices,
+        key=lambda i: scan["energies_per_atom"][i],
     )
+
+    minima_indices = minima_indices[:max_starting_points]
+
+    return [
+        {
+            "index": int(i),
+            "alat": float(scan["alats"][i]),
+            "energy_per_atom": float(scan["energies_per_atom"][i]),
+        }
+        for i in minima_indices
+    ]
+
+
+def _nelder_mead_worker(
+    model_name: str,
+    reference_config: dict,
+    start_alat: float,
+    a_min: float,
+    a_max: float,
+    energy_bound: tuple[float, float],
+    queue,
+):
+    """
+    Run Nelder-Mead in a child process using the same reference FCC
+    configuration as the coarse scan.
+
+    Args:
+        model_name: Name of interatomic potential model
+        reference_config: The baseline crystal structure configuration used as the
+          starting template.
+        start_alat: Initial lattice parameter 'a' value (in Angstroms) to begin the
+          optimization.
+        a_min: Minimum allowable bounding value for the lattice parameter 'a'.
+        a_max: Maximum allowable bounding value for the lattice parameter 'a'.
+        energy_bound: Valid range (min, max) for acceptable configuration
+          energies.
+        queue: A multiprocessing.Queue object used to safely pass the optimization
+          results back to the parent process.
+    """
+
+    try:
+        evaluations = []
+        num_atoms = len(reference_config["symbols"])
+
+        def objective(x):
+            alat = float(np.ravel(x)[0])
+
+            if not np.isfinite(alat) or alat < a_min or alat > a_max:
+                return 1.0e100
+
+            val = generate_fcc_compute_energy_from_reference(
+                model_name=model_name,
+                reference_config=reference_config,
+                alat=alat,
+            )
+
+            if val is None:
+                return 1.0e100
+
+            energy_total, ncells = val
+            energy_per_atom = float(energy_total) / float(num_atoms)
+
+            if not _energy_is_within_bounds(energy_per_atom, energy_bound):
+                return 1.0e100
+
+            evaluations.append(
+                {
+                    "alat": float(alat),
+                    "energy_total": float(energy_total),
+                    "energy_per_atom": float(energy_per_atom),
+                    "ncells": int(ncells),
+                }
+            )
+
+            return float(energy_per_atom)
+
+        result = minimize(
+            objective,
+            x0=np.array([float(start_alat)]),
+            method="Nelder-Mead",
+            options={
+                "xatol": 1.0e-4,
+                "fatol": 1.0e-8,
+                "maxiter": 80,
+                "maxfev": 160,
+                "disp": False,
+            },
+        )
+
+        if len(evaluations) == 0:
+            queue.put(
+                {
+                    "ok": False,
+                    "status": "no_valid_evaluations",
+                    "message": str(result.message),
+                    "start_alat": float(start_alat),
+                    "evaluations": evaluations,
+                }
+            )
+            return
+
+        best_eval = min(evaluations, key=lambda row: row["energy_per_atom"])
+
+        if not result.success:
+            queue.put(
+                {
+                    "ok": False,
+                    "status": "optimizer_unsuccessful",
+                    "message": str(result.message),
+                    "start_alat": float(start_alat),
+                    "best_alat": float(best_eval["alat"]),
+                    "best_energy_per_atom": float(best_eval["energy_per_atom"]),
+                    "evaluations": evaluations,
+                }
+            )
+            return
+
+        queue.put(
+            {
+                "ok": True,
+                "status": "success",
+                "message": str(result.message),
+                "start_alat": float(start_alat),
+                "good_alat": float(best_eval["alat"]),
+                "good_energy_total": float(best_eval["energy_total"]),
+                "good_energy_per_atom": float(best_eval["energy_per_atom"]),
+                "good_ncells": int(best_eval["ncells"]),
+                "optimizer_x": float(np.ravel(result.x)[0]),
+                "optimizer_fun": float(result.fun),
+                "nfev": int(result.nfev),
+                "nit": int(result.nit),
+                "evaluations": evaluations,
+            }
+        )
+
+    except Exception:
+        queue.put(
+            {
+                "ok": False,
+                "status": "python_exception",
+                "message": traceback.format_exc(),
+                "start_alat": float(start_alat),
+                "evaluations": [],
+            }
+        )
+
+
+def scipy_nelder_mead_safe(
+    model_name: str,
+    reference_config: dict,
+    start_alat: float,
+    a_min: float,
+    a_max: float,
+    energy_bound: tuple[float, float],
+    timeout: float = 600.0,
+) -> dict:
+    """
+    Run Nelder-Mead in a child process.
+
+    This isolates crashes/segfaults from the parent process.
+
+    Args:
+        model_name: Name of the interatomic potential model
+        reference_config: The baseline crystal structure configuration used as the
+          starting template.
+        start_alat: Initial lattice parameter 'a' value (in Angstroms) to begin the
+          optimization.
+        a_min: Minimum allowable bounding value for the lattice parameter 'a'.
+        a_max: Maximum allowable bounding value for the lattice parameter 'a'.
+        energy_bound: Valid range (min, max) for acceptable configuration
+          energies.
+        timeout: Maximum execution time in seconds before terminating the child
+          process worker. Defaults to 600.0.
+
+    Returns:
+        A dictionary containing the optimization outcome status, evaluations, and
+        the refined equilibrium lattice coordinates if successful.
+    """
+
+    def fail_result(status: str, message: str) -> dict:
+        return {
+            "ok": False,
+            "status": status,
+            "message": message,
+            "start_alat": float(start_alat),
+            "evaluations": [],
+        }
+
+    ctx = mp.get_context("spawn")
+    result_queue = ctx.Queue(maxsize=1)
+
+    proc = ctx.Process(
+        target=_nelder_mead_worker,
+        args=(
+            model_name,
+            reference_config,
+            start_alat,
+            a_min,
+            a_max,
+            energy_bound,
+            result_queue,
+        ),
+    )
+
+    try:
+        proc.start()
+        proc.join(timeout)
+
+        if proc.is_alive():
+            proc.terminate()
+            proc.join(5.0)
+
+            if proc.is_alive():
+                proc.kill()
+                proc.join()
+
+            logger.info(
+                "scipy_nelder_mead_safe TIMEOUT for "
+                f"{model_name} {reference_config['species_list']} "
+                f"start_alat={start_alat}"
+            )
+
+            return fail_result(
+                "timeout",
+                f"Nelder-Mead timed out after {timeout} seconds",
+            )
+
+        if proc.exitcode != 0:
+            message = _format_child_exit_reason(proc.exitcode)
+
+            logger.info(
+                "scipy_nelder_mead_safe CRASH/EXIT for "
+                f"{model_name} {reference_config['species_list']} "
+                f"start_alat={start_alat}: {message}"
+            )
+
+            return fail_result("crash", message)
+
+        try:
+            result = result_queue.get(timeout=1.0)
+        except queue_module.Empty:
+            return fail_result(
+                "no_result",
+                "child exited but returned no result",
+            )
+
+        if not isinstance(result, dict):
+            return fail_result(
+                "invalid_result",
+                f"child returned invalid result type {type(result).__name__}",
+            )
+
+        if "ok" not in result:
+            return fail_result(
+                "invalid_result",
+                "child result dictionary is missing required key 'ok'",
+            )
+
+        if not result.get("ok", False):
+            result.setdefault("status", "worker_error")
+            result.setdefault("message", "Nelder-Mead worker returned ok=False")
+            result.setdefault("start_alat", float(start_alat))
+            result.setdefault("evaluations", [])
+            return result
+
+        result.setdefault("status", "success")
+        result.setdefault("message", "")
+        result.setdefault("start_alat", float(start_alat))
+        result.setdefault("evaluations", [])
+
+        return result
+
+    finally:
+        if proc.is_alive():
+            proc.terminate()
+            proc.join(5.0)
+
+            if proc.is_alive():
+                proc.kill()
+                proc.join()
+
+        try:
+            result_queue.close()
+            result_queue.join_thread()
+        except Exception:
+            pass
+
+        try:
+            proc.close()
+        except Exception:
+            pass
+
+
+def _failure_config_result(
+    species_list: list[str],
+    configuration_type: str,
+    reference_config: Union[dict, None],
+    scan: Union[dict, None],
+    starting_points: list[dict],
+    attempts: list[dict],
+    reason: str,
+    bounds: dict,
+) -> dict:
+    """Generate a uniform dictionary summary for a failed configuration search.
+
+    Populates default error indicators like negative dimensions or None values for
+    missing measurements while preserving logs, boundaries, and historical attempts
+    for later diagnosis.
+
+    Args:
+        species_list: Chemical symbols of the elements included in the system
+        configuration_type: A label indicating the structural type
+        reference_config: The generated baseline crystal structure, or None if
+          generation failed.
+        scan: Historical trace of the initial energy-versus-lattice coarse scan,
+          or None if skipped.
+        starting_points: Local energy minima detected during the coarse scan to
+          be used for optimization.
+        attempts: List of optimization traces produced by downstream Nelder-Mead
+          subprocess workers.
+        reason: A string identifier explaining why the search workflow halted.
+        bounds: Dictionary defining coordinate search window ranges and step delta
+          sizes.
+
+    Returns:
+        A dictionary containing error statuses, tracking identifiers, and any
+        partial execution traces collected before the failure occurred.
+    """
+
+    result = {
+        "ok": False,
+        "status": "failed",
+        "failure_reason": reason,
+        "configuration_type": configuration_type,
+        "species_list": list(species_list),
+        "species_label": _species_label(species_list),
+        "good_alat": -1.0,
+        "good_energy_per_atom": None,
+        "good_energy_total": None,
+        "good_ncells": -1,
+        "bounds": bounds,
+        "coarse_scan": scan,
+        "coarse_minima": starting_points,
+        "nelder_mead_attempts": attempts,
+        "search_strategy": "reverse_coarse_scan_plus_first_successful_nelder_mead",
+        "all_alats": [],
+        "all_energies_per_atom": [],
+    }
+
+    if reference_config is not None:
+        result["reference_config"] = reference_config
+
+    return result
+
+
+def _equilibrate_one_config(
+    model_name: str,
+    species_list: list[str],
+    configuration_type: str,
+    energy_bound: tuple[float, float],
+    coarse_del_a: float,
+    coarse_timeout: float,
+    nelder_mead_timeout: float,
+    max_starting_points: int,
+    ncells_per_side: int = DEFAULT_FCC_NCELLS_PER_SIDE,
+    seed: int = 13,
+    coarse_a_start: float = 12.0,
+    coarse_a_stop: float = 1.5,
+) -> dict:
+    """Equilibrate a single FCC atomic configuration using a sequential protocol.
+
+    Executes a high-level orchestration that generates a reference crystal,
+    scans lattice constants to find energy minima, and applies a Nelder-Mead
+    simplex search to optimize structure bounds.
+
+    Args:
+        model_name: Name of the interatomic potential model
+        species_list: Chemical symbols of the elements to include in the system
+        configuration_type: A label indicating the structural type
+        energy_bound: Valid range (min, max) for acceptable configuration
+          energies.
+        coarse_del_a: Step size for the lattice parameter 'a' during coarse
+          scans.
+        coarse_timeout: Maximum execution time in seconds for the coarse scan
+          subprocess.
+        nelder_mead_timeout: Maximum execution time in seconds for each
+          Nelder-Mead optimization subprocess.
+        max_starting_points: Maximum number of local minima to evaluate using
+          Nelder-Mead relaxation.
+        ncells_per_side: Number of unit cells along each axis to define the
+          supercell size.
+        seed: Random seed for reproducible structure generation and atom
+          placement.
+        coarse_a_start: Starting lattice parameter 'a' (in Angstroms) for the
+          reverse scan.
+        coarse_a_stop: Ending lattice parameter 'a' (in Angstroms) for the
+          reverse scan.
+
+    Returns:
+        A dictionary containing the metadata, execution history, and details of
+        either a successful equilibrium search or a recorded failure.
+    """
+
+    logger.info(
+        f"_equilibrate_one_config {_species_label(species_list)} "
+        f"config_type={configuration_type} "
+        f"coarse_a_start {coarse_a_start}, coarse_a_stop {coarse_a_stop} "
+        f"ncells_per_side {ncells_per_side} "
+    )
+
+    reference_config = make_fcc_reference_config(
+        species_list=species_list,
+        ncells_per_side=ncells_per_side,
+        seed=seed,
+    )
+
+    scan = coarse_scan_reverse_safe(
+        model_name=model_name,
+        reference_config=reference_config,
+        a_start=coarse_a_start,
+        a_stop=coarse_a_stop,
+        del_a=coarse_del_a,
+        timeout=coarse_timeout,
+    )
+
+    bounds = {
+        "coarse_a_start": float(coarse_a_start),
+        "coarse_a_stop": float(coarse_a_stop),
+        "coarse_del_a": float(coarse_del_a),
+        "nelder_mead_a_min": float(min(coarse_a_start, coarse_a_stop)),
+        "nelder_mead_a_max": float(max(coarse_a_start, coarse_a_stop)),
+    }
+
+    if len(scan["alats"]) == 0:
+        return _failure_config_result(
+            species_list,
+            configuration_type,
+            reference_config,
+            scan,
+            [],
+            [],
+            "coarse_scan_has_no_successful_points",
+            bounds,
+        )
+
+    starting_points = _starting_points_from_scan(
+        scan=scan,
+        max_starting_points=max_starting_points,
+        energy_bound=energy_bound,
+    )
+
+    if len(starting_points) == 0:
+        reason = "no_coarse_minima_found"
+
+        if scan.get("stopped_reason") not in (
+            "completed",
+            "completed_without_done_message",
+        ):
+            reason = f"no_coarse_minima_found_before_{scan.get('stopped_reason')}"
+
+        return _failure_config_result(
+            species_list,
+            configuration_type,
+            reference_config,
+            scan,
+            [],
+            [],
+            reason,
+            bounds,
+        )
+
+    attempts = []
+
+    for start_index, start in enumerate(starting_points):
+        attempt = scipy_nelder_mead_safe(
+            model_name=model_name,
+            reference_config=reference_config,
+            start_alat=start["alat"],
+            a_min=bounds["nelder_mead_a_min"],
+            a_max=bounds["nelder_mead_a_max"],
+            energy_bound=energy_bound,
+            timeout=nelder_mead_timeout,
+        )
+
+        attempts.append(attempt)
+
+        if attempt.get("ok", False):
+            evaluations = attempt.get("evaluations", [])
+
+            return {
+                "ok": True,
+                "status": "success",
+                "configuration_type": configuration_type,
+                "species_list": list(species_list),
+                "species_label": _species_label(species_list),
+                "good_alat": float(attempt["good_alat"]),
+                "good_energy_per_atom": float(attempt["good_energy_per_atom"]),
+                "good_energy_total": float(attempt["good_energy_total"]),
+                "good_ncells": int(attempt["good_ncells"]),
+                "bounds": bounds,
+                "reference_config": reference_config,
+                "coarse_scan": scan,
+                "coarse_minima": starting_points,
+                "nelder_mead_attempts": attempts,
+                "selected_attempt_index": int(start_index),
+                "selected_policy": "first_successful_nelder_mead",
+                "search_strategy": (
+                    "reverse_coarse_scan_plus_first_successful_nelder_mead"
+                ),
+                "all_alats": [float(row["alat"]) for row in evaluations],
+                "all_energies_per_atom": [
+                    float(row["energy_per_atom"]) for row in evaluations
+                ],
+            }
+
+    return _failure_config_result(
+        species_list,
+        configuration_type,
+        reference_config,
+        scan,
+        starting_points,
+        attempts,
+        "all_nelder_mead_attempts_failed",
+        bounds,
+    )
+
+
+def _finite_positive_mean(values: list[float]) -> float:
+    """Calculate the mean of finite, positive numbers in a list.
+
+    Filters out non-finite numbers (NaN, Inf) and values less than or equal to
+    zero before computing the average.
+
+    Args:
+        values: A list of floats to be filtered and averaged.
+
+    Returns:
+        The arithmetic mean of the remaining valid values as a float, or -1.0
+        if no values survive the filtering process.
+    """
+    arr = np.asarray(values, dtype=float)
+    arr = arr[np.isfinite(arr)]
+    arr = arr[arr > 0.0]
+
+    if len(arr) == 0:
+        return -1.0
+
+    return float(np.mean(arr))
+
+
+def _minimal_success_result(full_result: dict) -> dict:
+    """Extract a minimal summary from a successful full result dictionary.
+
+    Args:
+        full_result: The complete dictionary of results containing metadata,
+          scan details, and final optimization outputs.
+
+    Returns:
+        A dictionary containing parsed information about the equilibrium
+        configuration, including energy values, cell parameters, and structural
+        metadata.
+    """
+
+    final_result = full_result["final_result"]
+
+    return {
+        "ok": True,
+        "status": "success",
+        "model": full_result["model"],
+        "species_list": full_result["species_list"],
+        "species_label": full_result["species_label"],
+        "configuration_type": final_result["configuration_type"],
+        "equilibrium_alat": float(final_result["good_alat"]),
+        "approx_mixed_equilibrium_alat": float(
+            full_result["approx_mixed_equilibrium_alat"]
+        ),
+        "mono_species_equilibrium_alats": full_result["mono_species_equilibrium_alats"],
+        "ncells_per_side": int(final_result["good_ncells"]),
+        "natoms": fcc_atoms_in_supercell(int(final_result["good_ncells"])),
+        "energy_per_atom": float(final_result["good_energy_per_atom"]),
+        "energy_total": float(final_result["good_energy_total"]),
+        "method": full_result["method"],
+    }
+
+
+def find_equilibrium_config_FCC(
+    model_name: str,
+    species_list: list[str],
+    energy_bound: tuple[float, float] = (5.0e-2, 5.0e2),
+    coarse_del_a: float = 0.1,
+    mixed_coarse_del_a: float = 0.1,
+    coarse_timeout: float = 600.0,
+    nelder_mead_timeout: float = 600.0,
+    max_starting_points: int = 6,
+    ncells_per_side: int = DEFAULT_FCC_NCELLS_PER_SIDE,
+    seed: int = 13,
+    coarse_a_start: float = 12.0,
+    coarse_a_stop: float = 1.5,
+) -> dict:
+    """
+    Find an FCC equilibrium configuration.
+
+    Protocol:
+      1. For each mono species, create one fixed FCC reference configuration.
+      2. Run one reverse coarse scan subprocess from coarse_a_start to
+         coarse_a_stop.
+      3. Keep all energy-alat points collected before any child crash.
+      4. Find local minima using scipy.signal.find_peaks(-E).
+      5. Run Nelder-Mead subprocesses from minima sorted by coarse energy.
+      6. Return after the first successful Nelder-Mead result.
+      7. For mixed species, repeat the same protocol using one fixed mixed
+         reference configuration.
+
+    Args:
+        model_name: Name of interatomic potential model.
+        species_list: Chemical symbols of the elements to include in the system
+        energy_bound: Valid range (min, max) for configuration energies.
+        coarse_del_a: Step size for the lattice parameter 'a' for monospecies
+          coarse scans.
+        mixed_coarse_del_a: Step size for the lattice parameter 'a' for
+          mixed-species coarse scans.
+        coarse_timeout: Maximum execution time in seconds for the coarse scan
+          subprocess.
+        nelder_mead_timeout: Maximum execution time in seconds for each
+          Nelder-Mead optimization subprocess.
+        max_starting_points: Maximum number of local minima to evaluate using
+          Nelder-Mead relaxation.
+        ncells_per_side: Number of unit cells along each axis to define the
+          supercell size.
+        seed: Random seed for reproducible structure generation and atom
+          placement.
+        coarse_a_start: Starting lattice parameter 'a' (in Angstroms) for the
+          reverse scan.
+        coarse_a_stop: Ending lattice parameter 'a' (in Angstroms) for the
+          reverse scan.
+
+    Returns:
+        A dictionary containing the successful equilibrium configuration results
+        and metadata.
+
+    """
+
+    mono_results = []
+
+    for species in species_list:
+        mono = _equilibrate_one_config(
+            model_name=model_name,
+            species_list=[species],
+            configuration_type="mono_species_fcc",
+            energy_bound=energy_bound,
+            coarse_del_a=coarse_del_a,
+            coarse_timeout=coarse_timeout,
+            nelder_mead_timeout=nelder_mead_timeout,
+            max_starting_points=max_starting_points,
+            ncells_per_side=ncells_per_side,
+            seed=seed,
+            coarse_a_start=coarse_a_start,
+            coarse_a_stop=coarse_a_stop,
+        )
+
+        mono_results.append(mono)
+
+    mono_good_alats = [row.get("good_alat", -1.0) for row in mono_results]
+    approx_mixed_equilibrium_alat = _finite_positive_mean(mono_good_alats)
+
+    if len(species_list) == 1:
+        mixed_result = None
+        final_result = mono_results[0]
+        results = mono_results
+
+    else:
+        mixed_result = _equilibrate_one_config(
+            model_name=model_name,
+            species_list=species_list,
+            configuration_type="mixed_species_fcc",
+            energy_bound=energy_bound,
+            coarse_del_a=mixed_coarse_del_a,
+            coarse_timeout=coarse_timeout,
+            nelder_mead_timeout=nelder_mead_timeout,
+            max_starting_points=max_starting_points,
+            ncells_per_side=ncells_per_side,
+            seed=seed,
+            coarse_a_start=coarse_a_start,
+            coarse_a_stop=coarse_a_stop,
+        )
+
+        mixed_result["approx_mixed_equilibrium_alat"] = approx_mixed_equilibrium_alat
+
+        final_result = mixed_result
+        results = mono_results + [mixed_result]
+
+    full_result = {
+        "ok": bool(final_result and final_result.get("ok", False)),
+        "status": (
+            "success" if final_result and final_result.get("ok", False) else "failed"
+        ),
+        "model": model_name,
+        "species_list": list(species_list),
+        "species_label": _species_label(species_list),
+        "ncells_per_side": ncells_per_side,
+        "method": "reverse_coarse_scan_plus_first_successful_nelder_mead",
+        "mono_species_equilibrium_alats": {
+            row["species_label"]: row.get("good_alat", -1.0) for row in mono_results
+        },
+        "approx_mixed_equilibrium_alat": approx_mixed_equilibrium_alat,
+        "mono_species_results": mono_results,
+        "mixed_species_result": mixed_result,
+        "final_result": final_result,
+        "equilibrium_alat": (
+            final_result.get("good_alat", -1.0) if final_result else -1.0
+        ),
+        "results": results,
+    }
+
+    if full_result["ok"]:
+        return _minimal_success_result(full_result)
+
+    return full_result
 
 
 ################################################################################
