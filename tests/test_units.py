@@ -1,6 +1,6 @@
 import numpy as np
 
-from kim_tools.kimunits import convert_list, convert_units
+from kim_tools.excerpts.kimunits import convert_list, convert_units
 
 
 def test_units() -> None:

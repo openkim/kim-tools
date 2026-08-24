@@ -1,4 +1,4 @@
-__version__ = "0.4.14"
+__version__ = "0.4.15"
 
 from .aflow_util import *
 from .aflow_util import __all__ as aflow_all
@@ -10,8 +10,10 @@ from .test_driver import *
 from .test_driver import __all__ as test_driver_all
 from .vc import *
 from .vc import __all__ as vc_all
+from .excerpts import *
+from .excerpts import __all__ as excerpts_all
 
 # TODO: Go through all other TODOs in code and make sure they've been
 # turned into issues
 
-__all__ = test_driver_all + aflow_all + symmetry_all + ase_all + vc_all
+__all__ = test_driver_all + aflow_all + symmetry_all + ase_all + vc_all + excerpts_all

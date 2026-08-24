@@ -16,10 +16,10 @@ Subpackages
 Submodules
 ----------
 
-kim\_tools.kimunits module
+kim\_tools.excerpts.kimunits module
 --------------------------
 
-.. automodule:: kim_tools.kimunits
+.. automodule:: kim_tools.excerpts.kimunits
    :members:
    :undoc-members:
    :show-inheritance:

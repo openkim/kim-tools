@@ -77,7 +77,7 @@ from ..aflow_util import (
 )
 from ..aflow_util.core import AFLOW_EXECUTABLE, get_atom_indices_for_each_wyckoff_orb
 from ..ase import get_isolated_energy_per_atom
-from ..kimunits import convert_list, convert_units
+from ..excerpts.kimunits import convert_list, convert_units
 from ..symmetry_util import (
     cartesian_rotation_is_in_point_group,
     change_of_basis_atoms,
