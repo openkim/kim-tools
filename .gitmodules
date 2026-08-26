@@ -7,3 +7,5 @@
 [submodule "kim_tools/openkim-pipeline-excerpts"]
 	path = kim_tools/excerpts
 	url = git@github.com:openkim/openkim-pipeline-excerpts.git
+[submodule "kim_tools/excerpts"]
+	url = https://github.com/openkim/openkim-pipeline-excerpts.git
