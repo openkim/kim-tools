@@ -3,9 +3,9 @@ from .aflow_util import *
 from .aflow_util import __all__ as aflow_all
 from .ase import *
 from .ase import __all__ as ase_all
-from .excerpts import kimunits as kimunits
 from .excerpts import *
 from .excerpts import __all__ as excerpts_all
+from .excerpts import kimunits as kimunits
 from .symmetry_util import *
 from .symmetry_util import __all__ as symmetry_all
 from .test_driver import *
@@ -16,4 +16,12 @@ from .vc import __all__ as vc_all
 # TODO: Go through all other TODOs in code and make sure they've been
 # turned into issues
 
-__all__ = test_driver_all + aflow_all + symmetry_all + ase_all + vc_all + excerpts_all + [kimunits]
+__all__ = (
+    test_driver_all
+    + aflow_all
+    + symmetry_all
+    + ase_all
+    + vc_all
+    + excerpts_all
+    + [kimunits]
+)
