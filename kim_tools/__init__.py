@@ -1,9 +1,9 @@
 __version__ = "0.4.15"
-
 from .aflow_util import *
 from .aflow_util import __all__ as aflow_all
 from .ase import *
 from .ase import __all__ as ase_all
+from .excerpts import kimunits as kimunits
 from .excerpts import *
 from .excerpts import __all__ as excerpts_all
 from .symmetry_util import *
@@ -16,4 +16,4 @@ from .vc import __all__ as vc_all
 # TODO: Go through all other TODOs in code and make sure they've been
 # turned into issues
 
-__all__ = test_driver_all + aflow_all + symmetry_all + ase_all + vc_all + excerpts_all
+__all__ = test_driver_all + aflow_all + symmetry_all + ase_all + vc_all + excerpts_all + [kimunits]
