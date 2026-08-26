@@ -4,8 +4,6 @@
 [submodule "kim_tools/aflow_util/aflow_prototype_encyclopedia"]
 	path = kim_tools/aflow_util/aflow_prototype_encyclopedia
 	url = https://github.com/aflow-org/aflow_prototype_encyclopedia.git
-[submodule "kim_tools/openkim-pipeline-excerpts"]
-	path = kim_tools/excerpts
-	url = git@github.com:openkim/openkim-pipeline-excerpts.git
 [submodule "kim_tools/excerpts"]
+	path = kim_tools/excerpts
 	url = https://github.com/openkim/openkim-pipeline-excerpts.git
