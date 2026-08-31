@@ -179,6 +179,7 @@ def add_si_units(doc, convert=convert):
             # we've found a place to add
             assert "source-value" in doc, "Badly formed doc"
             # search for any convertable source values or uncertanties
+            output = doc.copy()
             for source_key in corresponding_keys.keys():
                 o_value = doc.get(source_key, None)
                 o_unit = doc.get("source-unit", None)
@@ -190,9 +191,8 @@ def add_si_units(doc, convert=convert):
                     # look up the corresponding SI key for the converted value
                     converted_key = corresponding_keys[source_key]
                     si_dict = {"si-unit": unit, converted_key: value}
-                    doc = doc.copy()
-                    doc.update(si_dict)
-                    return doc
+                    output.update(si_dict)
+            return output
         else:
             # recurse
             return type(doc)((key, add_si_units(value)) for key, value in doc.items())

@@ -10,5 +10,14 @@ def test_units() -> None:
     assert np.isclose(convert_units(0, "tempC", "tempF", suppress_unit=True), 32)
     assert np.allclose(convert_list([1000, 1000], "g")[0], [1, 1])
     assert np.isclose(
-        add_si_units({"source-value": 1000, "source-unit": "mm"})["si-value"], 1.0
+        add_si_units(
+            {"source-value": 1000, "source-unit": "mm", "source-std-uncert-value": 1}
+        )["si-value"],
+        1.0,
+    )
+    assert np.isclose(
+        add_si_units(
+            {"source-value": 1000, "source-unit": "mm", "source-std-uncert-value": 1}
+        )["si-std-uncert-value"],
+        0.001,
     )
