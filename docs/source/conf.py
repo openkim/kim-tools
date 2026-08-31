@@ -47,7 +47,7 @@ sphinx_gallery_conf = {
 }
 
 intersphinx_mapping = {
-    "ase": ("https://wiki.fysik.dtu.dk/ase/", None),
+    "ase": ("https://docs.ase-lib.org/", None),
     "python": ("https://docs.python.org/3", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
     "pymatgen": ("https://pymatgen.org/", None),
