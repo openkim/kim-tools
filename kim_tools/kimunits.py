@@ -161,30 +161,41 @@ def convert_list(x, from_unit, to_unit=None, convert=convert, dofit=True):
 
 def add_si_units(doc, convert=convert):
     """Given a document, add all of the appropriate si-units fields"""
+
+    # dict specifying which SI keys correspond with which source keys
+    corresponding_keys = {
+        "source-value": "si-value",
+        "source-std-uncert-value": "si-std-uncert-value",
+        "source-expand-uncert-value": "si-expand-uncert-value",
+        "source-asym-std-uncert-neg": "si-asym-std-uncert-neg",
+        "source-asym-std-uncert-pos": "si-asym-std-uncert-pos",
+        "source-asym-expand-uncert-neg": "si-asym-expand-uncert-neg",
+        "source-asym-expand-uncert-pos": "si-asym-expand-uncert-pos",
+    }
+
     if isinstance(doc, dict):
         # check for a source-unit to defined a value with units
         if "source-unit" in doc:
             # we've found a place to add
             assert "source-value" in doc, "Badly formed doc"
-            o_value = doc.get("source-value", None)
-            o_unit = doc.get("source-unit", None)
+            # search for any convertable source values or uncertanties
+            output = doc.copy()
+            for source_key in corresponding_keys.keys():
+                o_value = doc.get(source_key, None)
+                o_unit = doc.get("source-unit", None)
 
-            if o_value is None:
-                raise UnitConversion("No source-value provided")
-            if o_unit is None:
-                raise UnitConversion("No source-unit provided")
-
-            # convert the units and insert
-            value, unit = convert_list(o_value, o_unit, convert=convert)
-            si_dict = {"si-unit": unit, "si-value": value}
-            doc = doc.copy()
-            doc.update(si_dict)
-            return doc
+                # convertable value or uncertianty found
+                if o_value is not None:
+                    # convert the units and insert
+                    value, unit = convert_list(o_value, o_unit, convert=convert)
+                    # look up the corresponding SI key for the converted value
+                    converted_key = corresponding_keys[source_key]
+                    si_dict = {"si-unit": unit, converted_key: value}
+                    output.update(si_dict)
+            return output
         else:
             # recurse
-            return type(doc)(
-                (key, add_si_units(value)) for key, value in list(doc.items())
-            )
+            return type(doc)((key, add_si_units(value)) for key, value in doc.items())
 
     elif isinstance(doc, (list, tuple)):
         return type(doc)(add_si_units(x) for x in doc)
