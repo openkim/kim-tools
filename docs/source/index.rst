@@ -66,22 +66,15 @@ Before installing the package using ``pip``, you will need to install AFLOW 4.0.
 
 AFLOW
 -----
-The installation script for ``kim-tools`` will check that the ``aflow`` executable is in your ``PATH`` and is version 4.0.5 or greater. At the time of writing, AFLOW 4 is in prerelease
-at https://github.com/aflow-org/aflow, so the installation options may change, but the following options appear to work well so far:
-   - Ubuntu precompiled binary
-   - Ubuntu ``.deb`` package
-   - Homebrew
-   - Build from source using the ``release_vcpkg`` preset (read their README carefully for requirements)
+The installation script for ``kim-tools`` will check that the ``aflow`` executable is in your ``PATH`` and is version 4.0.5 or greater. See https://github.com/aflow-org/aflow for installation options. Not that if you use ``snap``, you may need to change your ``TMP`` environment variable. ``kim-tools`` uses the Python ``tempfile`` library to wrap the ``aflow`` CLI, and snaps may not have access to the default location (e.g. ``/tmp``).
 
-Installing AFLOW using ``snap`` does NOT work, as it does not have access to the files saved by the Python ``tempfile`` library (e.g. ``/tmp``), at least using default settings.
+GNU Units
+---------
+``kim-tools`` uses the `GNU Units <https://www.gnu.org/software/units/>`_ utility for automatic unit conversion. You can check if you already have it by running ``units --help`` or ``gunits --help``. It is available from many native package managers such as ``apt`` (as ``units``), conda and homebrew (as ``gnu-units``). You can also build it from source. Once you download the source code from the GNU website, you should be able to install it by running the following commands from the source directory. The ``--prefix=/desired/install/dir`` option specifies the install location, and you will have to add ``/desired/install/dir/bin`` to your ``PATH``. For more info, see the ``INSTALL`` and ``README`` files in the source.
 
 KIM API and kimpy
 -----------------
 Installation instructions for the KIM API can be found `here <https://openkim.org/doc/usage/obtaining-models/>`_, and for ``kimpy`` `here <https://github.com/openkim/kimpy#readme>`_. Recommended installation methods are building from source or installing from conda-forge (installing the ``kimpy`` package will automatically install ``kim-api`` as well). If you need `LAMMPS <https://www.lammps.org>`_ as well (because you are running or developing Test Drivers that use it, or you wish to use LAMMPS `Simulator Models <https://openkim.org/doc/repository/kim-content/>`_), a good option is to install the ``lammps`` package from conda-forge as well.
-
-GNU Units
----------
-``kim-tools`` uses the `GNU Units <https://www.gnu.org/software/units/>`_ utility for automatic unit conversion. You can check if you already have it by running ``units --help`` or ``gunits --help``. It is available from many native package managers such as ``apt`` and homebrew (as ``gnu-units``). If you are on a system where you do not have admin access, you may have to build it from source. Once you download the source code from the GNU website, you should be able to install it by running the following commands from the source directory. The ``--prefix=/desired/install/dir`` option specifies the install location, and you will have to add ``/desired/install/dir/bin`` to your ``PATH``. For more info, see the ``INSTALL`` and ``README`` files in the source.
 
 .. code-block:: bash
 
