@@ -72,13 +72,13 @@ GNU Units
 ---------
 ``kim-tools`` uses the `GNU Units <https://www.gnu.org/software/units/>`_ utility for automatic unit conversion. You can check if you already have it by running ``units --help`` or ``gunits --help``. It is available from many native package managers such as ``apt`` (as ``units``), conda and homebrew (as ``gnu-units``). You can also build it from source. Once you download the source code from the GNU website, you should be able to install it by running the following commands from the source directory. The ``--prefix=/desired/install/dir`` option specifies the install location, and you will have to add ``/desired/install/dir/bin`` to your ``PATH``. For more info, see the ``INSTALL`` and ``README`` files in the source.
 
-KIM API and kimpy
------------------
-Installation instructions for the KIM API can be found `here <https://openkim.org/doc/usage/obtaining-models/>`_, and for ``kimpy`` `here <https://github.com/openkim/kimpy#readme>`_. Recommended installation methods are building from source or installing from conda-forge (installing the ``kimpy`` package will automatically install ``kim-api`` as well). If you need `LAMMPS <https://www.lammps.org>`_ as well (because you are running or developing Test Drivers that use it, or you wish to use LAMMPS `Simulator Models <https://openkim.org/doc/repository/kim-content/>`_), a good option is to install the ``lammps`` package from conda-forge as well.
-
 .. code-block:: bash
 
    ./configure --prefix=/desired/install/dir && make && make install
+
+KIM API and kimpy
+-----------------
+Installation instructions for the KIM API can be found `here <https://openkim.org/doc/usage/obtaining-models/>`_, and for ``kimpy`` `here <https://github.com/openkim/kimpy#readme>`_. Recommended installation methods are building from source or installing from conda-forge (installing the ``kimpy`` package will automatically install ``kim-api`` as well). If you need `LAMMPS <https://www.lammps.org>`_ as well (because you are running or developing Test Drivers that use it, or you wish to use LAMMPS `Simulator Models <https://openkim.org/doc/repository/kim-content/>`_), a good option is to install the ``lammps`` package from conda-forge as well.
 
 Installation
 ------------
