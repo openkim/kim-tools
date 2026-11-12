@@ -726,7 +726,7 @@ def reduce_and_avg(
     new_atoms.set_positions(avg_positions_in_prim_cell)
 
     if tol is None:
-        tol = get_smallest_nn_dist(atoms) * 0.01
+        tol = get_smallest_nn_dist(new_atoms) * 0.01
     else:
         if not tol > 0:
             raise ValueError(f"Provided tolerance {tol} is not a positive number")
