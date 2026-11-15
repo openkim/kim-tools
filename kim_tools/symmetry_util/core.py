@@ -675,7 +675,7 @@ def reduce_and_avg(
             If tol is not a positive number
     """
     new_atoms = atoms.copy()
-
+    new_atoms.set_constraint()  # Otherwise set_positions may not work later
     cell = new_atoms.get_cell()
 
     # Divide each unit vector by its number of repeats.
