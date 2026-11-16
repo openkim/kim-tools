@@ -654,7 +654,7 @@ def reduce_and_avg(
 
     Args:
         atoms:
-            The supercell to reduce
+            The supercell to reduce. The input object is unchanged.
         repeat:
             The number of repeats of each unit cell vector in the
             provided supercell
@@ -665,7 +665,7 @@ def reduce_and_avg(
             Default is 0.01*NN distance.
 
     Returns:
-        The reduced unit cell
+        The reduced unit cell. Constraints are not retained from input atoms.
 
     Raises:
         PeriodExtensionException:
