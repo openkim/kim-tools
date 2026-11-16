@@ -1020,15 +1020,25 @@ def fit_voigt_tensor_to_cell_and_space_group(
 def get_smallest_nn_dist(atoms: Atoms) -> float:
     """
     Get the smallest NN distance in an Atoms object
+
+    Raises:
+        ValueError:
+            If it's a single nonperiodic atom or empty Atoms object
+
     """
+    if len(atoms) == 0:
+        raise ValueError("Cannot compute NN distance for an empty Atoms object")
+    elif len(atoms) == 1 and not atoms.pbc.any():
+        raise ValueError("Cannot compute NN distance for a nonperiodic single atom")
     nl_len = 0
     cov_mult = 1
+    min_cov_dia = 2 * min(natural_cutoffs(atoms))
     while nl_len == 0:
         logger.info(
             "Attempting to find NN distance by searching "
-            f"within covalent radii times {cov_mult}"
+            f"within minimum covalent diameter times {cov_mult}"
         )
-        nl = neighbor_list("d", atoms, natural_cutoffs(atoms, mult=cov_mult))
+        nl = neighbor_list("d", atoms, cov_mult * min_cov_dia)
         nl_len = nl.size
         cov_mult += 1
     return nl.min()
