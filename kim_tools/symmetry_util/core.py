@@ -654,7 +654,7 @@ def reduce_and_avg(
 
     Args:
         atoms:
-            The supercell to reduce
+            The supercell to reduce. The input object is unchanged.
         repeat:
             The number of repeats of each unit cell vector in the
             provided supercell
@@ -665,7 +665,7 @@ def reduce_and_avg(
             Default is 0.01*NN distance.
 
     Returns:
-        The reduced unit cell
+        The reduced unit cell. Constraints are not retained from input atoms.
 
     Raises:
         PeriodExtensionException:
@@ -675,7 +675,7 @@ def reduce_and_avg(
             If tol is not a positive number
     """
     new_atoms = atoms.copy()
-
+    new_atoms.set_constraint()  # Otherwise set_positions may not work later
     cell = new_atoms.get_cell()
 
     # Divide each unit vector by its number of repeats.
@@ -726,7 +726,7 @@ def reduce_and_avg(
     new_atoms.set_positions(avg_positions_in_prim_cell)
 
     if tol is None:
-        tol = get_smallest_nn_dist(atoms) * 0.01
+        tol = get_smallest_nn_dist(new_atoms) * 0.01
     else:
         if not tol > 0:
             raise ValueError(f"Provided tolerance {tol} is not a positive number")
@@ -1020,15 +1020,25 @@ def fit_voigt_tensor_to_cell_and_space_group(
 def get_smallest_nn_dist(atoms: Atoms) -> float:
     """
     Get the smallest NN distance in an Atoms object
+
+    Raises:
+        ValueError:
+            If it's a single nonperiodic atom or empty Atoms object
+
     """
+    if len(atoms) == 0:
+        raise ValueError("Cannot compute NN distance for an empty Atoms object")
+    elif len(atoms) == 1 and not atoms.pbc.any():
+        raise ValueError("Cannot compute NN distance for a nonperiodic single atom")
     nl_len = 0
     cov_mult = 1
+    min_cov_dia = 2 * min(natural_cutoffs(atoms))
     while nl_len == 0:
         logger.info(
             "Attempting to find NN distance by searching "
-            f"within covalent radii times {cov_mult}"
+            f"within minimum covalent diameter times {cov_mult}"
         )
-        nl = neighbor_list("d", atoms, natural_cutoffs(atoms, mult=cov_mult))
+        nl = neighbor_list("d", atoms, cov_mult * min_cov_dia)
         nl_len = nl.size
         cov_mult += 1
     return nl.min()

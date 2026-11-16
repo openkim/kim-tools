@@ -315,7 +315,7 @@ def test_get_equations_from_prototype(input_crystal_structures):
 
 
 def test_solve_for_params_of_known_prototype(input_crystal_structures):
-    aflow = AFLOW(np=19)
+    aflow = AFLOW()
     match_counts_by_bravais_lattice = {}
     match_counts_by_spacegroup = {}
     INIT_COUNTS = {"match": 0, "nonmatch": 0}

@@ -13,27 +13,13 @@ configuration.
 
 The testing workflow will run your Test Driver on FCC gold (prototype label ``A_cF4_225_a``) using 3 models:
 
-  * a KIM Portable Model: ``LJ_ElliottAkerson_2015_Universal__MO_959249795837_003``
+  * a KIM Portable Model: ``EAM_Dynamo_Ackland_1987_Au__MO_754413982908_001``
   * a KIM Simulator Model: ``Sim_LAMMPS_ADP_StarikovGordeevLysogorskiy_2020_SiAuAl__SM_113843830602_000``
-  * a non-KIM ASE Calculator: ``ase.calculators.lj.LennardJones(sigma=2.42324, epsilon=2.30580, rc=9.69298)``
+  * a non-KIM ASE Calculator: ``ase.calculators.lj.LennardJones(sigma=2.42324, epsilon=2.30580)``
 
 Make sure your Test Driver is able to run these simulations in the first place before beginning this process (except
 for the non-KIM calculator if your Test Driver uses LAMMPS).
 
-
-Forking the ``kimvv`` repo
-==========================
-
-.. list-table::
-   :class: borderless
-
-   * - First, make a fork of the ``kimvv`` repo under your own Github account by navigating to https://github.com/openkim/kimvv and clicking the "fork" button:
-     - .. image:: fork_kimvv.png
-        :width: 500px
-   * - Once the fork is in your account, before making any changes, allow Github actions to run by clicking on the "actions" button and agreeing to run actions
-       on the resulting page:
-     - .. image:: actions.png
-        :width: 500px
 
 Setting up the packaging files
 ==============================
@@ -56,53 +42,25 @@ Examples of all of them exist in the example Test Driver: |example_url|
       the ``kimvv`` script ``pre_setup.py`` will automatically edit the paths for incorporation into the Python package.
 
 
-Issuing a release and adding it to your fork of ``kimvv``
-=========================================================
+Running the tests
+=================
 
-Next, you need to issue a release of your Test Driver. Because the release that is fully tested and ready for OpenKIM submission
-will be named and tagged "v000", it is recommended that you tag your release something like "v000b0". Make sure your ``.gitattributes``
-file is correctly configured to ignore any files and directories that should be excluded from releases
-(e.g. ``run.py``, ``output/``, ``local-props/``). See the
-`example .gitattributes <https://github.com/openkim-hackathons/CrystalGenomeASEExample__TD_000000654321_000/blob/794664404260f9a6fc556e9401dba4851cdeb9c5/.gitattributes>`_.
+A Github workflow for automatically testing that your Test Driver will work in the ``kimvv`` package is included in the example Test Driver:
+https://github.com/openkim-hackathons/CrystalGenomeASEExample__TD_000000654321_000/blob/main/.github/workflows/test_kimvv.yml
 
-.. list-table::
-   :class: borderless
+If you based your Test Driver off this example, you will already have this file in your repo. You may need to click on "Actions" in your repo and
+allow actions to run if the action has not been running already. If you created your repo from scratch, copy this workflow into your repo. It is set
+up to run every time you push to the repo, or it can be triggered manually.
 
-   * - Issue a release by clicking the "Create a new release" link in your Test Driver repository:
-     - .. image:: release_start.png
-        :width: 500px
-   * - Once the release is issued, you will need the URL of the ``.tar.gz`` file created by GitHub as part of it, or the file itself:
-     - .. image:: release_download.png
-        :width: 500px
+In the workflow file, you should edit the environment variable ``CRYSTAL_GENOME_TEST_ARGS``, which is a string literal containing a dictionary
+of the additional arguments you would like to use for testing. The ASE example test driver has a simple example. A more elaborate example can be
+found in the LAMMPS example Test Driver: https://github.com/openkim-hackathons/NPTCrystalStructure/blob/main/.github/workflows/test_kimvv.yml. Here
+you can see various arguments set to make the molecular dynamics run in a reasonable time.
 
-Next, you need to add the URL of the ``.tar.gz`` to the ``pre_setup.py`` script in your fork of ``kimvv``. An example fork for testing the example Test Driver is available,
-and here is where you add the URL: `pre_setup.py <https://github.com/openkim-hackathons/kimvv-example-driver-testing-fork/blob/main/pre_setup.py>`_. This will only work if your
-development repo is public. Alternatively, you may add the archive directly to your fork, and add the filename to ``pre_setup.py``, like in this example: https://github.com/openkim-hackathons/kimvv-example-LAMMPS-driver-testing-fork/blob/main/pre_setup.py (the archive is simply in the top level of the repo). Note that ``DEVEL_TEST_DRIVERS`` is a dictionary
-with the path or URL as a key. The values are the dictionary of additional non-default arguments you wish to pass to your Test Driver for testing. For example, for a molecular dynamics
-TD, you will likely want to specify a small system size so it can run in reasonable time on a free GitHub runner.
+Your Test Driver must pass all the jobs in the workflow. Additionally, you should inspect the job output to see whether there is a
+``WARNING Your Test Driver is unable to run with non-KIM calculators...`` during the "build and test kimvv" step. This warning is only acceptable
+if you strictly need a KIM model name to run (e.g. if you are using LAMMPS). Otherwise, there should be no such warning.
 
-.. note::
+.. todo::
 
-  If you are performing the final test before hitting "submit" on the openkim.org web form, you should use your ``InProgress`` ``.txz`` archive from the webapp
-  instead of from GitHub.
-
-Finally, if your properties have not yet been added to openkim.org, you need to add your Property Definitions to the ``test/local-props`` directory of your ``kimvv`` fork.
-
-Checking that your fork passes the tests
-========================================
-
-After making the above changes, commit and push the changes to your fork of ``kimvv``. The Github Actions workflow will automatically check that the ``kimvv`` package
-containing your driver correctly installs and runs the previously described simulations.
-
-.. list-table::
-   :class: borderless
-
-   * - When you click on "Actions" in your ``kimvv`` fork on Github after pushing your changes, you should see the test workflow in progress, failed, or succeeded.
-       the example on the right shows a failed and successful run:
-     - .. image:: actions_results.png
-        :width: 500px
-   * - If your Test Driver uses LAMMPS, a successful run is all that is required. If it does not, you should take one additional step to see that your Test Driver
-       runs with non-KIM ASE calculators. Click on the successful run, and click on one of the jobs (e.g. ``test (ubuntu-22.04")``). Expand the "Run tests" section
-       and check that there is no ``WARNING Your Test Driver is unable to run with non-KIM calculators...``.
-     - .. image:: actions_warnings.png
-        :width: 500px
+  Consider adding more detail and pictures to this section if needed.

@@ -4,6 +4,7 @@ import math
 
 import numpy as np
 import pytest
+from ase import Atoms
 from ase.build import bulk
 from ase.calculators.kim.kim import KIM
 from ase.geometry import get_duplicate_atoms
@@ -31,9 +32,30 @@ from kim_tools.symmetry_util.core import (
     PeriodExtensionException,
     fit_voigt_tensor_and_error_to_cell_and_space_group,
     fit_voigt_tensor_to_cell_and_space_group,
+    get_smallest_nn_dist,
     reduce_and_avg,
     transform_atoms,
 )
+
+
+def test_get_smallest_nn_dist():
+    with pytest.raises(
+        ValueError, match="Cannot compute NN distance for an empty Atoms object"
+    ):
+        get_smallest_nn_dist(Atoms())
+    with pytest.raises(
+        ValueError, match="Cannot compute NN distance for a nonperiodic single atom"
+    ):
+        get_smallest_nn_dist(Atoms("H", positions=[[0, 0, 0]]))
+    atoms = Atoms(
+        "CHH",
+        positions=[
+            [0, 0, 0],
+            [0, 0, 1],
+            [0, 0, 1.65],
+        ],
+    )
+    assert np.isclose(get_smallest_nn_dist(atoms), 0.65)
 
 
 def test_change_of_basis_atoms(
